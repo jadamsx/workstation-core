@@ -1,0 +1,650 @@
+#!/usr/bin/env python3
+"""Check the notes vault against its one format.
+
+The format comes from the vault's own templates/ (frontmatter keys and order, section headings)
+plus the folder rules in its README. Prints `path:line: rule: message`, exit 1 on any error.
+`--fix` rewrites only key order and whitespace. `--links` checks link integrity across the vault.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+
+DEFAULT_ROOT = Path(os.environ.get("NOTES_DIR") or Path.home() / "notes").expanduser()
+EXCLUDED_TOP = {"adr", "templates"}
+ROOT_DOCS = {"README.md"}
+PROJECT_SUBS = {"designs": "design", "decisions": "decision", "research": "research", "incidents": "incident",
+                "reviews": "review"}
+TOP_TYPES = {"decisions": "decision", "designs": "design", "howto": "howto", "reference": "reference",
+             "research": "research", "runbooks": "runbook"}
+STATUSES = {"draft", "current", "stale", "paused", "superseded"}
+DESIGN_STATUSES = {"proposed", "approved", "shipped", "superseded"}
+RELATIONS = {"decided_by", "implements", "supersedes", "superseded_by", "related_adrs"}
+BASE_KEYS = ["title", "aliases", "type", "status", "area", "updated", "verified", "sources"]
+LINK_RULES = {"link-broken", "link-ambiguous", "link-heading", "orphan", "project-hub"}
+STALE_DAYS = 60
+LEGACY_DESIGN_HEADINGS = ["Approach", "Why", "Plan header", "Node table", "Progress", "Acceptance", "Decisions", "Traps",
+                          "Out", "Links"]
+V2_OPTIONAL = {"Context and scope", "Goals and non-goals", "Design", "Alternatives considered", "Cross-cutting concerns",
+               "User Scenarios & Testing", "Success Criteria"}
+FORMATS = {"v2": "design", "proposal": "proposal"}
+FR_DEF = re.compile(r"^\s*[-*]\s+\**(FR-\d+)\**\s*:")
+FR_ID = re.compile(r"FR-\d+")
+SC_DEF = re.compile(r"^\s*[-*]\s+\**(SC-\d+)\**\s*:")
+SC_ID = re.compile(r"SC-\d+")
+RULES = frozenset("""
+    fm-missing fm-syntax fm-key-missing fm-key-unknown fm-empty fm-value key-order type-invalid type-folder
+    status-invalid status-superseded date-format stale-verified area-unknown project-key relation-quote
+    relation-form ticket-form h1-missing heading-missing heading-order links-last links-empty bare-label
+    bare-link no-outbound area-backlink design-name link-broken link-ambiguous link-heading orphan
+    project-hub structure whitespace format-invalid fr-missing fr-uncovered covers-column covers-empty
+    covers-unknown trace-column trace-missing trace-test-empty
+""".split())
+
+WIKILINK = re.compile(r"!?\[\[([^\]\n]+?)\]\]")
+FENCE = re.compile(r"^\s*(```|~~~)")
+INLINE_CODE = re.compile(r"`[^`\n]*`")
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+FIELD = re.compile(r"^([A-Za-z_][\w-]*):(.*)$")
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BARE_LABEL = re.compile(r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?(?:Area|Related|See also)(?:\*\*|__)?\s*:", re.I)
+SEE_ALSO = re.compile(r"^\s*(?:[-*+]\s+)?See also\s*(?:\[\[|$)", re.I)
+DESIGN_NAME = re.compile(r"^[A-Z][A-Z0-9]*-\d+-[a-z0-9][a-z0-9-]*\.md$")
+TICKET = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d+$")
+QUOTED_LINK = re.compile(r"""^(?:"(\[\[[^\]]+\]\])"|'(\[\[[^\]]+\]\])')$""")
+
+
+@dataclass
+class Issue:
+    path: str
+    line: int
+    rule: str
+    message: str
+    warn: bool = False
+
+    def __post_init__(self) -> None:
+        assert self.rule in RULES, self.rule
+
+
+@dataclass
+class Field:
+    key: str
+    line: int
+    rest: str
+    cont: list[tuple[int, str]] = field(default_factory=list)
+
+    def tokens(self) -> list[str]:
+        rest = self.rest.strip()
+        out: list[str] = []
+        if rest.startswith("[") and not rest.startswith("[["):
+            out += split_inline(rest.strip("[]"))
+        elif rest:
+            out.append(rest)
+        for _, text in self.cont:
+            item = re.match(r"^\s*-\s*(.*)$", text)
+            if item and item.group(1).strip():
+                out.append(item.group(1).strip())
+        return out
+
+
+@dataclass
+class Note:
+    rel: str
+    lines: list[str]
+    fm_end: int = -1
+    fields: list[Field] = field(default_factory=list)
+    issues: list[Issue] = field(default_factory=list)
+
+    def get(self, key: str) -> Field | None:
+        return next((f for f in self.fields if f.key == key), None)
+
+    def value(self, key: str) -> str:
+        f = self.get(key)
+        return unquote(f.tokens()[0]) if f and f.tokens() else ""
+
+
+def split_inline(text: str) -> list[str]:
+    items, buf, quote = [], "", ""
+    for ch in text:
+        if quote:
+            quote = "" if ch == quote else quote
+        elif ch in "\"'":
+            quote = ch
+        elif ch == ",":
+            items.append(buf.strip())
+            buf = ""
+            continue
+        buf += ch
+    items.append(buf.strip())
+    return [i for i in items if i]
+
+
+def unquote(text: str) -> str:
+    text = text.strip()
+    return text[1:-1] if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'" else text
+
+
+def code_masked(lines: list[str]) -> list[str]:
+    out, fenced = [], False
+    for text in lines:
+        if FENCE.match(text):
+            fenced = not fenced
+            out.append("")
+        else:
+            out.append("" if fenced else INLINE_CODE.sub(lambda m: " " * len(m.group()), text))
+    return out
+
+
+def parse_note(root: Path, rel: str, text: str) -> Note:
+    note = Note(rel, text.split("\n"))
+    lines = note.lines
+    if lines[0].strip() != "---":
+        note.issues.append(Issue(rel, 1, "fm-missing", "file must start with a --- frontmatter block"))
+        return note
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), -1)
+    if end < 0:
+        note.issues.append(Issue(rel, 1, "fm-missing", "frontmatter has no closing ---"))
+        return note
+    note.fm_end = end
+    for i in range(1, end):
+        match = FIELD.match(lines[i])
+        if match:
+            note.fields.append(Field(match.group(1), i + 1, match.group(2)))
+        elif note.fields:
+            note.fields[-1].cont.append((i + 1, lines[i]))
+        elif lines[i].strip():
+            note.issues.append(Issue(rel, i + 1, "fm-syntax", "expected `key: value`"))
+    return note
+
+
+class Vault:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.templates = self.load_templates()
+        self.notes: dict[str, Note] = {}
+        self.targets: dict[str, Path] = {}
+        self.headings_cache: dict[str, set[str]] = {}
+        self.scan()
+        self.areas = {p.name for p in (root / "areas").glob("*") if p.is_dir()}
+
+    def load_templates(self) -> dict[str, tuple[list[str], list[str]]]:
+        found = {}
+        tdir = self.root / "templates"
+        for path in sorted(tdir.glob("*.md")):
+            note = parse_note(self.root, path.name, path.read_text())
+            keys = [f.key for f in note.fields]
+            heads = [m.group(2) for t in code_masked(note.lines[note.fm_end + 1:])
+                     if (m := HEADING.match(t)) and len(m.group(1)) == 2]
+            found[path.stem] = (keys, heads)
+        return found
+
+    def scan(self) -> None:
+        for dirpath, dirnames, filenames in os.walk(self.root, followlinks=True):
+            here = Path(dirpath)
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for name in filenames:
+                if name.endswith(".md"):
+                    rel = (here / name).relative_to(self.root).as_posix()
+                    self.targets[rel] = here / name
+                    if rel.split("/")[0] in EXCLUDED_TOP or rel in ROOT_DOCS:
+                        continue
+                    self.notes[rel] = parse_note(self.root, rel, (here / name).read_text())
+
+    def resolve(self, target: str) -> list[str]:
+        key = target.strip().lstrip("/").removesuffix(".md").lower()
+        by_path = [r for r in self.targets if r.removesuffix(".md").lower() == key]
+        if by_path:
+            return by_path
+        if "/" in key:
+            return []
+        return [r for r in self.targets if r.removesuffix(".md").lower().rsplit("/", 1)[-1] == key]
+
+    def headings(self, rel: str) -> set[str]:
+        if rel not in self.headings_cache:
+            text = self.targets[rel].read_text().split("\n")
+            self.headings_cache[rel] = {slug(m.group(2)) for t in code_masked(text) if (m := HEADING.match(t))}
+        return self.headings_cache[rel]
+
+
+def slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def is_index(rel: str) -> bool:
+    return rel == "index.md" or bool(re.fullmatch(r"areas/[^/]+/index\.md", rel))
+
+
+def is_hub(rel: str) -> bool:
+    return bool(re.fullmatch(r"projects/[^/]+/index\.md", rel))
+
+
+def project_subs() -> dict[str, str]:
+    """Core subfolders plus `name:type` pairs from NOTES_EXTRA_SUBS (comma separated)."""
+    extra = (pair.split(":", 1) for pair in os.environ.get("NOTES_EXTRA_SUBS", "").split(",") if ":" in pair)
+    return {**PROJECT_SUBS, **{name.strip(): kind.strip() for name, kind in extra}}
+
+
+def is_record(rel: str) -> bool:
+    parts = rel.split("/")
+    return len(parts) == 4 and parts[0] == "projects" and project_subs().get(parts[2]) == "review"
+
+
+def project_of(rel: str) -> str:
+    parts = rel.split("/")
+    return parts[1] if parts[0] == "projects" and len(parts) > 2 else ""
+
+
+def expected_type(rel: str) -> str | None:
+    parts = rel.split("/")
+    if is_index(rel):
+        return "reference"
+    if parts[0] == "projects" and len(parts) == 3 and parts[2] == "index.md":
+        return "project"
+    if parts[0] == "projects" and len(parts) == 4:
+        return project_subs().get(parts[2])
+    if len(parts) == 2:
+        return TOP_TYPES.get(parts[0])
+    return None
+
+
+def wikilinks(note: Note) -> list[tuple[int, str, str, str]]:
+    """(line, target, fragment, raw) for every wikilink in frontmatter and body, code excluded."""
+    out = []
+    masked = code_masked(note.lines)
+    for i, text in enumerate(masked):
+        for m in WIKILINK.finditer(text):
+            inner = m.group(1).replace("\\|", "|").split("|")[0]
+            target, _, frag = inner.partition("#")
+            out.append((i + 1, target.strip(), frag.strip(), m.group(0)))
+    return out
+
+
+def body_links(note: Note) -> list[tuple[int, str, str, str]]:
+    return [l for l in wikilinks(note) if l[0] > note.fm_end + 1]
+
+
+def check_frontmatter(vault: Vault, note: Note, today: date) -> None:
+    rel, add = note.rel, note.issues.append
+    if note.fm_end < 0:
+        return
+    kind = note.value("type")
+    index = is_index(rel)
+    template = vault.templates.get(kind)
+    if kind not in vault.templates:
+        add(Issue(rel, (note.get("type") or note.fields[0]).line if note.fields else 1, "type-invalid",
+                  f"type `{kind}` has no template; use one of {', '.join(sorted(vault.templates))}"))
+        return
+    keys, _ = template
+    expect = expected_type(rel)
+    if expect and expect != kind:
+        add(Issue(rel, note.get("type").line, "type-folder", f"a note here has type `{expect}`, not `{kind}`"))
+    required = BASE_KEYS if index else [k for k in keys if k not in ("format",) and (k != "project" or project_of(rel))]
+    if is_hub(rel):
+        required = [k for k in required if k != "project"]
+    present = [f.key for f in note.fields]
+    for key in required:
+        if key not in present:
+            add(Issue(rel, 1, "fm-key-missing", f"missing frontmatter key `{key}`"))
+    allowed = set(BASE_KEYS if index else keys)
+    for f in note.fields:
+        if f.key not in allowed:
+            add(Issue(rel, f.line, "fm-key-unknown", f"`{f.key}` is not a key of a {kind} note"))
+    ordered = [k for k in keys if k in present] + [k for k in present if k not in keys]
+    if present != ordered:
+        add(Issue(rel, 2, "key-order", f"keys must follow templates/{kind}.md order"))
+    statuses = DESIGN_STATUSES if kind == "design" else STATUSES
+    if note.get("status") and note.value("status") not in statuses:
+        add(Issue(rel, note.get("status").line, "status-invalid",
+                  f"status `{note.value('status')}` must be one of {', '.join(sorted(statuses))}"))
+    if note.get("title") and not note.value("title"):
+        add(Issue(rel, note.get("title").line, "fm-empty", "title is empty"))
+    for key in ("updated", "verified"):
+        f = note.get(key)
+        if f and not valid_date(note.value(key)):
+            add(Issue(rel, f.line, "date-format", f"`{key}` must be a real YYYY-MM-DD date"))
+    f = note.get("date")
+    if f and note.value("date") and not valid_date(note.value("date")):
+        add(Issue(rel, f.line, "date-format", "`date` must be a real YYYY-MM-DD date"))
+    verified = note.value("verified")
+    if valid_date(verified) and note.value("status") == "current" and (today - date.fromisoformat(verified)).days > STALE_DAYS:
+        add(Issue(rel, note.get("verified").line, "stale-verified",
+                  f"verified {verified} is past {STALE_DAYS} days; recheck it or set status: stale", warn=True))
+    area = note.value("area")
+    if note.get("area") and area not in vault.areas:
+        add(Issue(rel, note.get("area").line, "area-unknown", f"area `{area}` has no areas/{area}/ folder"))
+    if index and rel.startswith("areas/") and area != rel.split("/")[1]:
+        add(Issue(rel, note.get("area").line if note.get("area") else 1, "area-unknown", "area must match the folder"))
+    check_project_key(note)
+    check_relations(note)
+    if note.get("format") and note.value("format") not in FORMATS:
+        add(Issue(rel, note.get("format").line, "format-invalid", f"`format` must be one of {', '.join(FORMATS)}"))
+    for f in note.fields:
+        if f.key == "aliases" and f.rest.strip() and not f.rest.strip().startswith("[") or \
+                f.key in ("sources", "ticket") and any("[[" in t for t in f.tokens()):
+            what = "aliases is a list" if f.key == "aliases" else f"{f.key} holds plain values, not vault links"
+            add(Issue(rel, f.line, "fm-value", what))
+
+
+def valid_date(text: str) -> bool:
+    if not DATE.match(text):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def check_project_key(note: Note) -> None:
+    slug_ = project_of(note.rel)
+    f = note.get("project")
+    if not f or is_hub(note.rel):
+        return
+    if slug_ and note.value("project") != slug_:
+        note.issues.append(Issue(note.rel, f.line, "project-key", f"`project` must be `{slug_}`"))
+    if not slug_ and note.value("project"):
+        note.issues.append(Issue(note.rel, f.line, "project-key", "`project` is only for notes under projects/<slug>/"))
+
+
+def check_relations(note: Note) -> None:
+    rel, add = note.rel, note.issues.append
+    for f in note.fields:
+        if f.key in RELATIONS:
+            for tok in f.tokens():
+                if not QUOTED_LINK.match(tok):
+                    rule = "relation-quote" if "[[" in tok else "relation-form"
+                    add(Issue(rel, f.line, rule, f"`{f.key}` holds quoted wikilinks like \"[[note]]\", got {tok}"))
+        elif f.key == "ticket":
+            for tok in f.tokens():
+                if not TICKET.match(unquote(tok)):
+                    add(Issue(rel, f.line, "ticket-form", f"`ticket` holds plain keys like ABC-123, got {tok}"))
+    if note.get("superseded_by") and note.get("superseded_by").tokens() and note.value("status") != "superseded":
+        add(Issue(rel, note.get("superseded_by").line, "status-superseded",
+                  "a note with `superseded_by` must have status: superseded"))
+
+
+def check_body(vault: Vault, note: Note) -> None:
+    rel, add = note.rel, note.issues.append
+    if note.fm_end < 0:
+        return
+    body = note.lines[note.fm_end + 1:]
+    base = note.fm_end + 1
+    masked = code_masked(body)
+    h1 = next((i for i, t in enumerate(body) if t.strip()), None)
+    if h1 is None or not body[h1].startswith("# "):
+        add(Issue(rel, base + 1, "h1-missing", "the first line after frontmatter must be a `# ` title"))
+    heads = [(i, m.group(2)) for i, t in enumerate(masked) if (m := HEADING.match(t)) and len(m.group(1)) == 2]
+    kind = note.value("type")
+    if kind in vault.templates and not is_index(rel):
+        wanted = wanted_headings(vault, note)
+        names = [h for _, h in heads]
+        optional = V2_OPTIONAL if note.value("type") == "design" and note.value("format") == "v2" else set()
+        for h in wanted:
+            if h not in names and h not in optional:
+                add(Issue(rel, base + 1, "heading-missing", f"missing section `## {h}`"))
+        present = [h for h in wanted if h in names]
+        if [h for h in names if h in wanted] != present:
+            add(Issue(rel, base + 1, "heading-order", f"sections must run in order: {', '.join(wanted)}"))
+        if "Links" in names and names[-1] != "Links":
+            add(Issue(rel, base + heads[names.index("Links")][0] + 1, "links-last", "`## Links` must be the last section"))
+        if "Links" in names and not is_record(rel):
+            start = heads[names.index("Links")][0]
+            if not any(WIKILINK.search(t) for t in masked[start + 1:]):
+                add(Issue(rel, base + start + 1, "links-empty", "`## Links` needs a sentence linking the notes this one builds on"))
+    for i, text in enumerate(masked):
+        if BARE_LABEL.match(text) or SEE_ALSO.match(text):
+            add(Issue(rel, base + i + 1, "bare-label", "no bare Area:/Related:/See also lines; say why the link matters in a sentence"))
+        elif WIKILINK.search(text) and not HEADING.match(text) and not re.search(
+                r"[A-Za-z0-9]", re.sub(r"[-*+>|,;:/.]|\d+\.", " ", WIKILINK.sub("", text))):
+            add(Issue(rel, base + i + 1, "bare-link", "a link on its own line; put it in a sentence that says why it matters"))
+    if not is_record(rel) and not any(vault.resolve(t) for _, t, _, _ in body_links(note) if t):
+        add(Issue(rel, base + 1, "no-outbound", "the note links to no other note"))
+    for line, target, _, raw in body_links(note):
+        if not is_index(rel) and re.fullmatch(r"areas/[^/]+/index", target.removesuffix(".md")):
+            add(Issue(rel, line, "area-backlink", "no backlink to the area index; `area:` carries it"))
+    if kind == "design" and not DESIGN_NAME.match(Path(rel).name):
+        add(Issue(rel, 1, "design-name", "designs are named <KEY>-<slug>.md, for example ABC-123-short-name.md"))
+
+
+def wanted_headings(vault: Vault, note: Note) -> list[str]:
+    if note.value("type") != "design":
+        return vault.templates[note.value("type")][1]
+    template = FORMATS.get(note.value("format"))
+    if template:
+        return vault.templates.get(template, ([], LEGACY_DESIGN_HEADINGS))[1]
+    return LEGACY_DESIGN_HEADINGS
+
+
+def section_lines(masked: list[str], name: str) -> list[tuple[int, str]]:
+    """(1-based line, text) between `## name` and the next `## `; empty when the section is absent."""
+    out, inside = [], False
+    for i, text in enumerate(masked):
+        m = HEADING.match(text)
+        if m and len(m.group(1)) == 2:
+            inside = m.group(2) == name
+        elif inside:
+            out.append((i + 1, text))
+    return out
+
+
+def table_rows(lines: list[tuple[int, str]]) -> tuple[list[str], list[tuple[int, list[str]]]]:
+    rows = [(n, [c.strip() for c in t.strip().strip("|").split("|")]) for n, t in lines if t.strip().startswith("|")]
+    rows = [r for r in rows if not all(re.fullmatch(r":?-+:?", c) for c in r[1])]
+    return ([c.lower() for c in rows[0][1]], rows[1:]) if rows else ([], [])
+
+
+def check_v2(note: Note) -> None:
+    """Requirement coverage for `format: v2` designs: FR ids defined, covered by nodes; FR and SC ids listed in the traceability table, SC rows with a test."""
+    rel, add = note.rel, note.issues.append
+    if note.fm_end < 0 or note.value("format") != "v2":
+        return
+    masked = code_masked(note.lines)
+    start = next((n for n, _ in section_lines(masked, "Requirements")), 1)
+    frs = {m.group(1): n for n, t in section_lines(masked, "Requirements") if (m := FR_DEF.match(t))}
+    if not frs:
+        add(Issue(rel, start, "fr-missing", "## Requirements defines no `- **FR-001**: System MUST ...` line"))
+    head, rows = table_rows(section_lines(masked, "Node table"))
+    covered: set[str] = set()
+    if "covers" not in head:
+        add(Issue(rel, next((n for n, _ in section_lines(masked, "Node table")), 1), "covers-column",
+                  "the node table needs a `covers` column"))
+    else:
+        col = head.index("covers")
+        for n, cells in rows:
+            ids = FR_ID.findall(cells[col]) if col < len(cells) else []
+            if not ids:
+                add(Issue(rel, n, "covers-empty", "node covers no FR id"))
+            for fr in ids:
+                covered.add(fr)
+                if fr not in frs:
+                    add(Issue(rel, n, "covers-unknown", f"{fr} is not defined in ## Requirements"))
+        for fr, n in frs.items():
+            if fr not in covered:
+                add(Issue(rel, n, "fr-uncovered", f"{fr} is covered by no node"))
+    head, rows = table_rows(section_lines(masked, "Traceability"))
+    if not head or head[0] != "req":
+        add(Issue(rel, next((n for n, _ in section_lines(masked, "Traceability")), 1), "trace-column",
+                  "the traceability table needs the columns Req | Nodes | Test | Status"))
+        return
+    listed = {fr for _, cells in rows for fr in FR_ID.findall(cells[0])}
+    for fr, n in frs.items():
+        if fr not in listed:
+            add(Issue(rel, n, "trace-missing", f"{fr} is missing from ## Traceability"))
+    scs = {m.group(1): n for n, t in section_lines(masked, "Success Criteria") if (m := SC_DEF.match(t))}
+    test_col = head.index("test") if "test" in head else -1
+    for sc, n in scs.items():
+        mine = [(rn, cells) for rn, cells in rows if sc in SC_ID.findall(cells[0])]
+        if not mine:
+            add(Issue(rel, n, "trace-missing", f"{sc} is missing from ## Traceability"))
+        elif not any(0 <= test_col < len(cells) and cells[test_col] for _, cells in mine):
+            add(Issue(rel, mine[0][0], "trace-test-empty", f"{sc} names no test or agent in ## Traceability"))
+
+
+def check_links(vault: Vault, note: Note) -> None:
+    rel, add = note.rel, note.issues.append
+    for line, target, frag, raw in wikilinks(note):
+        if not target:
+            if frag and slug(frag.split("#")[-1]) not in vault.headings(rel) and not frag.startswith("^"):
+                add(Issue(rel, line, "link-heading", f"{raw}: no heading `{frag}` in this note"))
+            continue
+        hits = vault.resolve(target)
+        if not hits:
+            add(Issue(rel, line, "link-broken", f"{raw} resolves to no note"))
+        elif len(hits) > 1:
+            add(Issue(rel, line, "link-ambiguous", f"{raw} matches {len(hits)} notes; use the path from the vault root"))
+        elif frag and not frag.startswith("^") and hits[0].endswith(".md") and \
+                slug(frag.split("#")[-1]) not in vault.headings(hits[0]):
+            add(Issue(rel, line, "link-heading", f"{raw}: no heading `{frag}` in {hits[0]}"))
+
+
+def check_graph(vault: Vault) -> None:
+    inbound: dict[str, set[str]] = {}
+    for rel, note in vault.notes.items():
+        for _, target, _, _ in body_links(note):
+            hits = vault.resolve(target) if target else []
+            if len(hits) == 1 and hits[0] != rel:
+                inbound.setdefault(hits[0], set()).add(rel)
+    for rel, note in vault.notes.items():
+        if rel == "index.md" or note.fm_end < 0 or is_record(rel):
+            continue
+        if not any(is_index(s) or is_hub(s) for s in inbound.get(rel, ())):
+            note.issues.append(Issue(rel, 1, "orphan", "no root index, area index or project hub links here; add a line saying what question it answers"))
+        slug_ = "" if is_hub(rel) else project_of(rel)
+        if slug_ and f"projects/{slug_}/index.md" not in inbound.get(rel, ()):
+            note.issues.append(Issue(rel, 1, "project-hub", f"projects/{slug_}/index.md must link this note with a reason"))
+
+
+def check_structure(vault: Vault) -> list[Issue]:
+    issues = []
+    for rel in vault.notes:
+        parts = rel.split("/")
+        bad = None
+        if len(parts) == 1 and rel != "index.md":
+            bad = "only index.md and README.md sit at the vault root"
+        elif parts[0] == "areas" and not (len(parts) == 3 and parts[2] == "index.md"):
+            bad = "areas/<area>/ holds only index.md"
+        elif parts[0] == "projects":
+            if len(parts) < 3:
+                bad = "projects hold a folder per stream, projects/<slug>/index.md"
+            elif len(parts) == 3 and parts[2] != "index.md":
+                bad = f"a stream folder holds index.md and the subfolders {', '.join(project_subs())}"
+            elif len(parts) == 4 and parts[2] not in project_subs():
+                bad = f"stream subfolders are {', '.join(project_subs())}"
+            elif len(parts) > 4:
+                bad = "stream notes sit one folder deep"
+        elif parts[0] not in {"areas", "projects", *TOP_TYPES} and len(parts) > 1:
+            bad = f"`{parts[0]}/` is not a vault folder"
+        elif parts[0] in TOP_TYPES and len(parts) != 2:
+            bad = f"{parts[0]}/ is flat"
+        if bad:
+            issues.append(Issue(rel, 1, "structure", bad))
+    for d in sorted((vault.root / "projects").glob("*")):
+        if d.is_dir() and f"projects/{d.name}/index.md" not in vault.notes:
+            first = next((r for r in sorted(vault.notes) if r.startswith(f"projects/{d.name}/")), None)
+            if first:
+                issues.append(Issue(first, 1, "structure", f"projects/{d.name}/ has no index.md hub"))
+    return issues
+
+
+def check_text(note: Note) -> None:
+    for i, text in enumerate(note.lines[:-1] if note.lines and note.lines[-1] == "" else note.lines):
+        if text != text.rstrip() and not (text.endswith("  ") and not text.endswith("   ") and text.strip()):
+            note.issues.append(Issue(note.rel, i + 1, "whitespace", "trailing whitespace"))
+    joined = "\n".join(note.lines)
+    if not joined.endswith("\n") or joined.endswith("\n\n"):
+        note.issues.append(Issue(note.rel, len(note.lines), "whitespace", "file must end with exactly one newline"))
+
+
+def fixed_text(vault: Vault, note: Note) -> str:
+    lines = list(note.lines)
+    if note.fm_end > 0 and any(i.rule == "key-order" for i in note.issues):
+        keys = vault.templates[note.value("type")][0]
+        order = {k: n for n, k in enumerate(keys)}
+        ranked = sorted(enumerate(note.fields), key=lambda p: (order.get(p[1].key, len(keys)), p[0]))
+        block: list[str] = []
+        for _, f in ranked:
+            block.append(lines[f.line - 1])
+            block += [t for _, t in f.cont]
+        lines[1:note.fm_end] = block
+    lines = [t if t.endswith("  ") and not t.endswith("   ") and t.strip() else t.rstrip() for t in lines]
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def find_root(explicit: str | None, paths: list[str]) -> Path:
+    if explicit or os.environ.get("NOTES_DIR"):
+        return Path(explicit or os.environ["NOTES_DIR"]).expanduser().resolve()
+    for start in [*(Path(p).expanduser().resolve() for p in paths), Path.cwd()]:
+        for parent in [start, *start.parents]:
+            if (parent / "templates").is_dir() and (parent / "index.md").is_file():
+                return parent
+    return DEFAULT_ROOT
+
+
+def select(vault: Vault, paths: list[str]) -> set[str]:
+    if not paths:
+        return set(vault.notes)
+    chosen = set()
+    for raw in paths:
+        p = Path(raw).expanduser()
+        p = (p if p.is_absolute() else Path.cwd() / p).resolve()
+        try:
+            rel = p.relative_to(vault.root).as_posix()
+        except ValueError:
+            continue
+        chosen |= {r for r in vault.notes if r == rel or r.startswith(rel.rstrip("/") + "/")} if rel != "." else set(vault.notes)
+    return chosen
+
+
+def lint(vault: Vault, today: date | None = None) -> None:
+    today = today or date.today()
+    for note in vault.notes.values():
+        check_text(note)
+        check_frontmatter(vault, note, today)
+        check_body(vault, note)
+        check_v2(note)
+        check_links(vault, note)
+    check_graph(vault)
+    for issue in check_structure(vault):
+        vault.notes.get(issue.path, Note(issue.path, [])).issues.append(issue)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="notes-lint", description=__doc__)
+    parser.add_argument("paths", nargs="*", help="notes or folders to check; default the whole vault")
+    parser.add_argument("--root", help="vault root; default found from the paths, else $NOTES_DIR (default ~/notes)")
+    parser.add_argument("--fix", action="store_true", help="fix key order and whitespace only")
+    parser.add_argument("--links", action="store_true", help="whole vault, link integrity rules only")
+    args = parser.parse_args(argv)
+    root = find_root(args.root, args.paths)
+    if not (root / "templates").is_dir():
+        print(f"notes-lint: no templates/ in {root}", file=sys.stderr)
+        return 2
+    vault = Vault(root)
+    lint(vault)
+    chosen = select(vault, [] if args.links else args.paths)
+    if args.fix and not args.links:
+        for rel in sorted(chosen):
+            note = vault.notes[rel]
+            if note.fm_end >= 0 or any(i.rule == "whitespace" for i in note.issues):
+                new = fixed_text(vault, note)
+                if new != "\n".join(note.lines):
+                    vault.targets[rel].write_text(new)
+        vault = Vault(root)
+        lint(vault)
+    errors = 0
+    for rel in sorted(chosen):
+        for issue in sorted(vault.notes[rel].issues, key=lambda i: (i.line, i.rule)):
+            if args.links and issue.rule not in LINK_RULES:
+                continue
+            print(f"{issue.path}:{issue.line}: {issue.rule}: {'(warning) ' if issue.warn else ''}{issue.message}")
+            errors += not issue.warn
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

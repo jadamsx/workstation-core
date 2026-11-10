@@ -1,0 +1,12 @@
+#!/bin/sh
+# Usage: current-project
+# Prints the project slug of this pane: $WORKSTATION_PROJECT, else the `project` metadata token of
+# this pane's herdr workspace, else nothing. Always exits 0 so skills can call it unguarded.
+if [ -n "${WORKSTATION_PROJECT:-}" ]; then
+  printf '%s\n' "$WORKSTATION_PROJECT"
+  exit 0
+fi
+[ -n "${HERDR_WORKSPACE_ID:-}" ] || exit 0
+herdr workspace get "$HERDR_WORKSPACE_ID" 2>/dev/null |
+  python3 -c 'import json,sys; t=json.load(sys.stdin)["result"]["workspace"].get("tokens",{}).get("project"); t and print(t)' 2>/dev/null || true
+exit 0

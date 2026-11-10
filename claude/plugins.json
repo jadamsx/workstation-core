@@ -1,0 +1,10 @@
+{
+  "marketplaces": [],
+  "plugins": [],
+  "optional": [
+    {
+      "plugin": "context-mode@context-mode",
+      "marketplace": {"name": "context-mode", "source": {"source": "github", "repo": "mksglu/context-mode"}}
+    }
+  ]
+}

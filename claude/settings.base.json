@@ -1,0 +1,194 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit -n *)",
+      "Bash(git push --no-verify*)",
+      "Bash(gh pr merge*)",
+      "Bash(glab mr merge*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git stash*)",
+      "Bash(git restore *)",
+      "Bash(git checkout -- *)",
+      "Bash(git branch -D main*)",
+      "Bash(docker volume rm *)",
+      "Bash(docker system prune -a*)",
+      "Bash(docker volume prune*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Edit(~/.ssh/**)",
+      "Edit(**/.env)",
+      "Edit(~/.config/workstation/secrets.env)"
+    ],
+    "ask": [
+      "Bash(git push *--tags*)",
+      "Bash(git push *refs/tags/*)",
+      "Bash(git push * v*)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin master*)",
+      "Bash(git push origin develop*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/pre-commit-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/pre-push-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/rm-guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/env-file-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/drafts-layout-guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__playwright__browser_navigate|mcp__playwright__browser_type|mcp__playwright__browser_fill_form|mcp__playwright__browser_evaluate|mcp__playwright__browser_file_upload",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/shared-env-guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/agent-model-gate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/notes-lint-guard.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/project-context.py"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash __HOME__/.claude/statusline-command.sh"
+  },
+  "effortLevel": "medium",
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [
+      "herdr *"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "~/notes",
+        "~/drafts",
+        "~/.cache",
+        "~/.npm",
+        "~/Library/Caches",
+        "~/.local/state"
+      ],
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws"
+      ],
+      "denyWrite": [
+        "~/.ssh"
+      ]
+    },
+    "network": {
+      "allowLocalBinding": true,
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "objects.githubusercontent.com",
+        "gitlab.com",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "ghcr.io",
+        "docker.io",
+        "*.docker.io"
+      ]
+    }
+  },
+  "x-workstation": {
+    "ownedKeys": [
+      "permissions",
+      "effortLevel",
+      "env",
+      "statusLine",
+      "attribution",
+      "sandbox"
+    ],
+    "ownedHookPath": "/.claude/hooks/",
+    "foreignHookMarkers": [
+      "herdr-agent-state"
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+.staging.example.com
+www.production.example.com
