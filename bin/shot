@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Headless screenshot of a URL or local HTML file; prints the PNG path."""
+import argparse
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from browser_common import DEFAULT_VIEWPORT, BrowserSetupError, launch, load_state, parse_viewport  # noqa: E402
+from playwright.sync_api import sync_playwright  # noqa: E402
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="shot", description=__doc__)
+    parser.add_argument("url", help="http(s) URL, file:// URL or path to an HTML file")
+    parser.add_argument("--env", help="saved login to use (see browser-login)")
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--viewport", default=DEFAULT_VIEWPORT)
+    parser.add_argument("--full-page", action="store_true")
+    return parser.parse_args(argv)
+
+
+def resolve_url(url: str) -> str:
+    return Path(url).resolve().as_uri() if Path(url).exists() else url
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    try:
+        viewport, state = parse_viewport(args.viewport), load_state(args.env)
+    except BrowserSetupError as error:
+        print(error, file=sys.stderr)
+        return 2
+    out = args.out or Path(tempfile.gettempdir()) / f"shot-{int(time.time())}.png"
+    with sync_playwright() as playwright:
+        browser = launch(playwright)
+        page = browser.new_context(viewport=viewport, storage_state=state, device_scale_factor=1).new_page()
+        page.goto(resolve_url(args.url), wait_until="networkidle")
+        page.screenshot(path=str(out), full_page=args.full_page)
+        browser.close()
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
