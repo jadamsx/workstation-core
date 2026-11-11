@@ -9,7 +9,7 @@ Every engine and every agent loads this file. Each rule below lives only here.
 - Never push. A push goes through the owning engine and a gate below. Never force-push; `--force-with-lease` only on your own change branch, clean tree, where the owning engine allows pushing.
 
 ## Gates
-- Nothing is posted, pushed, moved, approved or merged without the owner's OK. Never merge. Approve only when the owner asks, each time.
+- Nothing is posted, pushed, moved, approved or merged without the owner's OK. Merge or approve only when the owner explicitly asks, each time; the permission prompt still applies.
 - An OK covers the items shown when it was given. It does not carry over to later items or later rounds.
 - Exceptions, each defined in `engines/ship.md`: tracker moves for your own work, and one unasked rewrite of your own change's description in a ship run.
 - Anything that needs an OK goes under `## Out` in the report. One ask, at the end.

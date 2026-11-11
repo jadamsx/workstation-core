@@ -17,7 +17,7 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 
 ## Permission rules
 
-`claude/settings.base.json` also denies these commands outright: `git commit --no-verify` and `-n`, `git push --no-verify`, `gh pr merge`, `glab mr merge`, force pushes, `git reset --hard`, `git clean`, `git stash`, `git restore`, `git checkout --`, `docker volume rm`, `docker system prune -a`, and reads of `~/.ssh` and `~/.aws`. Pushes of tags and to `main`, `master` or `develop` ask first.
+`claude/settings.base.json` also denies these commands outright: `git commit --no-verify` and `-n`, `git push --no-verify`, force pushes, `git reset --hard`, `git clean`, `git stash`, `git restore`, `git checkout --`, `docker volume rm`, `docker system prune -a`, and reads of `~/.ssh` and `~/.aws`. Merges (`gh pr merge`, `glab mr merge`) and pushes of tags and to `main`, `master` or `develop` ask first.
 
 ## Hook data in `hooks.d`
 
