@@ -11,8 +11,6 @@
       "Bash(git commit --no-verify*)",
       "Bash(git commit -n *)",
       "Bash(git push --no-verify*)",
-      "Bash(gh pr merge*)",
-      "Bash(glab mr merge*)",
       "Bash(git push --force*)",
       "Bash(git push -f *)",
       "Bash(git push * --force*)",
@@ -32,6 +30,8 @@
       "Edit(~/.config/workstation/secrets.env)"
     ],
     "ask": [
+      "Bash(gh pr merge*)",
+      "Bash(glab mr merge*)",
       "Bash(git push *--tags*)",
       "Bash(git push *refs/tags/*)",
       "Bash(git push * v*)",
