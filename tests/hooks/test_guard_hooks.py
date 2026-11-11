@@ -488,6 +488,29 @@ class LayerConfigTest(unittest.TestCase):
         )
         self.assertEqual(self.bash(command).returncode, 0)
 
+    def test_command_cd_and_repo_flag_pick_the_exempt_project(self) -> None:
+        self.config(
+            "a.json",
+            {
+                "change": {
+                    "title_requires_ticket": True,
+                    "ticket_exempt_projects": ["jadamsx/"],
+                }
+            },
+        )
+        other = self.root / "other"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "git@github.com:jadamsx/x.git"],
+            cwd=other,
+            check=True,
+        )
+        create = 'gh pr create --title "🔧 No ticket"'
+        self.assertEqual(self.bash(f"cd {other} && {create}").returncode, 0)
+        self.assertEqual(self.bash(create).returncode, 2)
+        self.assertEqual(self.bash(f"{create} --repo jadamsx/x").returncode, 0)
+
     def test_gitmoji_and_commit_ticket_rules(self) -> None:
         self.config(
             "a.json",
