@@ -12,8 +12,10 @@ Exit 0 = allow, exit 2 = block (stderr is fed back to Claude to fix and retry).
 """
 
 import json
+import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 
@@ -38,6 +40,10 @@ TEMPLATE_FILES = (
     "docs/pull_request_template.md",
     ".gitlab/merge_request_templates/default.md",
 )
+COMMIT = re.compile(r"\bgit\b[^|;&]*\bcommit\b")
+CD_DIR = re.compile(r"^\s*cd\s+(\"[^\"]*\"|'[^']*'|\S+)")
+GIT_DIR = re.compile(r"\bgit\s+-C\s+(\"[^\"]*\"|'[^']*'|\S+)")
+REPO_FLAG = re.compile(r"(?<!\S)(?:--repo|-R)[=\s]+([^\s\"']+)")
 TEMPLATE_DIRS = (".github/PULL_REQUEST_TEMPLATE", ".gitlab/merge_request_templates")
 CHANGE_CREATE = re.compile(r"\b(gh\s+pr\s+(create|edit)|glab\s+mr\s+(create|update))\b")
 SMELL_PATTERNS = re.compile(
@@ -166,6 +172,23 @@ def quoted_flag(command: str, flags: str) -> str:
     return (match.group(1) or match.group(2)) if match else ""
 
 
+def resolve_dir(raw: str, base: str) -> str:
+    expanded = os.path.expandvars(os.path.expanduser(shlex.split(raw)[0]))
+    target = pathlib.Path(base) / expanded
+    return str(target) if target.is_dir() else base
+
+
+def command_cwd(command: str, cwd: str, checked: re.Pattern[str]) -> str:
+    for segment in re.split(r"&&|;|\|\||\n", command):
+        if checked.search(segment):
+            git_dir = GIT_DIR.search(segment)
+            return resolve_dir(git_dir.group(1), cwd) if git_dir else cwd
+        change_dir = CD_DIR.match(segment)
+        if change_dir:
+            cwd = resolve_dir(change_dir.group(1), cwd)
+    return cwd
+
+
 def check_commit(command: str, cwd: str) -> list[str]:
     errors = []
     msg_match = re.search(r"-m\s+(?:\"([^\"]+)\"|'([^']+)')", command)
@@ -215,13 +238,15 @@ def main() -> None:
         body_flags = (
             "--body|-b" if re.search(r"\bgh\s+pr\b", command) else "--description|-d"
         )
+        repo = REPO_FLAG.search(command)
         errors = check_change(
-            quoted_flag(command, "--title|-t"), quoted_flag(command, body_flags), cwd
+            quoted_flag(command, "--title|-t"),
+            quoted_flag(command, body_flags),
+            command_cwd(command, cwd, CHANGE_CREATE),
+            repo.group(1) if repo else "",
         )
-    elif re.search(r"\bgit\b[^|;&]*\bcommit\b", command) and not (
-        "--amend" in command and "-m" not in command
-    ):
-        errors = check_commit(command, cwd)
+    elif COMMIT.search(command) and not ("--amend" in command and "-m" not in command):
+        errors = check_commit(command, command_cwd(command, cwd, COMMIT))
     else:
         sys.exit(0)
 
