@@ -22,6 +22,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Read discussions, with author and resolved state | `gh api repos/<o>/<r>/pulls/<n>/comments`; resolved state from GraphQL `reviewThreads { isResolved }` | `glab api projects/<id>/merge_requests/<iid>/discussions` |
 | Post an inline thread | `gh api repos/<o>/<r>/pulls/<n>/comments` with `commit_id`, `path`, `line`, `side=RIGHT` | `glab api projects/<id>/merge_requests/<iid>/discussions` with `position` (`base_sha`, `head_sha`, `start_sha`, `position_type=text`, `new_path`, `old_path`, `new_line`); `old_path` equals `new_path` unless renamed |
 | Reply in a thread | `.../pulls/<n>/comments/<id>/replies` | `.../discussions/<id>/notes` |
+| React ➕ to a note (agree) | `gh api repos/<o>/<r>/pulls/comments/<id>/reactions -f content=+1` (GitHub has no plus reaction; `+1` is the nearest) | `glab api -X POST projects/<id>/merge_requests/<iid>/notes/<note_id>/award_emoji -f name=heavy_plus_sign`; list the same path first and skip if yours is there |
 | Edit my own note | `PATCH repos/<o>/<r>/pulls/comments/<id>` | `PUT .../discussions/<id>/notes/<note_id>` |
 | Resolve a thread | GraphQL `resolveReviewThread` | `PUT .../discussions/<id>` with `resolved=true` |
 | Check status, per job | `gh pr checks <n>`, `gh run list --branch <b>` | `glab ci status`, `glab api projects/<id>/pipelines/<pipeline-id>/jobs` |
@@ -33,7 +34,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Open or update a change | `gh pr create`, `gh pr edit` | `glab mr create`, `glab mr update` |
 
 - The template path is the default; the project settings may point elsewhere. Read the template before writing a description (`engines/write.md`).
-- Reads go to `change-reader`. Post and edit calls are made by the main thread, after the owner's OK, one thread first, checked to land before the rest.
+- Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK, one thread first, checked to land before the rest.
 - Allowed exception to the OK gate: a ship run may rewrite its own change's title and description once at the start, unasked, per `engines/write.md` target `change` and the repo template. Any later edit asks.
 - Discussions are read with who raised each and whether it is resolved. A resolved thread is reopened by reply only with new evidence.
 
