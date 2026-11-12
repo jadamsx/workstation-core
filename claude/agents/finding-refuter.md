@@ -16,6 +16,9 @@ Only when your prompt says fix-check (review rounds 2+, or a recheck). Input: th
 
 Per finding: `FIXED`, `NOT FIXED` or `REGRESSED` (a recheck thread may be `PARTIAL` when only partly addressed), the decisive `file:line`, and what you ran versus read. A runtime claim is `FIXED` only when run on a scratch copy; settled by reading it is `PARTIAL` at best. The CONFIRMED, REFUTED, PARTIAL output below applies only outside this mode.
 
+## Comments mode
+For other people's comments, also say whether each belongs in this change (ticket, base SHA, `decisions.md`), not only whether it is true.
+
 ## Output
 Per finding and per claims-ledger line: `CONFIRMED`, `REFUTED` or `PARTIAL`, the shortest decisive quote with `file:line`, and what you ran versus read.
 
