@@ -241,7 +241,12 @@ A finding closes in exactly two ways: you change the code, or you produce eviden
 
 ### Triage of what comes back (change, epic)
 
-- Compare every draft against every existing discussion, from the pin step: open or resolved, human or automated, inline or general. Same point means same defect, not same line. Something the thread lacks (new evidence, a concrete fix, wider impact, a correction) goes into that thread, opening with what it adds. Otherwise drop it. Never a second thread on a point already raised.
+- Compare every draft against every existing discussion, from the pin step: open or resolved, human or automated, inline or general. Same point means same defect, not same line.
+- Never reply in a thread someone else started.
+- Same point, thread open, raised by a person: drop the draft and react ➕ to that thread's first note, unless you already reacted.
+- Same defect at a place that thread does not cover: a new thread of your own on that place.
+- Thread resolved, answered by the author, or raised by an automated reviewer: drop it.
+- Never a second thread on a point already raised.
 - The last note decides reply or edit. Yours last: never reply. Still open or partly fixed: edit your note to the current state only, prefixed `Updated at <short sha>:`. Fixed: resolve with no comment. Reply only when someone wrote since your last note. A genuinely new defect is a new thread. "Fixed in <sha>" replies belong to your own changes only.
 - Drop findings the description already documents ("inert until X lands" and the code agrees).
 - Separate a security hole from a weak test. Overclaiming is the fastest way to be ignored.
@@ -362,7 +367,7 @@ Shared environments: `role-tester`, `edge-case-explorer` and `ui-verifier` write
 
 ## Posting rules
 
-Mode `change` and `epic` only. Nothing posts before the owner's OK (`engines/common.md`); never approve or merge. Before the OK the owner is shown the three lines (`engines/write.md`), the drafts, the anchors, and per item: `new thread`, `edit my note on path:line`, `reply to <author>'s thread on path:line`, `resolve` or `dropped: already raised by <author>`.
+Mode `change` and `epic` only. Nothing posts before the owner's OK (`engines/common.md`); never approve or merge. Before the OK the owner is shown the three lines (`engines/write.md`), the drafts, the anchors, and per item: `new thread`, `edit my note on path:line`, `reply in my thread on path:line`, `react ➕ on <author>'s thread on path:line`, `resolve` or `dropped: already raised by <author>`.
 
 Anchor on lines the change adds; a context line is fragile. Compute post-image line numbers from the diff, do not guess:
 
@@ -377,7 +382,7 @@ git -C $WT/head diff <base_sha>..<head_sha> -U0 -- <paths> | awk '
 
 Every anchor appears in that output (`grep -n` the head file, confirm it is in the added set). Put a finding on the line that causes it; for a mismatch between two places anchor on the new code and cite the other by `path:line`. A finding that belongs to the ticket or description rather than one line is one general note, not forced onto an unrelated line.
 
-Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies go in the existing discussion, never as a new thread, only when someone wrote after your last note. Skip a summary note unless asked: the inline threads are the review.
+Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies in your own threads go in the existing discussion, never as a new thread, only when someone wrote after your last note. Reactions go after the threads and after the OK, re-checked against the re-read discussions, and skipped if your reaction is already there. Skip a summary note unless asked: the inline threads are the review.
 
 ### Comprehension test
 
