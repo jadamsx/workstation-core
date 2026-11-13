@@ -100,7 +100,7 @@ Follow the repo's title format (recent merged titles show it). Command-style, pr
 Open with the problem being solved, then why this approach over the others. A bug number or benchmark figure beats description. Keep what the diff cannot show: the reasoning, what will look like a bug and is not, ordering constraints, anything unsettled, what you ran. Cut: file-by-file walks, counts and methodology, restating the ticket, side fixes, your own process.
 
 ### Review comment
-3-sentence cap. Blocking findings state the break, the cost, and the fix; non-blocking findings are framed with a non-blocking prefix such as `Consider:` or `nit:`, blank line after. Fewer comments beat many. Ask a question when the author may know something you do not. Defer to whoever owns the decision, such as the design lead on a design call. Full framing: `engines/review.md` "Comment style".
+3-sentence cap. Blocking findings state the break, the cost, and the fix; non-blocking findings are framed with a non-blocking prefix such as `Should fix:` or `Nit:`, blank line after. Fewer comments beat many. Ask a question when the author may know something you do not. Defer to whoever owns the decision, such as the design lead on a design call. Full framing: `engines/review.md` "Comment style".
 
 ### Reply to a review comment
 Concede what's right first, then the evidence. No defensiveness, no re-litigating a point already conceded.

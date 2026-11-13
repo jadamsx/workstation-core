@@ -104,7 +104,7 @@ One set. The first four are the finding severities in every mode.
 |---|---|---|---|---|
 | Blocker | wrong behaviour, security hole, data loss, broken contract, a test that proves nothing about the fix, a comment the change made false | fix before push | blocking thread; comment findings are non-blocking except a comment the change made false | wrong premise (kills or rescopes, goes first) or blocks approval |
 | Refuse | too big to review, or mechanical churn burying the behaviour change | split before push | ask for a split before reviewing | n/a |
-| Should-fix | quality a senior engineer would stop at | fix before push; blocks exit | posted as `Consider:`, non-blocking | should change |
+| Should-fix | quality a senior engineer would stop at | fix before push; blocks exit | posted as `Should fix:`, non-blocking | should change |
 | Nit | style, naming, wording | round 1 fix; later fix if trivial, else list; never blocks exit | non-blocking, batched | note |
 
 Quality findings are never dropped on someone else's change, only labelled non-blocking. Google's standard applies: approve once the change improves the overall health of the code. Don't block on preference.
@@ -113,7 +113,7 @@ The other words each belong to one step, not to severity:
 - Claim marks: **verified**, **false**, **unverified because X**.
 - Refuter rulings: CONFIRMED, REFUTED, PARTIAL; fix-check FIXED, NOT FIXED, REGRESSED (recheck threads: PARTIAL for FIXED-in-part).
 - Triage actions ("Resolve findings"): CONTEST, ESCALATE, FIX, DECLINE.
-- Posting verdict, a recommendation, approving stays the owner's call each time: **Approve** (no findings, or only `Nit:` and `Consider:`), **Don't approve** (at least one Blocker posted; name it in five words), **Split first** (Refuse).
+- Posting verdict, a recommendation, approving stays the owner's call each time: **Approve** (no findings, or only `Nit:` and `Should fix:`), **Don't approve** (at least one Blocker posted; name it in five words), **Split first** (Refuse).
 - Plan rollup per ticket: sound, rework, wrong premise, merge, drop.
 
 A finding line: `file:line - what breaks - fix`.
@@ -382,7 +382,7 @@ git -C $WT/head diff <base_sha>..<head_sha> -U0 -- <paths> | awk '
 
 Every anchor appears in that output (`grep -n` the head file, confirm it is in the added set). Put a finding on the line that causes it; for a mismatch between two places anchor on the new code and cite the other by `path:line`. A finding that belongs to the ticket or description rather than one line is one general note, not forced onto an unrelated line.
 
-Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies in your own threads go in the existing discussion, never as a new thread, only when someone wrote after your last note. Reactions go after the threads and after the OK, re-checked against the re-read discussions, and skipped if your reaction is already there. Skip a summary note unless asked: the inline threads are the review.
+Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies in your own threads go in the existing discussion, never as a new thread, only when someone wrote after your last note. Reactions go after the threads and after the OK, re-checked against the re-read discussions, and skipped if your reaction is already there. Skip a summary note unless asked: the inline threads are the review. A claim one command can prove is run before it is posted; one that cannot be run is cut, never posted as "I expect".
 
 ### Comprehension test
 
