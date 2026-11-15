@@ -14,44 +14,27 @@ Never simplify away: validation at trust boundaries, data-loss handling, securit
 - Preserve existing project conventions unless there is a strong reason not to. Minimize diff size.
 - Explicit data flow over hidden state. Small, focused functions.
 
-## Python
-- Mandatory type hints. Explicit, readable control flow. No unnecessary async.
-- Centralize prompts and configuration. Use `uv` to run Python.
-
-## Errors
-- Fail fast. Domain-specific exceptions. Never swallow an exception silently.
-
-## Documentation
-- Google/ReST docstrings for public APIs and classes.
-
-## Comments
-- Self-explanatory code first. A comment explains WHY, never WHAT.
-- No tutorial-style or AI-style comments, no TODOs unless asked, no ticket or ADR references.
-- No explanatory comments in config files (YAML, HCL); the reason goes in the commit message.
-
-## Testing
-- Add to the existing test file. Short test names that say the behaviour.
-- Bugfix tests and do-nothing proofs: `disciplines/tdd.md`.
-- A route, component or user-visible flow gets driven with playwright: `checklists/ui-verify.md`.
+## Other code rules
+- Python: type hints, `uv`, configuration and prompts in one place, no unnecessary async. Google/ReST docstrings on public APIs.
+- Fail fast with domain-specific exceptions; never swallow one.
+- A comment explains WHY, never WHAT. No tutorial or AI-style comments, TODOs, or ticket or ADR references. No comments in config files (YAML, HCL); the reason goes in the commit message.
+- Tests: add to the existing test file, short names that say the behaviour. Bugfix tests: `disciplines/tdd.md`. UI flows: `checklists/ui-verify.md`.
 
 # Prose for humans
-Applies to everything a colleague reads: comments, docstrings, commits, changes, reviews, docs, chat messages, tickets.
-- Process: `engines/write.md`. Rules: `checklists/prose.md`. Load `house-style` before anything longer than a couple of sentences.
-- Plain English first. If "explain it like I'm 5" would be needed, the first pass was wrong.
+Applies to everything a colleague reads. Process: `engines/write.md`. Rules: `checklists/prose.md`. Load `house-style` before anything longer than a couple of sentences.
 
 # Working method
 
 ## Search
-- Concepts ("where/how does X work", behaviour with no known name): `grepai search "<question>"` run inside a fresh main checkout of the repo (not your branch), then open that path in your worktree and `rg` there for current content. Exact names and strings: `rg`. Structure: `ast-grep`. If `grepai search` errors, fall back to `rg` once.
-- Notes: `rg` `${NOTES_DIR:-~/notes}`, read the area index, then `grepai search` in that dir. A note marked stale or verified long ago is a lead, not a fact.
-- Anything across many files goes to `code-locator`. Targeted search over whole-file reads; ranges over whole files.
+- Concepts: `grepai search "<question>"` inside a fresh main checkout (not your branch), then `rg` the path in your worktree. Exact strings: `rg`. Structure: `ast-grep`. If `grepai search` errors, fall back to `rg` once.
+- Many files: `code-locator`.
+- Notes: `rg` `${NOTES_DIR:-~/notes}`, read the area index, then `grepai search` there. A stale note is a lead, not a fact.
 
 ## Common rules
 Git and worktree safety, gates, delegation, the model rule and the report shape: `engines/common.md`.
 
 ## Context
-- Output likely to exceed 50 lines goes through a sandboxed executor or `head`/`grep`. Big MCP results: minimal fields.
-- Smallest read that answers. No re-reads. Batch independent calls. Stop when the task is done.
+Output likely to exceed 50 lines goes through a sandboxed executor or `head`/`grep`; big MCP results use minimal fields.
 
 ## Compact instructions
 When summarising, always keep:
@@ -61,7 +44,7 @@ When summarising, always keep:
 
 ## Notes
 - Before platform, tooling or process work, read `${NOTES_DIR:-~/notes}/index.md` and `grepai search` the vault; cite what you used.
-- Anything readable (plans, designs, decisions, research) goes to `${NOTES_DIR:-~/notes}` through `notes-write` as a refactor. `${DRAFTS_DIR:-~/drafts}` holds agent artifacts only, under `projects/<slug>/<ticket-or-topic>/`; notes go under `projects/<slug>/`, `<slug>` from `current-project`. No new top-level folders in either.
+- Readable output (plans, designs, decisions, research) goes to `${NOTES_DIR:-~/notes}` via `notes-write`. `${DRAFTS_DIR:-~/drafts}` is agent artifacts only, under `projects/<slug>/<ticket-or-topic>/` (`<slug>` from `current-project`). No new top-level folders in either.
 
 ## Before building anything
 Answer the five questions in `checklists/design.md` section 0, one sentence each with a `file:line`, `N/A` plus why, or `unknown`. `unknown` blocks.

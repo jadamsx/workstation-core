@@ -188,7 +188,8 @@
     ],
     "ownedHookPath": "/.claude/hooks/",
     "foreignHookMarkers": [
-      "herdr-agent-state"
+      "herdr-agent-state",
+      "context-mode-cache-heal"
     ]
   }
 }
