@@ -247,7 +247,7 @@ A finding closes in exactly two ways: you change the code, or you produce eviden
 - Same defect at a place that thread does not cover: a new thread of your own on that place.
 - Thread resolved, answered by the author, or raised by an automated reviewer: drop it.
 - Never a second thread on a point already raised.
-- The last note decides reply or edit. Yours last: never reply. Still open or partly fixed: edit your note to the current state only, prefixed `Updated at <short sha>:`. Fixed: resolve with no comment. Reply only when someone wrote since your last note. A genuinely new defect is a new thread. "Fixed in <sha>" replies belong to your own changes only.
+- The last note decides reply or edit. Yours last: never reply. Still open or partly fixed: edit your note to the current state only, prefixed `Updated at <short sha>:`. Fixed: resolve with no comment. Reply only when someone wrote since your last note. Never resolve a thread the author commented on that is still open. A genuinely new defect is a new thread. "Fixed in <sha>" replies belong to your own changes only.
 - Drop findings the description already documents ("inert until X lands" and the code agrees).
 - Separate a security hole from a weak test. Overclaiming is the fastest way to be ignored.
 - Downgrade races with idempotent effects: duplicate work is not corruption.
@@ -382,7 +382,7 @@ git -C $WT/head diff <base_sha>..<head_sha> -U0 -- <paths> | awk '
 
 Every anchor appears in that output (`grep -n` the head file, confirm it is in the added set). Put a finding on the line that causes it; for a mismatch between two places anchor on the new code and cite the other by `path:line`. A finding that belongs to the ticket or description rather than one line is one general note, not forced onto an unrelated line.
 
-Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies in your own threads go in the existing discussion, never as a new thread, only when someone wrote after your last note. Reactions go after the threads and after the OK, re-checked against the re-read discussions, and skipped if your reaction is already there. Skip a summary note unless asked: the inline threads are the review. A claim one command can prove is run before it is posted; one that cannot be run is cut, never posted as "I expect".
+Immediately before posting, re-read the discussions (`engines/ship.md`) and re-run the triage comparison on anything new. One thread per `new thread`, worst first; post one and check it lands before the rest. Replies in your own threads go in the existing discussion, never as a new thread, only when someone wrote after your last note. Reactions go after the threads and after the OK, re-checked against the re-read discussions, and skipped if your reaction is already there. Skip a summary note unless asked: the inline threads are the review. A claim one command can prove is run before it is posted; one that cannot be run is cut, never posted as "I expect". Resolve threads one at a time, never by a script. A clean change gets no comment: say "clean" in chat.
 
 ### Comprehension test
 

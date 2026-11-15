@@ -27,6 +27,7 @@ Never simplify away: validation at trust boundaries, data-loss handling, securit
 ## Comments
 - Self-explanatory code first. A comment explains WHY, never WHAT.
 - No tutorial-style or AI-style comments, no TODOs unless asked, no ticket or ADR references.
+- No explanatory comments in config files (YAML, HCL); the reason goes in the commit message.
 
 ## Testing
 - Add to the existing test file. Short test names that say the behaviour.

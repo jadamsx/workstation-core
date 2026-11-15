@@ -19,7 +19,7 @@ Concepts for planning: sizing, the plan note, the node vocabulary, the five answ
 4. Verdict: the five answers run (below). `don't` or `already exists` ends the run here: no plan, no branch, no code. Report and stop. Done when each answer carries a `file:line`, `N/A` plus why, or `unknown` (which blocks).
 5. Read and locate: the ticket and its comments, the notes, the code, every caller of anything exported. Epic: epic mode. Done when every file and caller the change touches is listed.
 6. Node graph: the table in "Node vocabulary". Quick plans still write it. Done when each node has an acceptance sentence and a discipline, every acceptance criterion has a verification node, and a quick plan still has its table.
-7. Review the plan: `engines/review.md` plan mode, with this plan's size and kind. Done when a round returns no findings or the cap is hit.
+7. Review the plan: `engines/review.md` plan mode, with this plan's size and kind. Done when a round returns no findings or the cap is hit. The last round brings yes/no suggestions to the owner; it never rewrites agreed decisions itself.
 8. Plan note: write it (below). Status `proposed`. Done when the note passes `notes-lint`, carries the plan fields the work touches, and the owner has the table.
 9. Approve: after the owner says go and not before, set `status: approved`, `date:`, and write the Progress checklist. Record the nodes with `node-index` (below). Done when the frontmatter reads `status: approved` with `date:` set; a keyless quick plan has no note, so the go in the session is the approval.
 
@@ -210,7 +210,7 @@ Rounds, lanes, caps and the stop rule: `engines/review.md` plan mode, epic. What
 - `approach-reviewer`: authority, spoofing, races, duplicates, partial-failure exposure.
 - `clean-code`: cut what is not `Decided:`.
 
-Every prompt carries every `Decided:` item and states that "no code exists yet" is not a finding. Triage each round yourself into verified, housekeeping, drop and unverified, and show the owner that split, never the raw list. Verify every load-bearing claim before folding it in. A real fork (push vs poll, generic vs single-producer) goes to the owner with the long-term trade-off; never pick the cheaper option to save effort.
+Every prompt carries every `Decided:` item and states that "no code exists yet" is not a finding. Triage each round yourself into verified, housekeeping, drop and unverified, and show the owner that split, never the raw list. Verify every load-bearing claim before folding it in. A real fork (push vs poll, generic vs single-producer) goes to the owner with the long-term trade-off; never pick the cheaper option to save effort. Premise or review findings never shrink the ticket's scope: note them and keep the requirement.
 
 ### Cut it into tickets
 
