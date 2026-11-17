@@ -3,7 +3,9 @@
 
 The main thread coordinates; subagents do the work. Subagent tool calls carry `agent_id` in
 the hook payload, the main thread's do not. Putting `main-thread-ok` in a prompt lifts the
-block for that turn: the UserPromptSubmit wiring records it per session, PreToolUse reads it.
+edit gate for the main thread this turn: the UserPromptSubmit wiring records it per session,
+PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
+agent with one bounded task, never a general-purpose agent carrying a whole job.
 
 Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 """
@@ -206,7 +208,9 @@ def main() -> None:
     reason = block_reason(payload)
     if reason:
         print(
-            f"{reason} Add `{ESCAPE_PHRASE}` to your prompt to allow it this turn.",
+            f"{reason} `{ESCAPE_PHRASE}` in your prompt lifts the edit gate for the main thread this turn; "
+            "it is not a way to brief agents. Long or open-ended jobs go to a typed agent "
+            "with one bounded task, never a general-purpose agent carrying a whole job.",
             file=sys.stderr,
         )
         sys.exit(2)

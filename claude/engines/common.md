@@ -18,6 +18,8 @@ Every engine and every agent loads this file. Each rule below lives only here.
 - The main thread coordinates. It does not edit files or run tests, builds, linters or formatters.
 - Edits go to `builder` (scope `one-file` for 1-2 files, `node` for a plan node). Runs go to `run-digest`. Review goes to `cold-reviewer`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
 - Agents never dispatch other agents.
+- Brief typed agents with one bounded task each; a job too big for one is split, not handed to a general-purpose agent.
+- Never poll. A long run (suite, CI pipeline, deploy, build) starts in the background with a notification on exit (`run_in_background`, or Monitor with an until-loop); the main thread keeps dispatching other work. On the notification, a fresh agent gets the result path: `run-digest` reduces it to one line, a builder or triage agent acts on it. No agent and no main-thread turn exists to check whether something finished. The run writes every end state (pass, fail, crash, timeout), so silence never means success.
 - Parallel workers only when the owner asks, or inside a build wave. Add a review round, plan or second agent only for the failure mode it covers.
 - A claim that rests on something an agent read gets read by the main thread before it acts. Weigh every agent finding for realism, say which you accept and why, never relay a verdict verbatim.
 

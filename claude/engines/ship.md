@@ -68,7 +68,7 @@ Any review app or plugin: GitHub Copilot code review, CodeRabbit, Danger, a revi
 Runs until: checks green, every valid automated comment fixed, every correct scanner finding fixed. Never stops to ask; reports.
 
 1. Fetch state: per-job checks, unresolved discussions, automated notes, conflicts, `git fetch origin <target>` (always the latest before investigating).
-2. Checks running: read job states every round, not just the overall status. Wait about 270 s only when no job has failed and nothing else is actionable. Do not idle.
+2. Checks running: read job states every round, not just the overall status. When no job has failed and nothing else is actionable, watch the pipeline in a background command that exits when any job changes state, and act on its notification. Do not poll.
 3. A job failed (not an allowed failure), even while others run: `run-digest` reads that log at once, a `builder` fixes the root cause in parallel with the rest of the pipeline, `run-digest` runs pre-commit, then commit and push. The push supersedes the old run. A flaky-shaped failure (runner died, timeout, network): retry once instead of fixing code.
 4. Automated comments and scanner findings: per "Automated reviewers".
 5. Conflicts: below.
