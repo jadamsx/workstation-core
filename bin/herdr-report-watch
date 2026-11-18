@@ -20,14 +20,23 @@ the limit, past the reset, overridden or failing open) the watcher sends them in
 path, drops a job whose manager is gone, and each coordinator gets one
 `[worker-report] resumed parked jobs: <names>` line.
 
+A shell started by a Bash tool call (its command names `shell-snapshots`) under a `claude` process is reaped when
+it and its child processes together have used no CPU for 10 minutes and it is older than 10 minutes: SIGTERM, then
+SIGKILL 5 seconds later if it is still there. Output cannot be watched cheaply, so CPU is the only signal. Jobs
+whose command line contains a `reaper_keep` substring from `claude/resource-policy.json` are left alone. A shell under
+a manager's claude also gets a `Status: decision` report, `reaped-<pid>.md`, in that manager's folder.
+
 Sent files are recorded in `<root>/.watch-state.json`. Every send and retry is logged to stdout, which
 the launchd agent writes to ~/Library/Logs/herdr-report-watch.log.
 """
 import argparse
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
+from typing import Callable, NamedTuple
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -41,6 +50,38 @@ RETRY_SECONDS = 15
 IDLE_SECONDS = 900
 TAIL_LINES = 15
 WAITING = "WAITING:"
+REAP_IDLE_SECONDS = 600
+KILL_GRACE_SECONDS = 5
+SHELLS = {"bash", "zsh", "sh"}
+BASH_TOOL_MARK = "shell-snapshots"
+POLICY = Path(__file__).resolve().parent.parent / "claude/resource-policy.json"
+
+
+class Proc(NamedTuple):
+    pid: int
+    ppid: int
+    age: float
+    cpu: float
+    command: str
+
+
+def clock_seconds(text: str) -> float:
+    """Seconds in a ps `[[dd-]hh:]mm:ss[.ff]` field."""
+    days, _, clock = text.rpartition("-")
+    total = 0.0
+    for part in clock.split(":"):
+        total = total * 60 + float(part)
+    return total + (int(days) * 86400 if days else 0)
+
+
+def read_procs() -> list[Proc]:
+    out = subprocess.run(["ps", "-axo", "pid,ppid,etime,time,command"], check=True, capture_output=True, text=True).stdout
+    rows = (line.split(None, 4) for line in out.splitlines()[1:])
+    return [Proc(int(r[0]), int(r[1]), clock_seconds(r[2]), clock_seconds(r[3]), r[4]) for r in rows if len(r) == 5]
+
+
+def argv0(proc: Proc) -> str:
+    return Path(proc.command.split(None, 1)[0]).name.lstrip("-")
 
 
 def last_message(text: str) -> str:
@@ -50,8 +91,12 @@ def last_message(text: str) -> str:
 
 
 class Watcher:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, procs: Callable[[], list[Proc]] = read_procs, kill: Callable[[int, int], None] = os.kill) -> None:
         self.root = root
+        self.procs = procs
+        self.kill = kill
+        self.cpu_seen: dict[int, tuple[float, float]] = {}
+        self.terminated: dict[int, float] = {}
         self.state_file = root / ".watch-state.json"
         self.state = {"sent": [], "exited": [], "idle": [], "cleared": []}
         if self.state_file.exists():
@@ -154,11 +199,74 @@ class Watcher:
             coordinator = path.read_text().strip() if path.exists() else None
             self.deliver(f"resumed:{wall}:{coordinator_file}", coordinator, f"[worker-report] resumed parked jobs: {', '.join(names)}", None, wall)
 
+    def reap(self, now: float) -> None:
+        """Stop Bash-tool shells under a claude process that have burnt no CPU for REAP_IDLE_SECONDS, unless a keep-listed job runs in them."""
+        try:
+            keep = json.loads(POLICY.read_text())["reaper_keep"]
+            procs = self.procs()
+        except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as err:
+            self.log(f"reaper skipped: {err}")
+            return
+        by_pid = {p.pid: p for p in procs}
+        children: dict[int, list[Proc]] = {}
+        for p in procs:
+            children.setdefault(p.ppid, []).append(p)
+
+        def claude_above(proc: Proc) -> Proc | None:
+            seen = set()
+            while proc.ppid in by_pid and proc.ppid not in seen:
+                seen.add(proc.ppid)
+                proc = by_pid[proc.ppid]
+                if argv0(proc) == "claude":
+                    return proc
+            return None
+
+        owners = {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_MARK in p.command and (c := claude_above(p))}
+        seen_cpu: dict[int, tuple[float, float]] = {}
+        for pid, claude in owners.items():
+            tree, queue = [], [by_pid[pid]]
+            while queue:
+                tree.append(queue.pop())
+                queue += children.get(tree[-1].pid, [])
+            cpu = sum(p.cpu for p in tree)
+            before = self.cpu_seen.get(pid)
+            since = before[1] if before and before[0] == cpu else now
+            seen_cpu[pid] = (cpu, since)
+            shell = by_pid[pid]
+            if shell.ppid in owners or pid in self.terminated or now - since <= REAP_IDLE_SECONDS or shell.age <= REAP_IDLE_SECONDS:
+                continue
+            if any(k in p.command for p in tree for k in keep):
+                continue
+            self.stop(shell, claude)
+            self.terminated[pid] = now
+        self.cpu_seen = seen_cpu
+        for pid, since in list(self.terminated.items()):
+            if pid not in by_pid:
+                del self.terminated[pid]
+            elif now - since >= KILL_GRACE_SECONDS:
+                self.kill(pid, signal.SIGKILL)
+                del self.terminated[pid]
+
+    def stop(self, shell: Proc, claude: Proc) -> None:
+        command = shell.command.split("eval ", 1)[-1][:200]
+        self.kill(shell.pid, signal.SIGTERM)
+        self.log(f"reaped shell {shell.pid}: {command}")
+        for info in self.root.glob("*/*/manager.json"):
+            if f"{info.parent}/mcp.json" in claude.command:
+                body = (
+                    "Status: decision\n"
+                    f"Stopped shell pid {shell.pid}: no CPU use for over {REAP_IDLE_SECONDS // 60} minutes.\n"
+                    f"Command: {command}\n"
+                    "Rerun it with run_in_background if it should run that long, or add it to reaper_keep in resource-policy.json.\n"
+                )
+                write_atomic(info.parent / f"reaped-{shell.pid}.md", body)
+
     def scan(self, now: float) -> None:
         if self.state_file.exists():
             on_disk = json.loads(self.state_file.read_text()).get("cleared", [])
             self.state["cleared"] = [*self.state["cleared"], *(k for k in on_disk if k not in self.state["cleared"])]
         self.resume_parked()
+        self.reap(now)
         panes: dict[str, str] | None = None
         for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
             coordinator_file = space / "coordinator"

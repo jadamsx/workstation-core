@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import stat
 import sys
 import subprocess
@@ -640,6 +641,8 @@ class ManagerTests(ReportsCase):
         tab = next(c for c in self.calls() if c.startswith("tab create"))
         self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
         self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
+        for item in herdr_reports.NO_STDIN_ENV:
+            self.assertIn(f"--env {item}", tab)
         start = next(c for c in self.calls() if c.startswith("agent start"))
         self.assertIn("agent start alpha-space-one --kind claude --pane w1:p4 -- --model sonnet --resume 0a1b2c3d", start)
         self.assertIn("--append-system-prompt-file", start)
@@ -902,6 +905,68 @@ class IdleTests(ReportsCase):
         w.scan(0)
         w.scan(5000)
         self.assertEqual(self.idle_lines(), [])
+
+
+class NoStdinEnvTests(unittest.TestCase):
+    def test_settings_env_carries_the_same_five_keys(self) -> None:
+        env = json.loads((REPO / "claude/settings.base.json").read_text())["env"]
+        self.assertEqual({f"{k}={v}" for k, v in env.items() if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}, set(herdr_reports.NO_STDIN_ENV))
+
+
+class ReaperTests(ReportsCase):
+    CLAUDE = "claude --model sonnet --mcp-config {mcp}"
+    SHELL = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval '{cmd}' < /dev/null"
+
+    def table(self, cmd: str = "make serve", cpu: float = 0.0, age: float = 900, parent: int = 10, child_cpu: float = 0.0) -> list:
+        mcp = self.manager() / "mcp.json"
+        P = watch.Proc
+        return [
+            P(10, 1, 5000, 50.0, self.CLAUDE.format(mcp=mcp)),
+            P(20, parent, age, cpu, self.SHELL.format(cmd=cmd)),
+            P(21, 20, age, child_cpu, cmd),
+        ]
+
+    def reaper(self, rows: list) -> tuple[watch.Watcher, list]:
+        kills: list = []
+        watcher = watch.Watcher(self.root, procs=lambda: rows, kill=lambda pid, sig: kills.append((pid, sig)))
+        watcher.scan(0)
+        watcher.scan(601)
+        return watcher, kills
+
+    def test_idle_descendant_shell_is_killed_and_a_decision_report_written(self) -> None:
+        watcher, kills = self.reaper(self.table())
+        self.assertEqual(kills, [(20, signal.SIGTERM)])
+        report = (self.manager() / "reaped-20.md").read_text()
+        self.assertEqual(report.split("\n")[0], "Status: decision")
+        self.assertIn("pid 20", report)
+        self.assertIn("make serve", report)
+        self.assertIn(f"[worker-report] {self.manager() / 'reaped-20.md'}", " ".join(self.prompts()))
+        watcher.scan(603)
+        self.assertEqual(len(kills), 1)
+        watcher.scan(607)
+        self.assertEqual(kills[1], (20, signal.SIGKILL))
+
+    def test_keep_listed_busy_and_unrelated_shells_survive(self) -> None:
+        for rows in (
+            self.table(cmd="docker compose up"),
+            self.table(cmd="tail -f log"),
+            self.table(age=500),
+            [r for r in self.table() if r.pid != 10],
+            self.table(parent=99),
+        ):
+            self.assertEqual(self.reaper(rows)[1], [])
+        kills: list = []
+        rows = [self.table(child_cpu=1.0), self.table(child_cpu=2.0)]
+        watcher = watch.Watcher(self.root, procs=lambda: rows[0], kill=lambda pid, sig: kills.append(pid))
+        watcher.scan(0)
+        watcher.procs = lambda: rows[1]
+        watcher.scan(601)
+        self.assertEqual(kills, [])
+
+    def test_ps_fields_parse(self) -> None:
+        self.assertEqual(watch.clock_seconds("1-02:03:04"), 93784)
+        self.assertEqual(watch.clock_seconds("35:36"), 2136)
+        self.assertEqual(watch.clock_seconds("0:05.11"), 5.11)
 
 
 if __name__ == "__main__":

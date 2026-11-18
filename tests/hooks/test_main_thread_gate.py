@@ -262,6 +262,51 @@ class PayloadTest(unittest.TestCase):
         self.env["WORKSTATION_REPORTS"] = "/tmp/reports"
         self.assertEqual(self.ask_code("Edit", {"file_path": "/repo/a.py"}), 2)
 
+    def test_polling_loops_and_long_sleeps_denied_for_every_role(self) -> None:
+        commands = [
+            "until curl -s localhost; do sleep 2; done",
+            "while true; do sleep 1; done",
+            "sleep 11",
+            "sleep 1m",
+            "sleep 0.5h",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                for extra in ({}, {"agent_id": "a1"}):
+                    result = self.run_hook(self.pre("Bash", {"command": command}, **extra))
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("run_in_background", result.stderr)
+                self.env["WORKSTATION_REPORTS"] = "/r"
+                self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 2)
+                del self.env["WORKSTATION_REPORTS"]
+
+    def test_short_sleep_and_quoted_text_allowed(self) -> None:
+        for command in ("sleep 2", "sleep 10", 'echo "while we sleep 30"'):
+            self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 0, command)
+
+    def test_ask_gate_still_applies_beside_the_sleep_rule(self) -> None:
+        self.assertEqual(self.ask_code("Bash", {"command": "ls"}), 0)
+        self.assertEqual(self.ask_code("Bash", {"command": "make deploy"}), 2)
+
+    def test_background_command_gets_timeout_wrapper(self) -> None:
+        tool_input = {"command": "echo 'it''s'", "run_in_background": True}
+        result = self.run_hook(self.pre("Bash", tool_input))
+        self.assertEqual(result.returncode, 0)
+        out = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(out["hookEventName"], "PreToolUse")
+        updated = out["updatedInput"]
+        self.assertTrue(updated["run_in_background"])
+        self.assertRegex(updated["command"], r"^(gtimeout 1200|perl -e 'alarm 1200; exec @ARGV' --) bash -c ")
+        shell = subprocess.run(updated["command"], shell=True, text=True, capture_output=True)
+        self.assertEqual(shell.stdout.strip(), "its")
+
+    def test_foreground_and_wrapped_commands_unchanged(self) -> None:
+        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "echo hi"})).stdout, "")
+        wrapped = {"command": "gtimeout 1200 bash -c 'echo hi'", "run_in_background": True}
+        self.assertEqual(self.run_hook(self.pre("Bash", wrapped)).stdout, "")
+        perl = {"command": "perl -e 'alarm 1200; exec @ARGV' -- bash -c 'x'", "run_in_background": True}
+        self.assertEqual(self.run_hook(self.pre("Bash", perl)).stdout, "")
+
     def ask_code(self, tool: str, tool_input: dict, **extra: str) -> int:
         self.env["WORKSTATION_ROLE"] = "ask"
         return self.run_hook(self.pre(tool, tool_input, **extra)).returncode

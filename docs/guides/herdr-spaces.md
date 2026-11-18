@@ -40,6 +40,9 @@ It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and l
 
 `herdr-report-watch` carries result files to the lead. `install.sh` renders and loads it as a launchd agent on macOS, logging to `~/Library/Logs/herdr-report-watch.log`. Elsewhere, run it yourself.
 
+The watcher also stops a shell that a Bash tool call left behind: one under a `claude` process, older than 10 minutes, whose processes have used no CPU for 10 minutes. It sends SIGTERM, then SIGKILL after 5 seconds, and a manager gets a `Status: decision` report naming the command and pid.
+Commands containing a `reaper_keep` entry in `claude/resource-policy.json` (`docker`, `kubectl`, `tail -f` by default) are never stopped.
+
 ## Troubleshooting
 
 - Startup prompts are answered for you: folder trust and external `CLAUDE.md` imports, only under the lead's folder. Anywhere else, run `claude` there once to trust it.

@@ -12,6 +12,7 @@ MANAGER_TAB = "▸ "
 ASK_TAB = "? ask"
 TRUST_DIALOG = "Is this a project you created or one you trust?"
 IDLE_STATES = {"idle", "done"}
+NO_STDIN_ENV = ("CI=1", "GIT_TERMINAL_PROMPT=0", "PAGER=cat", "GIT_PAGER=cat", "GIT_EDITOR=true")
 INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*[>❯]\s", re.M)
 
 

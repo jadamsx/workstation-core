@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, work_enabled, write_atomic,
+    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, NO_STDIN_ENV, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, work_enabled, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -124,7 +124,8 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     """Open a tab running claude and answer its startup prompts; the tab is closed again if that fails."""
     tab = herdr(
         "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory), "--label", label,
-        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--env", "DISABLE_UPDATE_PROMPT=true", "--no-focus",
+        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--env", "DISABLE_UPDATE_PROMPT=true",
+        *(arg for item in NO_STDIN_ENV for arg in ("--env", item)), "--no-focus",
     )
     pane = tab["root_pane"]["pane_id"]
     try:
