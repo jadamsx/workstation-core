@@ -12,7 +12,7 @@ MANAGER_TAB = "▸ "
 ASK_TAB = "? ask"
 TRUST_DIALOG = "Is this a project you created or one you trust?"
 IDLE_STATES = {"idle", "done"}
-INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*[>❯] ", re.M)
+INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*[>❯]\s", re.M)
 
 
 class ReportsError(Exception):

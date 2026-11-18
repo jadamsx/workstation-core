@@ -585,9 +585,10 @@ class ManagerTests(ReportsCase):
         self.assertFalse((self.space / "beta/manager.json").exists())
 
     def test_input_box_matches_both_prompt_glyphs(self) -> None:
-        for text in ("> \n", "│ > \n", "❯ \n", "  ? for shortcuts"):
+        for text in ("> \n", "│ > \n", "❯ \n", "❯\xa0Try \"x\"\n", "  ? for shortcuts"):
             self.assertTrue(herdr_reports.INPUT_BOX.search(text), text)
-        self.assertFalse(herdr_reports.INPUT_BOX.search("loading\n"))
+        for text in ("loading\n", "❯Try\n", "echo > file\n"):
+            self.assertFalse(herdr_reports.INPUT_BOX.search(text), text)
 
     def test_trust_accepted_but_no_input_box_raises(self) -> None:
         self.trust_dialog()
