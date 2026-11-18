@@ -536,6 +536,10 @@ class BaselineTest(LintCase):
     def test_good_vault_is_clean(self) -> None:
         self.assertEqual(self.lint(), (0, []))
 
+    def test_legacy_frontmatter_key_is_known(self) -> None:
+        replace("reference/ref.md", "ticket: []", "ticket: []\nlegacy: true")(self.root)
+        self.assertEqual(self.lint(), (0, []))
+
     def test_progress_checklist_with_in_progress_marks_is_clean(self) -> None:
         sub(
             self.root,

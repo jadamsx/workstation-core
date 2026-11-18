@@ -244,6 +244,15 @@ class ParkedResumeTests(ReportsCase):
         watch.Watcher(self.root).scan(0)
         self.assertEqual((self.left(), self.prompts()), (["alpha"], []))
 
+    def test_a_busy_manager_does_not_block_the_jobs_after_it(self) -> None:
+        self.park(("alpha", "/plan-task a", 0), ("beta", "/plan-task b", 0))
+        folder = self.space / "alpha"
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p9", "tab_id": "w1:t9", "standing": True}))
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1"},{"pane_id":"w1:p9","agent_status":"working"},{"pane_id":"w1:p8"}'
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.left(), ["alpha"])
+        self.assertIn("agent prompt w1:p8 [coordinator] /plan-task b", self.prompts())
+
 
 class DoneReportTests(ReportsCase):
     def test_done_report_is_delivered_then_closes_the_tab_and_silences_the_exited_line(self) -> None:
@@ -537,6 +546,16 @@ class ManagerTests(ReportsCase):
         self.assertEqual(self.started_servers(starts[1]), set(POLICY["roles"]["ask"]))
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
+
+    def test_ask_role_refuses_any_mcp_server(self) -> None:
+        manager = SourceFileLoader("herdr_manager_under_test", str(REPO / "bin/herdr-manager")).load_module()
+        self.root.mkdir(parents=True, exist_ok=True)
+        policy, catalog = self.root / "policy.json", self.root / "mcp.json"
+        policy.write_text(json.dumps({"roles": {"ask": ["x"]}}))
+        catalog.write_text(json.dumps({"mcpServers": {"x": {}}}))
+        with mock.patch.object(manager, "POLICY", policy), mock.patch.object(manager, "MCP_SERVERS", catalog):
+            with self.assertRaises(herdr_reports.ReportsError):
+                manager.mcp_args("ask", self.root / "ask")
 
     def test_setup_in_two_spaces_passes_distinct_agent_names(self) -> None:
         self.setup_run()

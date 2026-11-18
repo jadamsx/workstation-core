@@ -120,9 +120,9 @@ ASK_AGENTS = {
 }
 ASK_ALLOWED = (
     "Allowed in the ask tab: read-only agents (" + ", ".join(sorted(ASK_AGENTS)) + "), "
-    "and Bash that runs only listed read-only commands (ls, cat, head, tail, wc, rg, grep, find, jq, diff, "
-    "git, gh and glab reads, `herdr pane read|list`, `herdr tab list`, `herdr workspace list|get`, "
-    "`herdr agent list`), joined by && || ; |, with no command substitution or `$` and no redirect except to /dev/null. "
+    "and Bash that runs only listed read-only commands (" + ", ".join(sorted(ASK_READ_HEADS)) + "; "
+    "git " + ", ".join(sorted(ASK_GIT_READS)) + "; gh and glab reads; "
+    "herdr " + ", ".join(" ".join(pair) for pair in sorted(ASK_HERDR_READS)) + "), joined by && || ; |, with no command substitution or `$` and no redirect except to /dev/null. "
     "No file edits, no SendMessage. Point the human to the lead tab."
 )
 
@@ -274,7 +274,9 @@ def ask_allows(tokens: list[str]) -> bool:
         while rest[:1] == ["-C"]:
             rest = rest[2:]
         sub, args = (rest[:1] or [""])[0], rest[1:]
-        if any(a.startswith(("--output", "--textconv", "--ext-diff")) for a in args):
+        if any(a.startswith(("--output", "--textconv", "--ext-diff", "--no-index")) for a in args):
+            return False
+        if sub in ("diff", "log", "show") and any(a.startswith(("/", "~")) or "../" in a for a in args):
             return False
         if sub == "branch":
             return set(args) <= ASK_GIT_BRANCH_FLAGS

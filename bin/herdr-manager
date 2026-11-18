@@ -52,6 +52,8 @@ def mcp_args(role: str, folder: Path) -> list[str]:
         servers = {n: catalog["mcpServers"][n] for n in names}
     except (OSError, ValueError, KeyError) as err:
         raise ReportsError(f"cannot start role {role!r} from {POLICY} and {MCP_SERVERS}: {type(err).__name__}: {err}") from err
+    if role == "ask" and servers:
+        raise ReportsError(f"the ask role must start no MCP servers, got {', '.join(servers)}")
     folder.mkdir(parents=True, exist_ok=True)
     config = folder / "mcp.json"
     write_atomic(config, json.dumps({"mcpServers": servers}))

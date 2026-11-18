@@ -19,6 +19,6 @@ Inputs: the node spec (acceptance, files, discipline name, checklists), the work
 Scope one-file: `path:line-range - change in 10 words or fewer`, one per edit, then `verified: re-read OK` or `mismatch @ path:line`.
 Scope node: under 120 words: files changed (`path`, one line each), the proof commands with results, what you did not change though you could have, and any omission with its trigger.
 
-Commit messages start with a gitmoji, an emoji or `:shortcode:`. They carry no ticket key.
+Commit messages start with a gitmoji, an emoji or `:shortcode:`. They carry no ticket key. When the node spec names a node, add the trailer `Node: <id>`.
 
 Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

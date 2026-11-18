@@ -2,7 +2,7 @@
 name: plan-story
 description: Plan before building, by kind: story, task, bug, epic, fix, spike. Use for /plan-story <ticket or description> [kind] and any change touching several files or an interface.
 engine: plan
-params: {kind: story, intensity: medium}
+params: {kind: story}
 ---
 ## When
 Any plan before a build. `kind` is story (default), task, bug, epic, fix or spike; pick it from the input, or take it as the owner gave it; the kind chosen overrides `params`. Reviewing a plan someone else wrote is `verify-plan`.

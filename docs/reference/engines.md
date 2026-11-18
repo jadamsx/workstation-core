@@ -6,7 +6,7 @@ An engine is the full procedure for one stage of work, in `claude/engines/<name>
 | --- | --- | --- |
 | `common` | Git and worktree safety, gates, delegation, the model rule, agent refusals, report skeleton, glossary. Every engine and agent loads it | none |
 | `plan` | Sizing, the five design questions, the plan note, the node table, epic mode | `kind`: `task`, `bug`, `spike`, `story`, `epic`, `fix`. `intensity`: `light`, `medium`, `intense` |
-| `build` | Running an approved plan's nodes in worktrees, wave by wave, then the whole-repo gates and proof | `scope`: `node`, `wave`, `plan` |
+| `build` | Running an approved plan's nodes in worktrees, ready node by ready node, then the whole-repo gates and proof | `scope`: `node`, `wave`, `plan`; default the whole ready graph |
 | `review` | Review of your own branch, someone else's change, comments, an epic or a plan: pinning a checkout, reviewers, verification of findings, posting rules, the intensity scale | `mode`: `self`, `change`, `epic`, `comments`, `plan`. `intensity`: `light`, `medium`, `intense`; `recheck` is a flag on `change`. `target` |
 | `write` | Process for anything a colleague reads: change descriptions, tickets, comments, commits, notes | `target`: `change`, `ticket`, `comment`, `reply`, `commit`, `note`, `chat` |
 | `ship` | The source control adapter, the tracker, automated reviewers, the push gate, the CI loop, conflicts | `target`: a change URL, `<project> #<number>` or empty. `phase`: `open`, `loop` |

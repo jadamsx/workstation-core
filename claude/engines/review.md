@@ -24,13 +24,13 @@ Plans and code alike; nothing else decides depth.
 |---|---|---|---|
 | `light` | one finder | fix-check only if round 1 found a Blocker | none |
 | `medium` | `cold-reviewer`; plus `security-reviewer` when auth, input, secrets or permissions are touched | `finding-refuter` fix-check on the fix delta: FIXED, NOT FIXED or REGRESSED | quick confirmation of open findings against the delta |
-| `intense` | in parallel `cold-reviewer`, `clean-code`, `test-gap-auditor`, plus `security-reviewer` as above; plan reviews add `approach-reviewer` in both modes | as `medium` | as `medium` |
+| `intense` | in parallel `cold-reviewer`, `clean-code`, `test-gap-auditor`, plus `security-reviewer` as above | as `medium` | as `medium` |
 
 Plan finders: `light` `premise-attacker`; `medium` adds `approach-reviewer`; `intense` adds `approach-reviewer` gap mode and a `researcher` decision-record sweep. `comments`: `finding-refuter` only; `intense` adds `claim-prover` runs.
 
 Rules for every round:
 - The findings file starts with `Round: n of 3`, written from the spawn prompt. A round with n > 3 is refused: no agent is spawned and the report says so.
-- An open Blocker after the last round the intensity defines (round 2 at `light`, round 3 otherwise) stops the run and goes to the owner with each finding and your position. There is never a further round.
+- An open Blocker after the last round the intensity defines (round 3 at `medium` and `intense`; at `light` the fix-check, which runs only when round 1 found a Blocker) stops the run and goes to the owner with each finding and your position. There is never a further round.
 - On `change` and `epic`, rounds 2 and 3 run only as an owner-triggered recheck.
 - Stop after any round with zero Blocker and zero Should-fix.
 - `comment-cutter` runs at `medium` and above over the branch diff. `comprehension-cutter` runs on posted comments at `intense`.
@@ -108,7 +108,7 @@ Fresh agents each round, given the ticket, the plan and every `Decided:` item, "
 
 No praise label. Quality findings are never dropped on someone else's change, only labelled non-blocking.
 
-Claim marks: **verified**, **false**, **unverified because X**. Refuter rulings: CONFIRMED, REFUTED, PARTIAL; fix-check FIXED, NOT FIXED, REGRESSED. Triage: CONTEST, ESCALATE, FIX, DECLINE. Verdict (the owner's call): **Approve**, **Don't approve**, **Split first**. A finding line: `file:line - what breaks - fix`.
+Claim marks: **verified**, **false**, **unverified because X**. Refuter rulings: CONFIRMED, REFUTED, PARTIAL; fix-check FIXED, NOT FIXED, REGRESSED. Triage: CONTEST, ESCALATE, FIX, DECLINE. Verdict (the owner's call): `approve`, `changes`, `stop`; the review note's `verdict` carries the same word. A finding line: `file:line - what breaks - fix`.
 
 ## Claims
 
@@ -179,7 +179,7 @@ On `change` and `epic`, compare every draft against existing discussions; same p
 
 ### Node review
 
-Round 1: the node's finders on `git diff -- <owns>`; every severity is fixed. Later rounds follow "Round shapes": reviewers see the diff since the reviewed sha plus callers, and a new finding that is not a Blocker or Should-fix in the fix delta goes to a follow-up list carried into `self`. The node passes with zero open Blockers, fix-check all FIXED and its acceptance or FR tests green. A Blocker open after round 3 stops the run: ask the owner.
+Round 1: the node's finders on `git diff -- <owns>`; every severity is fixed. Later rounds follow "Round shapes": reviewers see the diff since the reviewed sha plus callers, and a new finding that is not a Blocker or Should-fix in the fix delta goes to a follow-up list carried into `self`. The node passes with zero open Blockers, fix-check all FIXED and its acceptance or FR tests green. A Blocker open after the last round of the node's intensity stops the run: ask the owner.
 
 ### Post-completion checks
 

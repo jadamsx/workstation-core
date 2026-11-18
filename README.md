@@ -7,7 +7,7 @@ Claude Code reads one `CLAUDE.md`, which points at six engines: common rules, pl
 ## What you can do
 
 - Plan a task, bug, spike, story or epic into an approved node table before any code is written
-- Build that plan in worktrees, wave by wave, with a cold review at each node
+- Build that plan in worktrees, ready node by ready node, with a cold review at each node
 - Review your own branch, someone else's change, a plan or an epic with fresh reviewers
 - Drive a change to green CI while treating automated reviewers as claims to check
 - Write tickets, change descriptions and notes to a fixed plain-English standard

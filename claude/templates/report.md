@@ -1,4 +1,4 @@
-Status: <done / decision / blocked>
+Status: <done / decision>
 BLUF: <outcome, then what you need from the reader, or "nothing">
 
 Ran: <command> → <result, with the numbers>

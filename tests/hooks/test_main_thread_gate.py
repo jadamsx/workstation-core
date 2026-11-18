@@ -396,6 +396,11 @@ class PayloadTest(unittest.TestCase):
             "git diff --textconv",
             "git log -p --ext-diff",
             "git show --ext-diff HEAD",
+            "git diff --no-index /dev/null ~/.aws/credentials",
+            "git diff --no-index a b",
+            "git log -p -- /etc/passwd",
+            "git show HEAD:../x",
+            "git diff ~/.ssh/id_rsa",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
 
@@ -405,12 +410,20 @@ class PayloadTest(unittest.TestCase):
             'git log --format="%h > %s"',
             "cd repo && git status",
             "git status; git diff --stat | head -5",
+            "git diff HEAD -- src/a.py",
+            "git log main..HEAD",
             "gh api repos/o/r/pulls",
             "gh pr list || glab mr list",
             "h''erdr pane read w1:p1",
             "ls 2>&1 | wc -l",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
+
+    def test_ask_message_lists_the_allowed_commands_from_the_sets(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "ask"
+        result = self.run_hook(self.pre("Edit", {"file_path": "/repo/a.py"}))
+        for word in ("ls", "rg", "log", "blame", "pane read", "workspace get"):
+            self.assertIn(word, result.stderr)
 
     def test_ask_role_blocks_non_readonly_agents_and_edits(self) -> None:
         for agent in ("builder", "builder-small", "rebase-resolver", "general-purpose", "explorer"):

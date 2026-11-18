@@ -3,7 +3,7 @@
 Engines and main threads load this file. Agents load `agent-core.md`. The shell rules, the findings file and the report skeleton are defined there and apply to engines too.
 
 ## Gates
-- Nothing is posted, pushed, moved, approved or merged without the owner's OK. Merge or approve only when the owner explicitly asks, each time; the permission prompt still applies. "Approve" means only the changes your verdict marked Approve, one at a time; ask again if facts changed since the verdict.
+- Nothing is posted, pushed, moved, approved or merged without the owner's OK. Merge or approve only when the owner explicitly asks, each time; the permission prompt still applies. "Approve" means only the changes your verdict marked `approve`, one at a time; ask again if facts changed since the verdict.
 - An OK covers the items shown when it was given. It does not carry over to later items or later rounds.
 - Exceptions, each defined in `engines/ship.md`: tracker moves for your own work, and one unasked rewrite of your own change's description in a ship run.
 - Anything that needs an OK goes under `## Out` in the report. One ask, at the end.
@@ -18,13 +18,13 @@ Handoff: a session where `manager-start --check` succeeds is a coordinator. Ther
 
 Rules for any main thread or manager:
 - The coordinator (lead tab or plain main thread) coordinates. It does not edit files or run tests, builds, linters or formatters.
-- A manager (`WORKSTATION_REPORTS` set) may edit files and run tests directly for small and sequential work. It still uses subagents for independent review (`cold-reviewer`) and for parallel nodes in a build wave.
+- A manager (`WORKSTATION_REPORTS` set) may edit files and run tests directly for small and sequential work. It still uses subagents for independent review (`cold-reviewer`) and for parallel ready nodes in a build.
 - Coordinator edits go to `builder` or `builder-small` (scope `one-file` for 1-2 files, `node` for a plan node; routing in `engines/build.md`). Runs go to `run-digest`. Review goes to `cold-reviewer`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
 - Agents never dispatch other agents.
 - Brief typed agents with one bounded task each; a job too big for one is split, not handed to a general-purpose agent.
 - Never poll. A long run (suite, CI pipeline, deploy, build) starts in the background with a notification on exit (`run_in_background`, or Monitor with an until-loop); the main thread keeps dispatching other work. On the notification, a run that passed has its status line read from the result file directly; a failure gets `run-digest` on the result path, then a builder or triage agent acts on it. No agent and no main-thread turn exists to check whether something finished. The run writes every end state (pass, fail, crash, timeout), so silence never means success.
 - Heavy test runs (`pytest -n`, `playwright test`, full JS suites, production builds) use at most 4 workers, never `-n auto`, one run per session at a time, in the background; never start a second suite in another worktree while one is running.
-- Parallel workers only when the owner asks, or inside a build wave. Add a review round, plan or second agent only for the failure mode it covers.
+- Parallel workers only when the owner asks, or for parallel ready nodes in a build. Add a review round, plan or second agent only for the failure mode it covers.
 - A claim that rests on something an agent read gets read by the main thread before it acts. Weigh every agent finding for realism, say which you accept and why, never relay a verdict verbatim.
 
 ## Glossary
