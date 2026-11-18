@@ -2,7 +2,7 @@
 """Usage: manager-close <name> [--force]
 
 Closes the manager's tab and marks it closed in its manager.json, so the watcher sends no exited line and
-`workspace --repair` does not restart it. A standing manager (the `work` tab) is closed only with --force.
+`workspace --repair` does not restart it. A standing manager (the `work` tab) is closed only with --force, and so is a kept one (`herdr-manager keep`).
 """
 import subprocess
 import sys
@@ -21,6 +21,8 @@ def main(argv: list[str]) -> int:
         folder = manager_folder(names[0])
         if read_manager(folder).get("standing") and "--force" not in argv:
             raise ReportsError(f"{names[0]!r} is a standing manager; it clears itself after each done report, close it only with --force")
+        if read_manager(folder).get("keep") and "--force" not in argv:
+            raise ReportsError(f"{names[0]!r} is a kept manager; the human closes it, close it here only with --force")
         close_manager(folder)
     except ReportsError as err:
         print(f"manager-close: {err}", file=sys.stderr)

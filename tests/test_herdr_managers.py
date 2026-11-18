@@ -233,6 +233,29 @@ class DoneReportTests(ReportsCase):
         self.assertIn("tab close w1:t4", self.calls())
         self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
 
+    def kept(self, name: str = "alpha") -> Path:
+        folder = self.manager(name)
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "keep": True}))
+        return folder
+
+    def test_kept_done_report_is_delivered_but_never_closes_or_clears(self) -> None:
+        folder = self.kept()
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"idle"}'
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        watcher.scan(100)
+        self.assertEqual(self.prompts(), [f"agent prompt w1:p1 [worker-report] {folder / 'result-1.md'}"])
+        self.assertNotIn("tab close w1:t4", self.calls())
+        self.assertNotIn("closed", json.loads((folder / "manager.json").read_text()))
+
+    def test_manager_close_refuses_a_kept_manager_unless_forced(self) -> None:
+        self.kept()
+        self.assertEqual(self.bin("manager-close", "alpha").returncode, 2)
+        self.assertNotIn("tab close w1:t4", self.calls())
+        self.assertEqual(self.bin("manager-close", "alpha", "--force").returncode, 0)
+        self.assertIn("tab close w1:t4", self.calls())
+
     def test_decision_report_keeps_the_tab_open(self) -> None:
         folder = self.manager()
         (folder / "result-1.md").write_text("Status: decision\nwhich one?\n")
@@ -285,6 +308,14 @@ class ManagerTests(ReportsCase):
         self.assertEqual(self.bin("manager-close", "alpha").returncode, 0)
         self.assertIn("tab close w1:t4", self.calls())
         self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
+
+    def test_keep_sets_and_off_clears_the_flag(self) -> None:
+        folder = self.manager()
+        self.assertEqual(self.bin("herdr-manager", "keep", "alpha").returncode, 0)
+        self.assertTrue(json.loads((folder / "manager.json").read_text())["keep"])
+        self.assertEqual(self.bin("herdr-manager", "keep", "alpha", "--off").returncode, 0)
+        self.assertNotIn("keep", json.loads((folder / "manager.json").read_text()))
+        self.assertEqual(self.bin("herdr-manager", "keep", "nope").returncode, 2)
 
     def setup_run(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
         return subprocess.run([str(REPO / "bin/herdr-manager"), "setup"], capture_output=True, text=True, cwd=cwd or self.root.parent)

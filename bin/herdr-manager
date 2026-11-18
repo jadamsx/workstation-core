@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Usage: herdr-manager register | setup | start <name> [--resume <session-id>] [--dir <path>] | list
+"""Usage: herdr-manager register | setup | start <name> [--resume <session-id>] [--dir <path>] | list | keep <name> [--off]
 
 Three-tier work: the coordinator session registers its pane, each manager runs in its own tab of the same
 herdr space, and herdr-report-watch carries the manager's result files to the coordinator.
@@ -10,6 +10,8 @@ setup     run in the coordinator's pane: registers it, then opens a standing `â–
           (Haiku, read-only helper) unless they are already live. Re-run it to repair a missing tab.
 start     opens a tab named `â–¸ <name>` running `claude --model sonnet` with the manager brief, and
           WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into.
+keep      sets `"keep": true` in the manager's manager.json (`--off` removes it): the watcher then never closes
+          or clears that manager, and the human closes it.
 list      the managers of this space, whether their pane is alive, and their newest result file.
 """
 import argparse
@@ -24,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, pane_text, space_dir, wait_for_pane, wait_for_shell, write_atomic,
+    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_pane, wait_for_shell, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -162,6 +164,18 @@ def list_managers() -> int:
     return 0
 
 
+def keep(name: str, off: bool) -> int:
+    folder = manager_folder(name)
+    info = read_manager(folder)
+    if off:
+        info.pop("keep", None)
+    else:
+        info["keep"] = True
+    write_atomic(folder / "manager.json", json.dumps(info))
+    print(f"{name}: {'no longer kept' if off else 'kept'}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="herdr-manager")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -172,6 +186,9 @@ def main(argv: list[str]) -> int:
     starter.add_argument("name")
     starter.add_argument("--resume")
     starter.add_argument("--dir", default=os.getcwd())
+    keeper = sub.add_parser("keep")
+    keeper.add_argument("name")
+    keeper.add_argument("--off", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command == "register":
@@ -180,6 +197,8 @@ def main(argv: list[str]) -> int:
             return setup()
         if args.command == "start":
             return start(args.name, args.resume, args.dir)
+        if args.command == "keep":
+            return keep(args.name, args.off)
         return list_managers()
     except ReportsError as err:
         print(f"herdr-manager: {err}", file=sys.stderr)

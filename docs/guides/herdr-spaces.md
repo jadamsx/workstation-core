@@ -39,6 +39,7 @@ It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and l
 ## Troubleshooting
 
 - Startup prompts are answered for you: folder trust and external `CLAUDE.md` imports, only under the lead's folder. Anywhere else, run `claude` there once to trust it.
+- `herdr-manager keep <name>` marks a manager as a long-lived named worker: its reports still arrive, but the watcher never closes or clears it and you close it yourself.
 - `herdr-manager list` shows each manager, whether its pane is alive, and its newest report.
 - `[worker-report] <name> idle, no report` means a manager sat idle for 15 minutes without reporting. Look at its tab.
 

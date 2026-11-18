@@ -7,7 +7,8 @@ to the pane saved by `herdr-manager register`. A send that fails, including whil
 at a permission prompt (agent_blocked), is retried every 15 seconds. A manager whose pane is gone and
 that has nothing unsent produces `[worker-report] <name> exited without a report`, once per pane. A report whose first
 line is `Status: done` also closes that manager's tab (as `manager-close` does) and silences the exited line; a
-`Status: decision` report leaves the tab open. A standing manager (`"standing": true` in manager.json, the `work`
+`Status: decision` report leaves the tab open. A kept manager (`"keep": true`, set with `herdr-manager keep`) gets its
+reports delivered but is never closed or cleared, and is idle-checked like a standing one. A standing manager (`"standing": true` in manager.json, the `work`
 tab) is never closed: once a `Status: done` report is delivered and its pane is idle, the watcher sends it `/clear`
 with `herdr agent prompt`, once per report. A standing manager is idle-checked only after its pane was seen working
 since its newest report or the last `/clear`. A manager idle for 15 minutes without writing a report, whose last
@@ -131,7 +132,8 @@ class Watcher:
                 for result in pending:
                     if not self.deliver(str(result), coordinator, f"[worker-report] {result}", "sent", now):
                         break
-                    if result == results[-1] and is_done(result) and not read_manager(manager).get("standing"):
+                    flags = read_manager(manager)
+                    if result == results[-1] and is_done(result) and not (flags.get("standing") or flags.get("keep")):
                         self.close(manager)
                 else:
                     info = read_manager(manager)
@@ -143,14 +145,16 @@ class Watcher:
                         continue
                     done = bool(results) and is_done(results[-1])
                     standing = bool(info.get("standing"))
-                    if standing and pane in panes:
+                    kept = bool(info.get("keep"))
+                    longlived = standing or kept
+                    if longlived and pane in panes:
                         self.note_work(pane, panes[pane], len(results))
-                    if standing and done and str(results[-1]) not in self.state["cleared"] and panes.get(pane) in IDLE_STATES:
+                    if standing and not kept and done and str(results[-1]) not in self.state["cleared"] and panes.get(pane) in IDLE_STATES:
                         if self.deliver(str(results[-1]), pane, "/clear", "cleared", now):
                             self.worked.pop(pane, None)
                             self.clearing.add(pane)
-                    resumed = standing and self.worked.get(pane) == len(results)
-                    if (done or (standing and not results)) and not resumed:
+                    resumed = longlived and self.worked.get(pane) == len(results)
+                    if (done or (longlived and not results)) and not resumed:
                         continue
                     if pane not in panes:
                         self.deliver(pane, coordinator, f"[worker-report] {manager.name} exited without a report", "exited", now)
