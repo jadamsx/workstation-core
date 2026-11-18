@@ -547,6 +547,16 @@ class ManagerTests(ReportsCase):
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
 
+    def test_ask_role_refuses_any_mcp_server(self) -> None:
+        manager = SourceFileLoader("herdr_manager_under_test", str(REPO / "bin/herdr-manager")).load_module()
+        self.root.mkdir(parents=True, exist_ok=True)
+        policy, catalog = self.root / "policy.json", self.root / "mcp.json"
+        policy.write_text(json.dumps({"roles": {"ask": ["x"]}}))
+        catalog.write_text(json.dumps({"mcpServers": {"x": {}}}))
+        with mock.patch.object(manager, "POLICY", policy), mock.patch.object(manager, "MCP_SERVERS", catalog):
+            with self.assertRaises(herdr_reports.ReportsError):
+                manager.mcp_args("ask", self.root / "ask")
+
     def test_setup_in_two_spaces_passes_distinct_agent_names(self) -> None:
         self.setup_run()
         os.environ["FAKE_LABEL"] = "Space Two"
