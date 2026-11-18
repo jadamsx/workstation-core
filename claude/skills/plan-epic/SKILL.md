@@ -1,6 +1,7 @@
 ---
 name: plan-epic
 description: Alias for plan-story with kind epic, kept for one release. Use plan-story instead.
+disable-model-invocation: true
 ---
 ## When
 Old name for `plan-story` kind epic.
