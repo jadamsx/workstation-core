@@ -12,7 +12,7 @@ A plan note, a ticket key with an approved design note, an epic piece, or a plan
 
 ## Differs
 - In a coordinator this goes to the work tab (`engines/common.md` Delegation, Handoff).
-- Every ready node starts at once, up to the concurrency cap; a named node or piece is built alone, else the next unbuilt wave (say which).
+- Default is the whole ready graph, every node whose needs are done, up to the concurrency cap; `node` builds one node.
 - Notes are written with `notes-write`.
 - Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before a done report.
 
