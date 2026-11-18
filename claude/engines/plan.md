@@ -159,7 +159,7 @@ A branch that fans out gets one node that exists only to check the branch landed
 
 ### Manager sessions
 
-Use a manager session (`engines/common.md` "Delegation") for a stream with several nodes or for a whole app. It plans, builds and reviews its stream with subagents and reports only when a decision is needed or an item is done. Subagents stay inside it for independence, unbiased review and parallel work. A single node or a short plan needs no manager.
+Hand a build to the standing `work` tab (`engines/common.md` "Delegation"); an extra manager session is for a parallel stream such as a second app. It plans, builds and reviews its stream with subagents and reports only when a decision is needed or an item is done. Subagents stay inside it for independence, unbiased review and parallel work. A single node or a short plan needs no manager.
 
 ## Epic mode
 

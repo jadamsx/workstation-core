@@ -7,7 +7,9 @@ to the pane saved by `herdr-manager register`. A send that fails, including whil
 at a permission prompt (agent_blocked), is retried every 15 seconds. A manager whose pane is gone and
 that has nothing unsent produces `[worker-report] <name> exited without a report`, once per pane. A report whose first
 line is `Status: done` also closes that manager's tab (as `manager-close` does) and silences the exited line; a
-`Status: decision` report leaves the tab open. A manager idle for 15 minutes without writing a report, whose last
+`Status: decision` report leaves the tab open. A standing manager (`"standing": true` in manager.json, the `work`
+tab) is never closed: once a `Status: done` report is delivered and its pane is idle, the watcher sends it `/clear`
+with `herdr agent prompt`, once per report. A manager idle for 15 minutes without writing a report, whose last
 message does not start with `WAITING:`, produces `[worker-report] <name> idle, no report` plus the last lines of its
 pane, once per idle spell.
 
@@ -22,7 +24,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import ReportsError, close_manager, pane_states, pane_text, reports_root, write_atomic  # noqa: E402
+from herdr_reports import ReportsError, close_manager, pane_states, pane_text, read_manager, reports_root, write_atomic  # noqa: E402
 
 RETRY_SECONDS = 15
 IDLE_SECONDS = 900
@@ -46,7 +48,7 @@ class Watcher:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.state_file = root / ".watch-state.json"
-        self.state = {"sent": [], "exited": [], "idle": []}
+        self.state = {"sent": [], "exited": [], "idle": [], "cleared": []}
         if self.state_file.exists():
             self.state.update(json.loads(self.state_file.read_text()))
         self.retry_at: dict[str, float] = {}
@@ -118,15 +120,20 @@ class Watcher:
                 for result in pending:
                     if not self.deliver(str(result), coordinator, f"[worker-report] {result}", "sent", now):
                         break
-                    if result == results[-1] and is_done(result):
+                    if result == results[-1] and is_done(result) and not read_manager(manager).get("standing"):
                         self.close(manager)
                 else:
-                    info = json.loads((manager / "manager.json").read_text())
+                    info = read_manager(manager)
                     pane = info["pane_id"]
-                    if pane in self.state["exited"] or info.get("closed") or (results and is_done(results[-1])):
+                    if pane in self.state["exited"] or info.get("closed"):
                         continue
                     panes = pane_states() if panes is None else panes
                     if panes is None:
+                        continue
+                    done = bool(results) and is_done(results[-1])
+                    if info.get("standing") and done and str(results[-1]) not in self.state["cleared"] and panes.get(pane) in IDLE_STATES:
+                        self.deliver(str(results[-1]), pane, "/clear", "cleared", now)
+                    if done or (info.get("standing") and not results):
                         continue
                     if pane not in panes:
                         self.deliver(pane, coordinator, f"[worker-report] {manager.name} exited without a report", "exited", now)

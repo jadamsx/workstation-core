@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Usage: herdr-manager register | start <name> [--resume <session-id>] [--dir <path>] | list
+"""Usage: herdr-manager register | setup | start <name> [--resume <session-id>] [--dir <path>] | list
 
 Three-tier work: the coordinator session registers its pane, each manager runs in its own tab of the same
 herdr space, and herdr-report-watch carries the manager's result files to the coordinator.
 
 register  run in the coordinator's pane and renames its tab `◆ lead`; re-run after a handoff and reports follow
           the new pane.
+setup     run in the coordinator's pane: registers it, then opens a standing `▸ work` manager and a `? ask` tab
+          (Haiku, read-only helper) unless they are already live. Re-run it to repair a missing tab.
 start     opens a tab named `▸ <name>` running `claude --model sonnet` with the manager brief, and
           WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into.
 list      the managers of this space, whether their pane is alive, and their newest result file.
@@ -22,10 +24,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, pane_text, space_dir, wait_for_pane, wait_for_shell, write_atomic,
+    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, pane_text, space_dir, wait_for_pane, wait_for_shell, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
+ASK_BRIEF = BRIEF.with_name("ask-brief.md")
 SHELL_TIMEOUT = 20
 STARTUP_TIMEOUT = 20
 START_RETRIES = 3
@@ -94,20 +97,13 @@ def agent_start(name: str, pane: str, claude_args: list[str]) -> bool:
     return False
 
 
-def start(name: str, resume: str | None, directory: str) -> int:
-    if not NAME.fullmatch(name):
-        raise ReportsError(f"name must match {NAME.pattern}: {name!r}")
-    if resume and not SESSION_ID.fullmatch(resume):
-        raise ReportsError(f"--resume needs a session id, got {resume!r}")
-    reports = space_dir() / name
-    reports.mkdir(parents=True, exist_ok=True)
-    directory = Path(directory).resolve()
+def launch(name: str, label: str, env: list[str], directory: Path, claude_args: list[str]) -> tuple[str, str]:
+    """Open a tab running claude and answer its startup prompts; the tab is closed again if that fails."""
     tab = herdr(
-        "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory),
-        "--label", MANAGER_TAB + name, "--env", f"WORKSTATION_REPORTS={reports}", "--env", "DISABLE_AUTO_UPDATE=true", "--no-focus",
+        "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory), "--label", label,
+        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--no-focus",
     )
     pane = tab["root_pane"]["pane_id"]
-    claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]
     try:
         if not wait_for_shell(pane, SHELL_TIMEOUT):
             raise ReportsError(f"the shell in pane {pane} never settled")
@@ -117,9 +113,37 @@ def start(name: str, resume: str | None, directory: str) -> int:
         with suppress(subprocess.CalledProcessError, OSError):
             herdr("tab", "close", tab["tab"]["tab_id"])
         raise
-    info = {"pane_id": pane, "tab_id": tab["tab"]["tab_id"], "dir": str(directory), "started": time.time()}
+    return pane, tab["tab"]["tab_id"]
+
+
+def start(name: str, resume: str | None, directory: str, standing: bool = False) -> int:
+    if not NAME.fullmatch(name):
+        raise ReportsError(f"name must match {NAME.pattern}: {name!r}")
+    if resume and not SESSION_ID.fullmatch(resume):
+        raise ReportsError(f"--resume needs a session id, got {resume!r}")
+    reports = space_dir() / name
+    reports.mkdir(parents=True, exist_ok=True)
+    directory = Path(directory).resolve()
+    claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]
+    pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}"], directory, claude_args)
+    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **({"standing": True} if standing else {})}
     write_atomic(reports / "manager.json", json.dumps(info))
     print(f"{name}: pane {pane}, reports {reports}")
+    return 0
+
+
+def setup() -> int:
+    """Register this pane as the lead, then open the standing work and ask tabs that are not already there."""
+    register()
+    directory = Path.cwd()
+    manifest = space_dir() / "work" / "manager.json"
+    info = json.loads(manifest.read_text()) if manifest.exists() else {}
+    if info.get("closed") or info.get("pane_id") not in (live_panes() or set()):
+        start("work", None, str(directory), standing=True)
+    tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
+    if not any(tab.get("label") == ASK_TAB for tab in tabs):
+        pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory, ["--model", "haiku", "--append-system-prompt-file", str(ASK_BRIEF)])
+        print(f"ask: pane {pane}")
     return 0
 
 
@@ -142,6 +166,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="herdr-manager")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("register")
+    sub.add_parser("setup")
     sub.add_parser("list")
     starter = sub.add_parser("start")
     starter.add_argument("name")
@@ -151,6 +176,8 @@ def main(argv: list[str]) -> int:
     try:
         if args.command == "register":
             return register()
+        if args.command == "setup":
+            return setup()
         if args.command == "start":
             return start(args.name, args.resume, args.dir)
         return list_managers()

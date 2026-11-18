@@ -7,6 +7,9 @@ edit gate for the main thread this turn: the UserPromptSubmit wiring records it 
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
+With WORKSTATION_ROLE=ask the gate also blocks prompting other tabs and edit agents, for subagents too and
+whatever the prompt says.
+
 Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 """
 
@@ -90,6 +93,9 @@ QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
+ASK_COMMANDS = {"manager-send", "manager-start"}
+ASK_HERDR = {"prompt", "send-keys"}
+ASK_AGENTS = re.compile(r"^(?:[\w-]+:)?(?:builder[\w-]*|rebase-resolver|comment-cutter)$")
 
 
 def is_subagent(payload: dict) -> bool:
@@ -175,6 +181,20 @@ def blocked_command(command: str) -> bool:
     )
 
 
+def ask_block_reason(payload: dict) -> str | None:
+    tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
+    if tool == "Agent" and ASK_AGENTS.match(tool_input.get("subagent_type") or ""):
+        return "The ask tab never spawns agents that edit."
+    if tool == "Bash":
+        bare = QUOTED.sub('""', HEREDOC.sub("", tool_input.get("command", "")))
+        for seg in SEGMENT_SPLIT.split(bare):
+            tokens = command_head(seg.strip())
+            head = Path(tokens[0]).name if tokens else ""
+            if head in ASK_COMMANDS or (head == "herdr" and tokens[1:2] == ["agent"] and tokens[2:3] and tokens[2] in ASK_HERDR):
+                return "The ask tab never prompts or types into other tabs. Point the human to the lead tab."
+    return None
+
+
 def is_coordination_file(path: str) -> bool:
     if any(part in path for part in EDIT_EXEMPT_DIRS):
         return True
@@ -205,6 +225,11 @@ def main() -> None:
     if payload.get("hook_event_name") == "UserPromptSubmit":
         record_prompt(payload)
         sys.exit(0)
+    if os.environ.get("WORKSTATION_ROLE") == "ask":
+        reason = ask_block_reason(payload)
+        if reason:
+            print(reason, file=sys.stderr)
+            sys.exit(2)
     if is_subagent(payload) or escaped(payload):
         sys.exit(0)
     reason = block_reason(payload)

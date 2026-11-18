@@ -11,7 +11,7 @@ Someone else's change, or one whose findings should be commented on it. Your own
 The change URL (or number and project); a batch or a chain of dependent changes: all the URLs. A trailing `light`, `medium` or `intense` sets `intensity`; `recheck` is a flag.
 
 ## Differs
-- A coordinator hands this review to a manager per Handoff in `engines/common.md`.
+- A coordinator hands this review to the work tab per Handoff in `engines/common.md`.
 - `medium` is the default: `cold-reviewer`, then `finding-refuter`. Offer `intense` in one line when the diff touches auth, a migration, money or a public contract.
 - Comments follow the engine's "Posting rules".
 - Never approves or merges. Posting never starts before the owner's go.

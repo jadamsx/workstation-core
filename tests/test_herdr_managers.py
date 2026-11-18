@@ -35,7 +35,7 @@ case "$1 $2" in
     n=$(cat "$FAKE_READS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_READS"
     if [ "$n" -ge "${FAKE_EMPTY_READS:-0}" ]; then cat "$FAKE_PANE"; fi ;;
   "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","label":"Space One"}]}}' ;;
-  "tab list") echo '{"result":{"tabs":[]}}' ;;
+  "tab list") echo "{\\"result\\":{\\"tabs\\":[$FAKE_TABS]}}" ;;
   "pane process-info")
     n=$(cat "$FAKE_PROCS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_PROCS"
     if [ "$n" -lt "${FAKE_BUSY_POLLS:-0}" ]; then fg='[{"argv0":"zsh"},{"argv0":"tail"}]'; else fg='[{"argv0":"zsh"}]'; fi
@@ -78,6 +78,7 @@ class ReportsCase(unittest.TestCase):
             "FAKE_WAIT_FAIL": str(base / "wait-fail"),
             "FAKE_NOT_READY": str(base / "not-ready"),
             "FAKE_PANES": '{"pane_id":"w1:p1","tab_id":"w1:t1"},{"pane_id":"w1:p4","tab_id":"w1:t4","agent":"claude"}',
+            "FAKE_TABS": "",
             "FAKE_CMDLINE": "claude --model sonnet --append-system-prompt-file brief.md",
             "WORKSTATION_REPORTS_ROOT": str(self.root),
             "HERDR_WORKSPACE_ID": "w1",
@@ -182,6 +183,56 @@ class DoneReportTests(ReportsCase):
         watcher.scan(100)
         self.assertEqual(len(self.prompts()), 1)
 
+    def standing(self, name: str = "alpha") -> Path:
+        folder = self.manager(name)
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
+        return folder
+
+    def test_standing_done_report_clears_the_tab_once_and_never_closes_it(self) -> None:
+        folder = self.standing()
+        (folder / "result-1.md").write_text("Status: done\nchanged x\n")
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"idle"}'
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        watch.Watcher(self.root).scan(100)
+        self.assertEqual(self.prompts(), [f"agent prompt w1:p1 [worker-report] {folder / 'result-1.md'}", "agent prompt w1:p4 /clear"])
+        self.assertNotIn("tab close w1:t4", self.calls())
+        self.assertNotIn("closed", json.loads((folder / "manager.json").read_text()))
+
+    def test_standing_tab_is_cleared_only_once_it_is_idle_and_again_after_the_next_done_report(self) -> None:
+        folder = self.standing()
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"working"}'
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        self.assertNotIn("agent prompt w1:p4 /clear", self.prompts())
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"idle"}'
+        watcher.scan(5)
+        (folder / "result-2.md").write_text("Status: done\ny\n")
+        watcher.scan(10)
+        self.assertEqual(self.prompts().count("agent prompt w1:p4 /clear"), 2)
+
+    def test_standing_decision_report_is_not_cleared(self) -> None:
+        folder = self.standing()
+        (folder / "result-1.md").write_text("Status: decision\nwhich?\n")
+        watch.Watcher(self.root).scan(0)
+        self.assertNotIn("agent prompt w1:p4 /clear", self.prompts())
+
+    def test_non_standing_done_report_still_closes_and_is_not_cleared(self) -> None:
+        folder = self.manager()
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        watch.Watcher(self.root).scan(0)
+        self.assertIn("tab close w1:t4", self.calls())
+        self.assertNotIn("agent prompt w1:p4 /clear", self.prompts())
+
+    def test_manager_close_refuses_a_standing_manager_unless_forced(self) -> None:
+        folder = self.standing()
+        self.assertEqual(self.bin("manager-close", "alpha").returncode, 2)
+        self.assertNotIn("tab close w1:t4", self.calls())
+        self.assertEqual(self.bin("manager-close", "alpha", "--force").returncode, 0)
+        self.assertIn("tab close w1:t4", self.calls())
+        self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
+
     def test_decision_report_keeps_the_tab_open(self) -> None:
         folder = self.manager()
         (folder / "result-1.md").write_text("Status: decision\nwhich one?\n")
@@ -234,6 +285,47 @@ class ManagerTests(ReportsCase):
         self.assertEqual(self.bin("manager-close", "alpha").returncode, 0)
         self.assertIn("tab close w1:t4", self.calls())
         self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
+
+    def setup_run(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run([str(REPO / "bin/herdr-manager"), "setup"], capture_output=True, text=True, cwd=cwd or self.root.parent)
+
+    def creates(self) -> list[str]:
+        return [c for c in self.calls() if c.startswith("tab create")]
+
+    def test_setup_registers_the_lead_and_creates_a_standing_work_tab_and_an_ask_tab(self) -> None:
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.space / "coordinator").read_text().strip(), "w1:p1")
+        self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
+        work, ask = self.creates()
+        self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
+        self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true", ask)
+        starts = [c for c in self.calls() if c.startswith("agent start")]
+        self.assertIn("-- --model sonnet --append-system-prompt-file", starts[0])
+        self.assertIn("-- --model haiku --append-system-prompt-file", starts[1])
+        self.assertTrue(starts[1].endswith("ask-brief.md"))
+        self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
+
+    def test_setup_twice_changes_nothing(self) -> None:
+        self.setup_run()
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
+        before = len(self.creates())
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.creates()), before)
+
+    def test_setup_brings_back_only_the_missing_tab(self) -> None:
+        self.setup_run()
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1","tab_id":"w1:t1"}'
+        self.setup_run()
+        self.assertEqual(len(self.creates()), 3)
+        self.assertIn("--label ▸ work", self.creates()[-1])
+        os.environ["FAKE_TABS"] = ""
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1","tab_id":"w1:t1"},{"pane_id":"w1:p4","tab_id":"w1:t4"}'
+        self.setup_run()
+        self.assertEqual(len(self.creates()), 4)
+        self.assertIn("--label ? ask", self.creates()[-1])
 
     def test_start_opens_a_sonnet_tab_with_the_brief_and_records_it(self) -> None:
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
@@ -445,6 +537,17 @@ class IdleTests(ReportsCase):
         self.status("idle")
         w.scan(10)
         w.scan(1000)
+        self.assertEqual(self.idle_lines(), [])
+
+    def test_standing_tab_idle_after_a_done_report_or_before_its_first_job_is_not_reported(self) -> None:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
+        w = watch.Watcher(self.root)
+        w.scan(0)
+        w.scan(5000)
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        w.scan(6000)
+        w.scan(20000)
         self.assertEqual(self.idle_lines(), [])
 
     def test_working_manager_is_never_reported(self) -> None:

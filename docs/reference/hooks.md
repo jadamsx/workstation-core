@@ -11,7 +11,7 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | `drafts-layout-guard.py` | Before Edit, Write | Writes under the drafts or notes folder whose first path part is not allowed, and writes under retired paths |
 | `shared-env-guard.py` | Before the Playwright navigate, type, fill, evaluate and upload tools | Typing, filling or uploading while the page sits on a host in `shared-envs.txt` |
 | `agent-model-gate.py` | Before Agent | A subagent spawn that would run on the session model or the wrong model for the agent |
-| `main-thread-gate.py` | Before Edit, Write, NotebookEdit, Bash, and on prompt submit | The main thread editing files or running tests, builds, linters and formatters. Put `main-thread-ok` in a prompt to lift it for that turn |
+| `main-thread-gate.py` | Before Edit, Write, NotebookEdit, Bash, Agent, and on prompt submit | The main thread editing files or running tests, builds, linters and formatters. Put `main-thread-ok` in a prompt to lift it for that turn. With `WORKSTATION_ROLE=ask` it also blocks `herdr agent prompt`, `herdr agent send-keys`, `manager-send`, `manager-start` and editing agents, and `main-thread-ok` does not lift that |
 | `notes-lint-guard.py` | After Edit, Write | Nothing. It runs `notes-lint` on a note you just wrote and hands failures back to Claude |
 | `report-format-guard.py` | Before Write and Bash, manager sessions only | A manager report that is not `result-*.md` with a `Status: decision` or `Status: done` first line |
 | `report-stop-guard.py` | On stop, manager sessions only | One stop when the turn wrote no report and the last message does not start with `WAITING:` |

@@ -11,7 +11,7 @@ A bounded change that is not a defect. A defect is `plan-bug`; a question with n
 A description or ticket key. A vague input starts the interview in `engines/plan.md`.
 
 ## Differs
-- On the go, the build is handed to a manager per Handoff in `engines/common.md`.
+- On the go, the build is handed to the work tab per Handoff in `engines/common.md`.
 - Quick when it sizes quick: a table of one or a few rows with all columns.
 - Disciplines: `tdd`, `acceptance-first`, `refactor` or `migration`, set on every node.
 - Minimal v2 note: Requirements, node table with `covers`, Traceability and the back half.

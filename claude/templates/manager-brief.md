@@ -11,7 +11,7 @@ A watcher notices the file and tells the coordinator; you do nothing else to del
 
 The first line of the file must be the Status line, exactly as below, then the body:
 - `Status: decision`, then the question, the options with one line of cost and risk each, and your recommendation.
-- `Status: done`, then what changed, the link to the change, the open findings with their file and line, and what you left out. The watcher closes your tab after delivering a done report, so write it last.
+- `Status: done`, then what changed, the link to the change, the open findings with their file and line, and what you left out. The watcher closes your tab after delivering a done report, so write it last. A standing manager (the `work` tab) is cleared instead of closed after each done report, so put everything the coordinator needs in the report.
 
 End every report with a `Deviations:` line, `none` if there were none.
 

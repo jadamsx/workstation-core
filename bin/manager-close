@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""Usage: manager-close <name>
+"""Usage: manager-close <name> [--force]
 
 Closes the manager's tab and marks it closed in its manager.json, so the watcher sends no exited line and
-`workspace --repair` does not restart it.
+`workspace --repair` does not restart it. A standing manager (the `work` tab) is closed only with --force.
 """
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import ReportsError, close_manager, manager_folder  # noqa: E402
+from herdr_reports import ReportsError, close_manager, manager_folder, read_manager  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
+    names = [a for a in argv if a != "--force"]
+    if len(names) != 1 or len(argv) - len(names) > 1:
         print(__doc__, file=sys.stderr)
         return 2
     try:
-        close_manager(manager_folder(argv[0]))
+        folder = manager_folder(names[0])
+        if read_manager(folder).get("standing") and "--force" not in argv:
+            raise ReportsError(f"{names[0]!r} is a standing manager; it clears itself after each done report, close it only with --force")
+        close_manager(folder)
     except ReportsError as err:
         print(f"manager-close: {err}", file=sys.stderr)
         return 2

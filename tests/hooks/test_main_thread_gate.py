@@ -224,6 +224,41 @@ class PayloadTest(unittest.TestCase):
         other["session_id"] = "s2"
         self.assertEqual(self.run_hook(other).returncode, 2)
 
+    def test_ask_role_blocks_prompting_other_tabs_and_editing_agents(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "ask"
+        for command in (
+            "herdr agent prompt w1:p1 hello",
+            "herdr agent send-keys w1:p1 Enter",
+            'manager-send work "go"',
+            "manager-start x --prompt go",
+            "git status && herdr agent prompt w1:p1 hi",
+        ):
+            self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 2, command)
+        for agent in ("builder", "builder-small", "rebase-resolver", "comment-cutter"):
+            self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": agent})).returncode, 2, agent)
+        sub = self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"}, agent_id="a1")
+        self.assertEqual(self.run_hook(sub).returncode, 2)
+
+    def test_ask_role_keeps_reads_and_cannot_be_escaped(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "ask"
+        for command in ("herdr pane read w1:p1", "herdr tab list", "git log -3", "gh pr list"):
+            self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 0, command)
+        self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "explorer"})).returncode, 0)
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "main-thread-ok"})
+        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 2)
+
+    def test_other_roles_may_prompt_and_spawn_builders(self) -> None:
+        for env in ({}, {"WORKSTATION_ROLE": "lead"}):
+            self.env.pop("WORKSTATION_ROLE", None)
+            self.env.update(env)
+            self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 0)
+            self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 0)
+
+    def test_settings_route_agent_spawns_to_the_gate(self) -> None:
+        settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())
+        matchers = [g["matcher"] for g in settings["hooks"]["PreToolUse"] if "main-thread-gate.py" in g["hooks"][0]["command"]]
+        self.assertTrue(any("Agent" in m.split("|") for m in matchers))
+
     def test_malformed_payload_fails_open(self) -> None:
         result = subprocess.run(
             [sys.executable, str(HOOK)],

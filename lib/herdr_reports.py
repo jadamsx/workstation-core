@@ -10,6 +10,7 @@ from pathlib import Path
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 LEAD_TAB = "◆ lead"
 MANAGER_TAB = "▸ "
+ASK_TAB = "? ask"
 TRUST_DIALOG = "Is this a project you created or one you trust?"
 INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*> ", re.M)
 
