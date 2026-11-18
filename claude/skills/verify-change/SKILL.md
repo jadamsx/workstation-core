@@ -18,4 +18,4 @@ The change URL (or number and project); a batch or a chain of dependent changes:
 - Ends early at "split first" when the change is too big to review.
 
 ## Output
-Engine report per `templates/review.md`: verdict (Approve, Don't approve, Split first), claims ledger, what was not checked, a missing tracker key in the title. Epic mode adds one line per change, the seam table and delivered, partial or missing per story.
+Engine report per `templates/review.md`: verdict (approve, changes, stop), claims ledger, what was not checked, a missing tracker key in the title. Epic mode adds one line per change, the seam table and delivered, partial or missing per story.
