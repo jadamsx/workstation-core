@@ -257,6 +257,18 @@ class DoneReportTests(ReportsCase):
         self.assertEqual(self.bin("manager-close", "alpha", "--force").returncode, 0)
         self.assertIn("tab close w1:t4", self.calls())
 
+    def test_restarted_manager_is_not_closed_by_a_done_report_from_before_its_start(self) -> None:
+        folder = self.manager()
+        old = folder / "result-1.md"
+        old.write_text("Status: done\nx\n")
+        os.utime(old, (100, 100))
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "started": 200}))
+        watch.Watcher(self.root).scan(0)
+        self.assertNotIn("tab close w1:t4", self.calls())
+        (folder / "result-2.md").write_text("Status: done\ny\n")
+        watch.Watcher(self.root).scan(1)
+        self.assertIn("tab close w1:t4", self.calls())
+
     def test_decision_report_keeps_the_tab_open(self) -> None:
         folder = self.manager()
         (folder / "result-1.md").write_text("Status: decision\nwhich one?\n")
@@ -372,6 +384,15 @@ class ManagerTests(ReportsCase):
         self.assertEqual(self.bin("manager-close", "alpha").returncode, 0)
         self.assertIn("tab close w1:t4", self.calls())
         self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
+
+    def test_restart_preserves_keep_and_standing_from_the_old_manager_json(self) -> None:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p9", "tab_id": "w1:t9", "closed": True, "keep": True, "standing": True}))
+        r = self.bin("manager-start", "alpha", "--prompt", "go", "--dir", "/tmp")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        info = json.loads((folder / "manager.json").read_text())
+        self.assertTrue(info["keep"] and info["standing"])
+        self.assertNotIn("closed", info)
 
     def test_keep_sets_and_off_clears_the_flag(self) -> None:
         folder = self.manager()

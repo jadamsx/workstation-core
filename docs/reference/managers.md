@@ -8,7 +8,7 @@ Delegated work runs inside [herdr](https://herdr.dev). The coordinator is the ma
 | --- | --- |
 | `herdr-manager setup [--no-work \| --work]` | Run in the lead's pane: registers it, then opens the standing `▸ work` manager and the `? ask` tab if they are not live. Safe to re-run, so it also repairs a missing tab. `--no-work` writes `{"work": false}` to the space's `setup.json` and setup then never starts work; `--work` turns it back on |
 | `herdr-manager register` | Run in the coordinator's pane. Saves it as the coordinator of its workspace and renames its tab `◆ lead`. Run again after a handoff and reports follow the new pane |
-| `herdr-manager start <name> [--resume <session-id>] [--dir <path>]` | Opens a `▸ <name>` manager tab running Sonnet with the manager brief. Refuses while a manager of that name is live and not closed |
+| `herdr-manager start <name> [--resume <session-id>] [--dir <path>]` | Opens a `▸ <name>` manager tab running Sonnet with the manager brief. Refuses while a manager of that name is live and not closed. Restarting a name keeps its `keep` and `standing` flags, and the watcher ignores reports older than the new `started` |
 | `manager-start <name> --prompt "<text>" [--dir <path>]` | Opens an extra manager tab for a parallel stream and sends the prompt once the agent is ready |
 | `manager-start --check` | Prints `coordinator` and exits 0 in the registered coordinator pane, exits 1 anywhere else |
 | `manager-send <name> "<text>"` | Delivers `[coordinator] <text>` to the manager, retrying every 15 seconds for up to 10 minutes while it is blocked. A standing manager is sent to only once its pane is idle, and is sent `/clear` first when its newest report is `Status: done` and not yet cleared |

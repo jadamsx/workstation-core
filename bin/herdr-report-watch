@@ -124,13 +124,14 @@ class Watcher:
             coordinator_file = space / "coordinator"
             coordinator = coordinator_file.read_text().strip() if coordinator_file.exists() else None
             for manager in sorted(p for p in space.glob("*") if (p / "manager.json").exists()):
-                results = sorted(manager.glob("*.md"))
-                pending = [r for r in results if str(r) not in self.state["sent"]]
+                allresults = sorted(manager.glob("*.md"))
+                pending = [r for r in allresults if str(r) not in self.state["sent"]]
                 for result in pending:
                     if not self.deliver(str(result), coordinator, f"[worker-report] {result}", "sent", now):
                         break
                 else:
                     info = read_manager(manager)
+                    results = [r for r in allresults if r.stat().st_mtime > info.get("started", 0)]
                     if results and is_done(results[-1]) and not (info.get("standing") or info.get("keep") or info.get("closed")):
                         self.close(manager)
                         continue

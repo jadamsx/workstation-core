@@ -126,15 +126,17 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
     if resume and not SESSION_ID.fullmatch(resume):
         raise ReportsError(f"--resume needs a session id, got {resume!r}")
     reports = space_dir() / name
+    previous: dict = {}
     if (reports / "manager.json").exists():
-        existing = read_manager(reports)
-        if not existing.get("closed") and existing.get("pane_id") in (live_panes() or set()):
-            raise ReportsError(f"manager {name!r} is already running in pane {existing['pane_id']}")
+        previous = read_manager(reports)
+        if not previous.get("closed") and previous.get("pane_id") in (live_panes() or set()):
+            raise ReportsError(f"manager {name!r} is already running in pane {previous['pane_id']}")
     reports.mkdir(parents=True, exist_ok=True)
     directory = Path(directory).resolve()
     claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]
     pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}"], directory, claude_args)
-    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **({"standing": True} if standing else {})}
+    carried = {k: True for k in ("standing", "keep") if previous.get(k)}
+    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **carried, **({"standing": True} if standing else {})}
     write_atomic(reports / "manager.json", json.dumps(info))
     print(f"{name}: pane {pane}, reports {reports}")
     return 0
