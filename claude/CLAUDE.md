@@ -44,7 +44,7 @@ When summarising, always keep:
 
 ## Notes
 - Before platform, tooling or process work, read `${NOTES_DIR:-~/notes}/index.md` and `grepai search` the vault; cite what you used.
-- Readable output (plans, designs, decisions, research) goes to `${NOTES_DIR:-~/notes}` via `notes-write`. `${DRAFTS_DIR:-~/drafts}` is agent artifacts only, under `projects/<slug>/<ticket-or-topic>/` (`<slug>` from `current-project`). No new top-level folders in either.
+- Readable output (plans, designs, decisions, research) goes to `${NOTES_DIR:-~/notes}` via `notes-write`. `${DRAFTS_DIR:-~/drafts}` is agent artifacts only, under `projects/<slug>/<ticket-or-topic>/` (`<slug>` from `current-project`).
 
 ## Before building anything
 Answer the five questions in `checklists/design.md` section 0, one sentence each with a `file:line`, `N/A` plus why, or `unknown`. `unknown` blocks.
