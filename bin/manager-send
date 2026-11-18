@@ -3,11 +3,12 @@
 
 The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
 `herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
-manager is blocked. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
+manager is blocked. A `/build` job (`/build <plan.md> node <id> worktree <path>`) first writes `<path>/.owns` from the plan. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
 `Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -52,6 +53,43 @@ def settle_standing(folder: Path, pane: str, deadline: float, interval: float) -
         wait_idle(pane, deadline, interval)
 
 
+def write_owns(text: str) -> None:
+    """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided, Standing and Not-building lines."""
+    if not re.match(r"/build(\s|$)", text):
+        return
+    fields = {
+        "plan": re.search(r"\S+\.md\b", text),
+        "node": re.search(r"\bnode[: ]\s*(\w+)", text),
+        "worktree": re.search(r"\bworktree[: ]\s*(\S+)", text),
+    }
+    missing = [name for name, found in fields.items() if not found]
+    if missing:
+        raise ReportsError(f"/build job names no {', '.join(missing)}")
+    plan = Path(fields["plan"].group(0)).expanduser()
+    tree = Path(fields["worktree"].group(1)).expanduser()
+    node = fields["node"].group(1)
+    if not plan.is_file():
+        raise ReportsError(f"plan {plan} does not exist")
+    top = subprocess.run(["git", "-C", str(tree), "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    if not top or Path(top).resolve() != tree.resolve():
+        raise ReportsError(f"{tree} is not the top level of a git worktree")
+    note = plan.read_text()
+    row = re.search(rf"^\|\s*{re.escape(node)}\b[^\n]*", note, re.M)
+    if not row:
+        raise ReportsError(f"node {node} is not in {plan}")
+    cells = row.group(0).split("|")
+    owns = re.findall(r"`([^`]+)`", cells[4] if len(cells) > 4 else "")
+    lines = re.findall(r"^- ((?:Decided|Standing|Not-building): .+)$", note, re.M)
+    kinds = {line.split(":", 1)[0] for line in lines}
+    absent = {"Decided", "Standing", "Not-building"} - kinds
+    if not owns:
+        raise ReportsError(f"{plan} lists no Owns for {node}")
+    if absent:
+        raise ReportsError(f"{plan} has no {', '.join(sorted(absent))} line")
+    legacy = ["legacy: true"] if re.search(r"^- size:.*\blegacy: true", note, re.M) else []
+    write_atomic(tree / ".owns", "\n".join([f"node: {node}", f"owns: {', '.join(owns)}", *lines, *legacy]) + "\n")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -63,6 +101,7 @@ def main(argv: list[str]) -> int:
         info = read_manager(folder)
         if info.get("closed"):
             raise ReportsError(f"manager {name!r} is closed")
+        write_owns(text)
     except ReportsError as err:
         print(f"manager-send: {err}", file=sys.stderr)
         return 2
