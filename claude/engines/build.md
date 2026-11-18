@@ -40,7 +40,7 @@ Every node has its own worktree `<ticket>-<node>` and its own agent, and paralle
 
 ## The graph
 
-No wave barriers. Whenever a node's needs are all done, start it in its own worktree and agent, up to `build_concurrency_cap` in `claude/resource-policy.json` (N12; 6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Fixes and review rounds of one node run alongside other nodes' builds.
+No wave barriers. Whenever a node's needs are all done, start it in its own worktree and agent, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Fixes and review rounds of one node run alongside other nodes' builds.
 
 - The manager never idle-waits while a ready node exists. When it must wait it ends the message with `WAITING: <what for>` (`templates/manager-brief.md`), naming the node, gate or answer.
 - Tests and browser gates run in the background, each writing a result file, and are never waited on. The manager does the next ready work meanwhile. One gate per app runs at a time, never a second suite in another worktree while one runs (`engines/common.md`); the others queue and their nodes keep building. Each app keeps its own worker cap from the resource policy, and no browser gate is shared across apps.
@@ -72,7 +72,7 @@ In this order, per node:
 3. `checklists/build.md` killer items against the node's own diff, quoting the numbers.
 4. **Pre-review gate.** `run-digest` runs lint, types and the targeted tests in the node's worktree, in the background with a result file. A failure goes back to the builder and no review round is logged, for two fix attempts, then stop and show the error. Round 1 starts on a green result. The node's focused proof runs through `run-digest` or `claim-prover` in the node's worktree.
 5. **Review**: the finders and rounds of the node's `intensity`, per `engines/review.md`. Every node's diff is reviewed whatever its size. `clean-code` also runs on any structural node whatever its intensity. A spike node gets `cold-reviewer` on the experiment's diff and finding, one round. The follow-up list goes in the node report to the `self` review.
-6. **Done check**, last before a done report. Git computes the Owns diff (`git diff <parent> -- <owns>`); `done-check` reads `.owns` and checks only the `Decided:` and `Not-building:` lines against it, quoting the line for each deviation. The report carries `Done-check: pass` or `Done-check: deviation <sha>`, the sha being the commit checked. `done-check` reruns after any commit that follows the check. A deviation goes to the coordinator as a decision report. `report-format-guard` requires the line (N17).
+6. **Done check**, last before a done report. Git computes the Owns diff (`git diff <parent> -- <owns>`); `done-check` reads `.owns` and checks only the `Decided:` and `Not-building:` lines against it, quoting the line for each deviation. The report carries `Done-check: pass` or `Done-check: deviation <sha>`, the sha being the commit checked. `done-check` reruns after any commit that follows the check. A deviation goes to the coordinator as a decision report. `report-format-guard` requires the line.
 
 The main thread holds the table, the graph and the findings; a main thread reading source or running a suite means the run collapsed into one agent.
 

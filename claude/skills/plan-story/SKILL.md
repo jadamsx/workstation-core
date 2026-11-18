@@ -21,4 +21,4 @@ All kinds: notes are written with `notes-write`, prose with `house-style`, and t
 - spike: discipline `spike`; the answer matters more than the code. The verdict names the decision it informs and who makes it; none, no run. Interview asks only Task and Extra info. Prior art: notes, then `researcher` and `code-locator`; cite sources for what is known. One to three `spike` nodes; `owns` is a scratch branch or copy; nothing merges. Review is one `premise-attacker` round. Findings go to `projects/<slug>/research/` via `notes-write` (top-level `research/` with no project), linked from the index and the decision.
 
 ## Output
-Story and task: verdict, node table, decisions and open questions, the go question. Bug: what fails, fix point, node table, go. Epic: the engine's epic report, go. Fix: the thread table, go. Spike: question, decision, box, experiment, node row, go.
+Filled `templates/plan-summary.md`. Story and task: verdict, node table, decisions and open questions, the go question. Bug: what fails, fix point, node table, go. Epic: the engine's epic report, go. Fix: the thread table, go. Spike: question, decision, box, experiment, node row, go.

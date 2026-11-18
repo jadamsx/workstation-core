@@ -47,15 +47,6 @@ V2_HEADS = [
     "Out",
     "Links",
 ]
-PROPOSAL_HEADS = [
-    "Summary",
-    "Problem",
-    "Proposal",
-    "Alternatives",
-    "Costs and risks",
-    "Ask and decision needed",
-    "Links",
-]
 TEMPLATES = {
     "decision": (
         [
@@ -95,29 +86,6 @@ TEMPLATES = {
             "related_adrs",
         ],
         V2_HEADS,
-    ),
-    "proposal": (
-        [
-            "title",
-            "aliases",
-            "type",
-            "status",
-            "format",
-            "ticket",
-            "project",
-            "date",
-            "superseded_by",
-            "mr",
-            "area",
-            "updated",
-            "verified",
-            "sources",
-            "decided_by",
-            "implements",
-            "supersedes",
-            "related_adrs",
-        ],
-        PROPOSAL_HEADS,
     ),
     "howto": (
         [
@@ -516,25 +484,6 @@ class V2Test(LintCase):
 
     def test_unknown_format_is_flagged(self) -> None:
         self.assertIn("format-invalid", self.v2(format="v3"))
-
-    def test_proposal_format_uses_the_proposal_headings(self) -> None:
-        write(
-            self.root,
-            "projects/p/designs/ABC-3-prop.md",
-            frontmatter("design", project="p", format="proposal")
-            + body(
-                "design",
-                "Detailed in [[projects/p/designs/ABC-1-thing]].",
-                heads=PROPOSAL_HEADS,
-            ),
-        )
-        sub(
-            self.root,
-            "projects/p/index.md",
-            "[[projects/p/research/q]] is the evidence.",
-            "[[projects/p/research/q]] is the evidence and [[projects/p/designs/ABC-3-prop]] the proposal.",
-        )
-        self.assertEqual(self.lint(), (0, []))
 
     def test_fr_without_node_is_flagged(self) -> None:
         self.assertEqual(self.v2(nodes=NODES.replace("FR-002, ", "")), {"fr-uncovered"})
