@@ -56,6 +56,7 @@ COMMIT_VALUE_FLAGS = {
 }
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n[ \t]*\2\b", re.S)
 REDIRECT = re.compile(r"(?<!\w)\d*(?:&>>?|>>?|<)&?[ \t]*[^\s;&|()<>\"']+")
+SHELL_C = re.compile(r"-[a-zA-Z]*c[a-zA-Z]*$")
 HOOK_CWD = ["."]
 SMELL_PATTERNS = re.compile(
     r"^\+\s*(#|//|--|/\*)\s*("
@@ -149,6 +150,8 @@ def commit_pathspecs(args: list[str]) -> tuple[bool, list[str]]:
         if token == "--":
             specs += args[i:]
             break
+        if token.startswith("--pathspec-"):
+            raise RuntimeError(f"{token.split('=')[0]} cannot be checked")
         if token.startswith("--"):
             all_tracked |= token == "--all"
             i += "=" not in token and token in COMMIT_VALUE_FLAGS
@@ -171,8 +174,9 @@ def would_stage(command: str, cwd: str, top: str) -> tuple[set[str], bool]:
             argv = argv[1:]
         if argv[:2] == [":", "scope-grew"]:
             override = True
-        elif argv[:1] and argv[0] in ("sh", "bash", "zsh") and "-c" in argv[1:-1]:
-            inner, grew = would_stage(argv[argv.index("-c") + 1], cwd, top)
+        elif argv[:1] and argv[0] in ("sh", "bash", "zsh") and any(SHELL_C.match(t) for t in argv[1:-1]):
+            flag = next(i for i, t in enumerate(argv) if i and SHELL_C.match(t))
+            inner, grew = would_stage(argv[flag + 1], cwd, top)
             paths |= inner
             override |= grew
         elif argv[:1] == ["git"]:
@@ -192,7 +196,8 @@ def staged_by(sub: str, rest: list[str], where: str, top: str) -> set[str]:
 
     named = [rel(t) for t in rest if not t.startswith("-")]
     if sub in ("add", "stage"):
-        found = (re.match(r"(?:add|remove) '(.*)'$", line) for line in git_out(["add", "-n", *rest], where))
+        args = [t for t in rest if t.startswith("-") or os.path.lexists(os.path.join(where, t)) or not LOCKFILE.search(t)]
+        found = (re.match(r"(?:add|remove) '(.*)'$", line) for line in git_out(["add", "-n", *args], where))
         return {m.group(1) for m in found if m}
     if sub in ("rm", "mv", "update-index"):
         return set(named)

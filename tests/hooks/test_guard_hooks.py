@@ -707,7 +707,22 @@ class OwnsGuardTest(unittest.TestCase):
             "(git add b.py && git commit -m x)",
             "{ git add b.py; git commit -m x; }",
             'bash -c "git add b.py && git commit -m x"',
+            "bash -lc 'git add b.py && git commit -m x'",
+            "zsh -ic 'git add b.py && git commit -m x'",
         )
+
+    def test_pathspec_from_file_cannot_be_verified(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        (self.repo / "list").write_text("b.py\n")
+        self.assert_blocked(
+            "git commit -m x --pathspec-from-file=list",
+            "git commit -m x --pathspec-from-file list",
+            "git commit -m x --pathspec-from-file=list --pathspec-file-nul",
+        )
+
+    def test_absent_lockfile_in_add_does_not_block(self) -> None:
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        self.assertEqual(self.run_command("git add uv.lock src; git commit -m x").returncode, 0)
 
     def test_git_dash_c_and_subdirectory_cwd(self) -> None:
         (self.repo / "b.py").write_text("b = 2\n")
