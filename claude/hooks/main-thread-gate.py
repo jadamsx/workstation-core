@@ -8,6 +8,9 @@ edit gate for the main thread this turn: the UserPromptSubmit wiring records it 
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
+Every role: a Bash polling loop (`until`/`while` with `sleep`) or a `sleep` over 10 seconds is denied in favour
+of run_in_background, and a run_in_background command is rewritten to run under a 20-minute timeout.
+
 With WORKSTATION_ROLE=ask the gate is an allowlist: no file edits, only read-only agent types, and Bash
 runs only listed read-only commands, tokenised and normalised before matching. It applies to subagents too and whatever the prompt says.
 
@@ -20,12 +23,21 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
 ESCAPE_PHRASE = "main-thread-ok"
 WORKER_REPORT = re.compile(r"^\s*\[worker-report\]", re.MULTILINE)
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
+MAX_SLEEP_SECONDS = 10
+BACKGROUND_TIMEOUT_SECONDS = 1200
+SLEEP_ARG = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)([smhd]?)\b")
+LOOP_WORD = re.compile(r"\b(until|while)\b")
+SLEEP_WORD = re.compile(r"\bsleep\b")
+SLEEP_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+WRAPPED = re.compile(rf"^\s*(gtimeout|timeout)\s+{BACKGROUND_TIMEOUT_SECONDS}\b|^\s*perl -e 'alarm {BACKGROUND_TIMEOUT_SECONDS};")
+POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_background, which notifies when the command finishes."
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
@@ -310,6 +322,26 @@ def ask_block_reason(payload: dict) -> str | None:
     return None
 
 
+def polling_reason(payload: dict) -> str | None:
+    if payload.get("tool_name") != "Bash":
+        return None
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    bare = QUOTED.sub('""', HEREDOC.sub("", command))
+    long_sleep = any(float(n) * SLEEP_UNITS[u] > MAX_SLEEP_SECONDS for n, u in SLEEP_ARG.findall(bare))
+    loop = LOOP_WORD.search(bare) and SLEEP_WORD.search(bare)
+    return POLLING_DENIED if long_sleep or loop else None
+
+
+def with_timeout(payload: dict) -> dict | None:
+    tool_input = payload.get("tool_input") or {}
+    command = tool_input.get("command") or ""
+    if payload.get("tool_name") != "Bash" or not tool_input.get("run_in_background") or WRAPPED.match(command):
+        return None
+    limit = BACKGROUND_TIMEOUT_SECONDS
+    runner = f"gtimeout {limit}" if shutil.which("gtimeout") else f"perl -e 'alarm {limit}; exec @ARGV' --"
+    return {**tool_input, "command": f"{runner} bash -c {shlex.quote(command)}"}
+
+
 def is_coordination_file(path: str) -> bool:
     resolved = Path(os.path.realpath(path))
     if resolved.suffix != ".md":
@@ -347,9 +379,11 @@ def main() -> None:
         if reason:
             print(reason, file=sys.stderr)
             sys.exit(2)
-    if is_subagent(payload) or is_manager() or escaped(payload):
-        sys.exit(0)
-    reason = block_reason(payload)
+    reason = polling_reason(payload)
+    if reason:
+        print(reason, file=sys.stderr)
+        sys.exit(2)
+    reason = None if is_subagent(payload) or is_manager() or escaped(payload) else block_reason(payload)
     if reason:
         print(
             f"{reason} `{ESCAPE_PHRASE}` in your prompt lifts the edit gate for the main thread this turn; "
@@ -358,6 +392,9 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(2)
+    updated = with_timeout(payload)
+    if updated:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": updated}}))
     sys.exit(0)
 
 

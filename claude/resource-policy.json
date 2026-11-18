@@ -21,5 +21,10 @@
   "watchers": {
     "per_space": 1
   },
+  "reaper_keep": [
+    "docker",
+    "kubectl",
+    "tail -f"
+  ],
   "build_concurrency_cap": 6
 }
