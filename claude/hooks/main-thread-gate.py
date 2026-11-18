@@ -109,7 +109,7 @@ ASK_AGENTS = {
 ASK_ALLOWED = (
     "Allowed in the ask tab: read-only agents (" + ", ".join(sorted(ASK_AGENTS)) + "), "
     "Bash that does not name herdr or manager- except `herdr pane read|list`, `herdr tab list`, "
-    "`herdr workspace list|get`, `herdr agent list`. No file edits. Point the human to the lead tab."
+    "`herdr workspace list|get`, `herdr agent list`. No file edits, no SendMessage. Point the human to the lead tab."
 )
 
 
@@ -213,6 +213,8 @@ def ask_block_reason(payload: dict) -> str | None:
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     if tool in EDIT_TOOLS:
         return f"The ask tab never edits files. {ASK_ALLOWED}"
+    if tool == "SendMessage":
+        return f"The ask tab never messages other sessions. {ASK_ALLOWED}"
     if tool == "Agent" and (tool_input.get("subagent_type") or "") not in ASK_AGENTS:
         return f"The ask tab only spawns read-only agents. {ASK_ALLOWED}"
     if tool == "Bash" and names_blocked_herdr(tool_input.get("command") or ""):

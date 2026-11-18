@@ -267,6 +267,7 @@ class PayloadTest(unittest.TestCase):
         for tool in ("Edit", "Write", "NotebookEdit", "MultiEdit"):
             self.assertEqual(self.ask_code(tool, {"file_path": "/home/u/notes/a.md"}), 2, tool)
             self.assertEqual(self.ask_code(tool, {"file_path": "/repo/a.py"}, agent_id="a1"), 2, tool)
+        self.assertEqual(self.ask_code("SendMessage", {"to": "x", "message": "hi"}), 2)
         sub = {"command": "herdr agent prompt w1:p1 hi"}
         self.assertEqual(self.ask_code("Bash", sub, agent_id="a1"), 2)
 
