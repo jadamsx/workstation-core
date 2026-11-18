@@ -48,7 +48,8 @@ No wave barriers. Whenever a node's needs are all done, start it in its own work
 - Node builders run only their focused proof plus lint and types on touched files, and share the repo's caches so setup stays cheap. The formatter, the suite and `pre-commit` run once, in the final `verify-run` node.
 - Overlapping `owns` is a need, or the node hands a patch to the integration owner the plan names; lockfiles, generated files and shared config sit in exactly one node's `owns`. A node that needs a file outside its `owns` reports `scope-grew` and stops. A merge conflict means the plan's `owns` or needs were wrong: stop and treat it as a planning error.
 - Progress is a one-line plan-note edit: `[~]` when the node starts, `[x]` when it is done, in the same edit adding its Decisions and Traps lines, so a compaction loses nothing. A v2 node's own tests go in its Traceability row's Test cell. Wave decisions are appended to the note's Decisions, one dated line each.
-- A usage-gate park holds new starts only; running nodes finish.
+- Before starting a node or a review round, run `usage-gate`. Exit 1 (`parked until <time>`) means park: start nothing new, tell the lead the line, never interrupt running work. The watcher resumes parked jobs after the reset.
+- The build job text `manager-send` parses is the build slash command followed by `<plan.md> node <id> worktree <path>`; it writes `<path>/.owns` from it.
 
 Discovered work that is not this ticket becomes a ticket draft under the note's `## Out`, never scope. Anything the build adds, drops or does differently from the plan is a decision node in the table before building.
 

@@ -4,7 +4,9 @@
 The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
 `herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
 manager is blocked. A `/build` job (`/build <plan.md> node <id> worktree <path>`) first writes `<path>/.owns` from the plan. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
-`Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state.
+`Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state. A slash-command job
+(a new start) while `usage-gate` is parked is not sent: it is saved under `parked` in the watcher state, which resumes
+it after the reset, and one line `parked until <time>` is printed.
 """
 import json
 import os
@@ -12,10 +14,13 @@ import re
 import subprocess
 import sys
 import time
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import IDLE_STATES, ReportsError, is_done, manager_folder, pane_states, read_manager, reports_root, write_atomic  # noqa: E402
+
+usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent / "usage-gate")).load_module()
 
 GIVE_UP_SECONDS = 600
 
@@ -87,6 +92,14 @@ def write_owns(text: str) -> None:
     write_atomic(tree / ".owns", "\n".join([f"node: {node}", f"owns: {', '.join(owns)}", *lines, *legacy]) + "\n")
 
 
+def park(folder: Path, text: str, until: float) -> None:
+    state_file = reports_root() / ".watch-state.json"
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    state["parked"] = [*state.get("parked", []), {"folder": str(folder), "text": text, "until": until}]
+    write_atomic(state_file, json.dumps(state))
+    print(f"parked until {time.strftime('%Y-%m-%d %H:%M', time.localtime(until))}")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -102,6 +115,10 @@ def main(argv: list[str]) -> int:
     except ReportsError as err:
         print(f"manager-send: {err}", file=sys.stderr)
         return 2
+    until = usage_gate.parked_until() if text.startswith("/") else None
+    if until is not None:
+        park(folder, text, until)
+        return 0
     deadline = time.monotonic() + GIVE_UP_SECONDS
     if info.get("standing") and not info.get("keep"):
         try:

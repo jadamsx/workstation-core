@@ -87,6 +87,10 @@
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/agent-model-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/usage-gate-hook.py"
           }
         ]
       },
