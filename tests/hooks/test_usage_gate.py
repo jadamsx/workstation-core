@@ -66,6 +66,10 @@ class GateTest(GateCase):
         self.assertEqual(self.cli().returncode, 0)
         self.usage.write_text("not json")
         self.assertEqual(self.cli().returncode, 0)
+        for body in ("[1]", "null"):
+            self.usage.write_text(body)
+            r = self.cli()
+            self.assertEqual((r.returncode, r.stderr), (0, ""))
 
     def test_a_window_that_already_reset_does_not_park(self) -> None:
         self.write(99, 10, reset=time.time() - 5)
@@ -119,6 +123,15 @@ class StatuslineTest(GateCase):
             ["bash", str(ROOT / "claude/statusline-command.sh")],
             input=json.dumps(payload), text=True, capture_output=True, env=self.env, check=True,
         )
+
+    def test_an_unwritable_usage_file_is_silent(self) -> None:
+        self.env["USAGE_FILE"] = str(self.base / "missing-dir" / "usage.json")
+        limits = {"five_hour": {"used_percentage": 1, "resets_at": 1900000000}}
+        r = subprocess.run(
+            ["bash", str(ROOT / "claude/statusline-command.sh")],
+            input=json.dumps({"rate_limits": limits}), text=True, capture_output=True, env=self.env,
+        )
+        self.assertEqual(r.stderr, "")
 
     def test_writes_the_rate_limits_atomically_and_skips_a_payload_without_them(self) -> None:
         self.run_line({"model": {"id": "m"}})

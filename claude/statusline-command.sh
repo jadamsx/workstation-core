@@ -21,8 +21,8 @@ seven_day_resets=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // em
 
 if [ -n "$five_hour_pct$seven_day_pct" ]; then
   usage_file=${USAGE_FILE:-$HOME/.claude/usage.json}
-  echo "$input" | jq -c '{five_hour: .rate_limits.five_hour, seven_day: .rate_limits.seven_day}' > "$usage_file.$$" \
-    && mv "$usage_file.$$" "$usage_file"
+  echo "$input" | jq -c '{five_hour: .rate_limits.five_hour, seven_day: .rate_limits.seven_day}' 2>/dev/null > "$usage_file.$$" \
+    && mv "$usage_file.$$" "$usage_file" 2>/dev/null
 fi
 
 c() { printf '\033[38;2;%sm' "$1"; }

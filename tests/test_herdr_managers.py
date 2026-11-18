@@ -178,22 +178,28 @@ class WatcherTests(ReportsCase):
 class ParkedResumeTests(ReportsCase):
     def park(self, *jobs: tuple[str, str, float]) -> None:
         panes = ['{"pane_id":"w1:p1"}']
-        for name, text, until in jobs:
-            self.manager(name, f"w1:p{4 + len(name)}")
-            panes.append(f'{{"pane_id":"w1:p{4 + len(name)}"}}')
+        (self.root / ".parked").mkdir(parents=True, exist_ok=True)
+        for i, (name, text, until) in enumerate(jobs):
+            if name != "ghost":
+                self.manager(name, f"w1:p{4 + len(name)}")
+                panes.append(f'{{"pane_id":"w1:p{4 + len(name)}"}}')
+            (self.root / ".parked" / f"{i:03}.json").write_text(json.dumps({"folder": str(self.space / name), "text": text, "until": until}))
         os.environ["FAKE_PANES"] = ",".join(panes)
-        (self.root / ".watch-state.json").write_text(
-            json.dumps({"parked": [{"folder": str(self.space / n), "text": t, "until": u} for n, t, u in jobs]})
-        )
 
-    def test_resumes_due_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
+    def left(self) -> list[str]:
+        return [Path(json.loads(f.read_text())["folder"]).name for f in sorted((self.root / ".parked").glob("*.json"))]
+
+    def usage(self, five: float, reset: float) -> None:
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
+
+    def test_resumes_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
         now = time.time()
-        self.park(("alpha", "/plan-task a", now - 5), ("beta", "/plan-task b", now - 4), ("late", "/plan-task c", now + 3600))
-        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": 95, "resets_at": now + 3600}}))
+        self.park(("alpha", "/plan-task a", now + 3600), ("beta", "/plan-task b", now + 3600))
+        self.usage(95, now + 3600)
         watcher = watch.Watcher(self.root)
         watcher.scan(0)
         self.assertEqual(self.prompts(), [])
-        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": 5, "resets_at": now + 9000}}))
+        self.usage(5, now + 9000)
         watcher.scan(1)
         watcher.scan(2)
         self.assertEqual(
@@ -204,13 +210,39 @@ class ParkedResumeTests(ReportsCase):
                 "agent prompt w1:p1 [worker-report] resumed parked jobs: alpha, beta",
             ],
         )
-        left = json.loads((self.root / ".watch-state.json").read_text())["parked"]
-        self.assertEqual([p["folder"] for p in left], [str(self.space / "late")])
+        self.assertEqual(self.left(), [])
 
-    def test_a_job_whose_reset_has_not_passed_stays_parked_even_when_the_reading_is_stale(self) -> None:
-        self.park(("alpha", "/plan-task a", time.time() + 3600))
+    def test_an_override_releases_parked_jobs(self) -> None:
+        now = time.time()
+        self.park(("alpha", "/plan-task a", now + 3600))
+        self.usage(95, now + 3600)
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        self.assertEqual(self.left(), ["alpha"])
+        Path(os.environ["USAGE_OVERRIDE_FILE"]).write_text(str(now + 600))
+        watcher.scan(1)
+        self.assertEqual(self.left(), [])
+
+    def test_a_poison_job_is_dropped_and_the_rest_still_resume(self) -> None:
+        self.park(("ghost", "/plan-task g", 0), ("alpha", "/plan-task a", 0))
         watch.Watcher(self.root).scan(0)
-        self.assertEqual(self.prompts(), [])
+        self.assertEqual(self.left(), [])
+        self.assertIn("agent prompt w1:p9 [coordinator] /plan-task a", self.prompts())
+
+    def test_a_malformed_parked_file_is_dropped(self) -> None:
+        (self.root / ".parked").mkdir(parents=True)
+        (self.root / ".parked" / "000.json").write_text("[1]")
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(list((self.root / ".parked").glob("*.json")), [])
+
+    def test_a_busy_standing_manager_keeps_its_job_parked(self) -> None:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1"},{"pane_id":"w1:p4","agent_status":"working"}'
+        (self.root / ".parked").mkdir()
+        (self.root / ".parked" / "000.json").write_text(json.dumps({"folder": str(folder), "text": "/plan-task a", "until": 0}))
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual((self.left(), self.prompts()), (["alpha"], []))
 
 
 class DoneReportTests(ReportsCase):
@@ -370,10 +402,22 @@ class ManagerTests(ReportsCase):
         r = self.bin("manager-send", "alpha", "/plan-task x")
         self.assertEqual((r.returncode, r.stdout.count("\n"), r.stdout.startswith("parked until ")), (0, 1, True))
         self.assertEqual(self.prompts(), [])
-        parked = json.loads((self.root / ".watch-state.json").read_text())["parked"]
+        parked = [json.loads(f.read_text()) for f in sorted((self.root / ".parked").glob("*.json"))]
         self.assertEqual([(p["folder"], p["text"]) for p in parked], [(str(folder), "/plan-task x")])
         self.assertEqual(self.bin("manager-send", "alpha", "OK to push").returncode, 0)
         self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] OK to push"])
+
+    def test_concurrent_parks_keep_every_job(self) -> None:
+        self.manager()
+        self.usage(90, time.time() + 3600)
+        procs = [
+            subprocess.Popen([str(REPO / "bin/manager-send"), "alpha", f"/plan-task {n}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            for n in range(12)
+        ]
+        results = [(p.wait(), p.stderr.read()) for p in procs]
+        self.assertEqual(results, [(0, "")] * 12)
+        texts = {json.loads(f.read_text())["text"] for f in (self.root / ".parked").glob("*.json")}
+        self.assertEqual(texts, {f"/plan-task {n}" for n in range(12)})
 
     def test_the_override_lifts_the_park(self) -> None:
         self.manager()
