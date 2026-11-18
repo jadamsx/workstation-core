@@ -9,8 +9,14 @@
   "permissions": {
     "allow": [
       "Bash(gh *)",
-      "Bash(git *)",
-      "Bash(launchctl *)"
+      "Bash(launchctl *)",
+      "Bash(git fetch*)",
+      "Bash(git push*)",
+      "Bash(git worktree*)",
+      "Bash(herdr *)",
+      "Bash(docker ps*)",
+      "Bash(docker logs*)",
+      "Bash(docker inspect*)"
     ],
     "deny": [
       "Bash(git commit --no-verify*)",
@@ -177,8 +183,12 @@
     "excludedCommands": [
       "herdr *",
       "gh *",
-      "git *",
-      "launchctl *"
+      "launchctl *",
+      "git fetch*",
+      "git push*",
+      "git pull*",
+      "git clone*",
+      "git ls-remote*"
     ],
     "filesystem": {
       "allowWrite": [
@@ -187,7 +197,11 @@
         "~/.cache",
         "~/.npm",
         "~/Library/Caches",
-        "~/.local/state"
+        "~/.local/state",
+        "**/.git",
+        "~/.gitconfig",
+        "~/.config/git",
+        "~/.local/share/uv"
       ],
       "denyRead": [
         "~/.ssh",
