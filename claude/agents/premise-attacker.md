@@ -1,6 +1,6 @@
 ---
 name: premise-attacker
-description: Attack a ticket before it is built, or, in after-build mode, check shipped behaviour against epic and designs.
+description: Attack a ticket before it is built: premise, existing work, trivial baselines, sequencing.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
@@ -20,11 +20,7 @@ Hunt in this order:
 
 Read the ticket whole: description, acceptance criteria, comments as a separate fetch, parent epic, linked issues. Where body and thread disagree, say which one a plan would implement.
 
-## After-build mode
-When the caller says `after-build`, the epic is merged. You get the epic, its stories and the designs, not the ticket text of any one story. Read the merged code on `origin/<base>` and say, per story, whether the shipped behaviour matches the epic and the designs. Also list anything built that nobody asked for.
-
 ## Output
-No summary, no strengths, no opinion on implementation. After-build mode: per story `delivered`, `partial` or `missing`, with `file:line`, then unrequested behaviour. Otherwise:
-Numbered attacks, each `file:line - which of the five - what the code shows`, or `no findings`. Say what you could not check and why.
+No summary, no strengths, no opinion on implementation. Numbered attacks, each `file:line - which of the five - what the code shows`, or `no findings`. Say what you could not check and why.
 
 Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.

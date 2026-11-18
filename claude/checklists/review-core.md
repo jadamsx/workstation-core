@@ -1,6 +1,6 @@
 # Review checklist: core
 
-The one list every review works from, and the agents that run it (`cold-reviewer`, `finding-refuter`, `miss-hunter`, `test-gap-auditor`, `clean-code`). Each question is answered against the diff with a file and a line, or marked "not applicable" with a reason. A question answered from memory hasn't been checked.
+The one list every review works from, and the agents that run it (`cold-reviewer`, `finding-refuter`, `test-gap-auditor`, `clean-code`). Each question is answered against the diff with a file and a line, or marked "not applicable" with a reason. A question answered from memory hasn't been checked.
 
 Core holds §0-7 and §17. `review-domain.md` holds §10 and §16. The seven concerns design and review share (§8, 9, 11, 12, 13, 14, 15) live in `design-review-shared.md`.
 
@@ -18,6 +18,8 @@ Quote the numbers you checked in the report. An item you skipped is named, with 
 6. The diff changed or deleted nothing nobody asked for, and the history of the changed lines (`git log -L`) does not contradict it (§0).
 7. Said what you ran and what you only read, and named the changed files you did not read. Agreement between agents is not evidence.
 8. A real bug is stated first; style never pads the report.
+9. Bolt-ons flagged: additions outside the brief or the node's Owns. Decision deviations flagged: each against the Decided and Not-building lines, with the quoted line.
+10. Findings written as Conventional Comments: `<label>: file:line - what breaks - fix`, where Blocker is `issue (blocking)`, Should-fix `suggestion (blocking)` and Nit `nitpick`. No praise label.
 
 ## Reference
 

@@ -1,6 +1,6 @@
 ---
 name: run-digest
-description: Run one named test command, or reduce a saved CI job log, and report the first failure. Use before reading raw output.
+description: Run one named command, the pre-review gate or a plan-topic memory lookup, or reduce a saved CI job log, and report the first failure. Use before reading raw output.
 model: haiku
 tools: Bash, Read, Grep
 ---
@@ -11,6 +11,8 @@ Run exactly the command you were given, with output redirected to `$TMPDIR`. Rep
 
 ## Modes
 `merged-main`: run the command on a fresh detached checkout of `origin/<base>` after the epic's changes merged, never the working tree. Say which commit ran. A red run stops the later post-completion checks, so state it first.
+`gate`: the input is a worktree and its lint, types and targeted test commands. Run each, write the report to the result file you were given, and make its first line `PASS` or `FAIL`. A failure goes back to the builder, so name the first failing command and line.
+`memory`: the input is a plan topic. `grep -il` its keywords across `~/.claude/projects/*/memory/feedback_*.md` (name, description, body) and return each matching path with its description line, nothing else.
 `log`: the input is a CI job log, not a command. Save it to `$TMPDIR` and `grep -n` for the first error, failure or non-zero exit.
 
 ## Output
