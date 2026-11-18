@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """PreToolUse guard on `git commit`, `gh pr create|edit` and `glab mr create|update`.
 
-Blocks AI-style comments in the staged diff, a missing pre-commit git hook, and change titles or
+Blocks AI-style comments in the staged diff, a missing pre-commit git hook, a commit that stages paths outside
+the Owns of the worktree's `.owns` (lockfiles and generated files pass, `legacy: true` lets all through, and
+`scope-grew` in the command overrides and is logged in `.owns`), and change titles or
 descriptions that break the rules in the ``change`` object of hooks.d (see hook_config.py):
 require_gitmoji, title_requires_ticket, commit_forbids_ticket, ticket_key, commit_ticket_key,
 ticket_exempt_projects and description_cut_markers. Every rule is off until a layer turns it on.
@@ -46,6 +48,8 @@ GIT_DIR = re.compile(r"\bgit\s+-C\s+(\"[^\"]*\"|'[^']*'|\S+)")
 REPO_FLAG = re.compile(r"(?<!\S)(?:--repo|-R)[=\s]+([^\s\"']+)")
 TEMPLATE_DIRS = (".github/PULL_REQUEST_TEMPLATE", ".gitlab/merge_request_templates")
 CHANGE_CREATE = re.compile(r"\b(gh\s+pr\s+(create|edit)|glab\s+mr\s+(create|update))\b")
+LOCKFILE = re.compile(r"(^|/)([^/]*\.lock|package-lock\.json|pnpm-lock\.yaml|go\.sum|[^/]*\.generated\.[^/]*)$|(^|/)generated/")
+COMMIT_ALL = re.compile(r"^(--all|-[a-zA-Z]*a[a-zA-Z]*)$")
 SMELL_PATTERNS = re.compile(
     r"^\+\s*(#|//|--|/\*)\s*("
     r"This (function|method|class|file|code|line)\b"
@@ -77,6 +81,62 @@ def staged_comment_smells(cwd: str) -> list[str]:
         for line in diff.splitlines()
         if SMELL_PATTERNS.match(line)
     ][:10]
+
+
+def git_out(args: list[str], cwd: str) -> list[str]:
+    done = subprocess.run(["git", *args], capture_output=True, text=True, cwd=cwd, timeout=10)
+    if done.returncode:
+        raise RuntimeError(done.stderr.strip())
+    return done.stdout.splitlines()
+
+
+def would_stage(command: str, cwd: str, top: str) -> set[str]:
+    paths = set(git_out(["diff", "--cached", "--name-only"], top))
+    for segment in re.split(r"&&|;|\|\||\n", command):
+        tokens = shlex.split(segment, comments=True)
+        if "git" in tokens and "add" in tokens:
+            args = tokens[tokens.index("add") + 1 :]
+            for line in git_out(["add", "-n", *args], cwd):
+                found = re.match(r"(?:add|remove) '(.*)'$", line)
+                if found:
+                    paths.add(os.path.relpath(os.path.join(cwd, found.group(1)), top))
+        elif COMMIT.search(segment) and any(COMMIT_ALL.match(t) for t in tokens):
+            paths.update(git_out(["ls-files", "-m", "-d"], top))
+    return paths
+
+
+def owns_errors(command: str, cwd: str) -> list[str]:
+    try:
+        top = git_out(["rev-parse", "--show-toplevel"], cwd)[0]
+    except (RuntimeError, IndexError):
+        return []
+    owns_file = pathlib.Path(top) / ".owns"
+    if not owns_file.is_file():
+        return []
+    fields = dict(
+        line.split(": ", 1) for line in owns_file.read_text().splitlines() if ": " in line
+    )
+    if fields.get("legacy") == "true":
+        return []
+    owned = [p.strip().rstrip("/") for p in fields.get("owns", "").split(",") if p.strip()]
+    try:
+        staged = would_stage(command, cwd, top)
+    except RuntimeError as err:
+        return [f"Cannot compute the staged paths against .owns ({err}). Fix the git command and retry."]
+    outside = sorted(
+        p for p in staged
+        if not LOCKFILE.search(p) and not any(p == o or p.startswith(o + "/") for o in owned)
+    )
+    if not outside:
+        return []
+    if "scope-grew" in command:
+        with owns_file.open("a") as handle:
+            handle.write(f"scope-grew: {', '.join(outside)}\n")
+        return []
+    return [
+        "Commit stages paths outside this node's Owns (.owns): " + ", ".join(outside)
+        + ". Unstage them, or report `scope-grew` and add `scope-grew` to the command to override."
+    ]
 
 
 def precommit_installed(cwd: str) -> bool:
@@ -201,6 +261,7 @@ def check_commit(command: str, cwd: str) -> list[str]:
             )
         if COMMIT_FORBIDS_TICKET and COMMIT_TICKET_RE.search(msg):
             errors.append(f"Commit messages carry no ticket key. Got: {msg[:80]!r}.")
+    errors.extend(owns_errors(command, cwd))
     if not precommit_installed(cwd):
         errors.append(
             "This repo has .pre-commit-config.yaml but the pre-commit git hook is not installed, so "

@@ -1,3 +1,5 @@
+import importlib.machinery
+import importlib.util
 import json
 import os
 import subprocess
@@ -576,6 +578,171 @@ class LayerConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OwnsGuardTest(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        (self.repo / "src").mkdir()
+        (self.repo / "src/a.py").write_text("a = 1\n")
+        (self.repo / "b.py").write_text("b = 1\n")
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+            cwd=self.repo,
+            check=True,
+        )
+        self.owns("node: N1\nowns: src\n")
+
+    def owns(self, text: str) -> None:
+        (self.repo / ".owns").write_text(text)
+
+    def run_command(self, command: str) -> subprocess.CompletedProcess:
+        return run_hook(
+            "pre-commit-guard.py",
+            {"tool_name": "Bash", "cwd": str(self.repo), "tool_input": {"command": command}},
+        )
+
+    def test_staged_path_outside_owns_blocked(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        subprocess.run(["git", "add", "b.py"], cwd=self.repo, check=True)
+        result = self.run_command('git commit -m "x"')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("b.py", result.stderr)
+
+    def test_staged_path_inside_owns_allowed(self) -> None:
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        subprocess.run(["git", "add", "src/a.py"], cwd=self.repo, check=True)
+        self.assertEqual(self.run_command('git commit -m "x"').returncode, 0)
+
+    def test_add_in_the_same_call_is_counted(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assertEqual(self.run_command('git add b.py && git commit -m "x"').returncode, 2)
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        self.assertEqual(self.run_command('git add src && git commit -m "x"').returncode, 0)
+
+    def test_commit_all_counts_modified_tracked_files(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assertEqual(self.run_command('git commit -am "x"').returncode, 2)
+        self.assertEqual(self.run_command('git commit -a -m "x"').returncode, 2)
+
+    def test_lockfile_passes(self) -> None:
+        (self.repo / "uv.lock").write_text("x\n")
+        self.assertEqual(self.run_command('git add uv.lock && git commit -m "x"').returncode, 0)
+
+    def test_legacy_passes(self) -> None:
+        self.owns("node: N1\nowns: src\nlegacy: true\n")
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assertEqual(self.run_command('git commit -am "x"').returncode, 0)
+
+    def test_no_owns_file_passes(self) -> None:
+        (self.repo / ".owns").unlink()
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assertEqual(self.run_command('git commit -am "x"').returncode, 0)
+
+    def test_owns_without_owns_line_fails_closed(self) -> None:
+        self.owns("node: N1\n")
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        self.assertEqual(self.run_command('git commit -am "x"').returncode, 2)
+
+    def test_scope_grew_override_logged_in_owns(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        result = self.run_command('git commit -am "x" # scope-grew')
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("scope-grew: b.py", (self.repo / ".owns").read_text())
+
+
+class ReportDoneCheckTest(unittest.TestCase):
+    def write(self, content: str) -> subprocess.CompletedProcess:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        folder = Path(tmp.name).resolve()
+        return run_hook(
+            "report-format-guard.py",
+            {"tool_name": "Write", "tool_input": {"file_path": str(folder / "result-1.md"), "content": content}},
+            {"WORKSTATION_REPORTS": str(folder)},
+        )
+
+    def test_done_report_needs_done_check(self) -> None:
+        result = self.write("Status: done\nbluf\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Done-check:", result.stderr)
+
+    def test_done_check_forms_pass(self) -> None:
+        for line in ("Done-check: pass", "Done-check: deviation 65b0c2d"):
+            self.assertEqual(self.write(f"Status: done\nbluf\n{line}\n").returncode, 0, line)
+
+    def test_done_check_deviation_needs_a_sha(self) -> None:
+        self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation\n").returncode, 2)
+
+    def test_decision_report_needs_no_done_check(self) -> None:
+        self.assertEqual(self.write("Status: decision\nbluf\n").returncode, 0)
+
+    def test_fourth_round_refused(self) -> None:
+        result = self.write("Status: decision\nbluf\nRound: 4 of 3\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("round", result.stderr.lower())
+        self.assertEqual(self.write("Status: decision\nbluf\nRound: 3 of 3\n").returncode, 0)
+
+
+class ManagerSendOwnsTest(unittest.TestCase):
+    PLAN = (
+        "- size: full; plan kind: epic{legacy}\n\n"
+        "| Node | Agent | Discipline | Owns | Wave |\n"
+        "| N1 Hooks | builder | tdd | core: `bin/x`, `lib/y.py`; company: `z/w.md` | 4 |\n\n"
+        "- Decided: one thing (Jack).\n- Standing: keep it simple.\n{notbuilding}"
+    )
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        path = Path(__file__).resolve().parents[2] / "bin/manager-send"
+        loader = importlib.machinery.SourceFileLoader("manager_send", str(path))
+        spec = importlib.util.spec_from_loader("manager_send", loader)
+        self.module = importlib.util.module_from_spec(spec)
+        loader.exec_module(self.module)
+
+    def send(self, plan: str, node: str = "N1") -> Path:
+        note = self.root / "plan.md"
+        note.write_text(plan)
+        tree = self.root / "tree"
+        tree.mkdir(exist_ok=True)
+        self.module.write_owns(f"/build {note} node {node} worktree {tree}")
+        return tree / ".owns"
+
+    def plan(self, legacy: bool = False, notbuilding: bool = True) -> str:
+        return self.PLAN.format(
+            legacy="; legacy: true" if legacy else "",
+            notbuilding="- Not-building: no registry.\n" if notbuilding else "",
+        )
+
+    def test_owns_file_carries_node_paths_and_lines(self) -> None:
+        lines = self.send(self.plan()).read_text().splitlines()
+        self.assertEqual(lines[0], "node: N1")
+        self.assertEqual(lines[1], "owns: bin/x, lib/y.py, z/w.md")
+        self.assertIn("Decided: one thing (Jack).", lines)
+        self.assertIn("Standing: keep it simple.", lines)
+        self.assertIn("Not-building: no registry.", lines)
+
+    def test_legacy_plan_marks_owns(self) -> None:
+        self.assertIn("legacy: true", self.send(self.plan(legacy=True)).read_text().splitlines())
+
+    def test_missing_lines_write_nothing(self) -> None:
+        with self.assertRaises(self.module.ReportsError):
+            self.send(self.plan(notbuilding=False))
+        self.assertFalse((self.root / "tree/.owns").exists())
+
+    def test_unknown_node_writes_nothing(self) -> None:
+        with self.assertRaises(self.module.ReportsError):
+            self.send(self.plan(), node="N9")
+        self.assertFalse((self.root / "tree/.owns").exists())
+
+    def test_non_build_text_writes_nothing(self) -> None:
+        self.module.write_owns("check in please")
 
 
 class RemotePathTest(unittest.TestCase):
