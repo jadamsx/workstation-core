@@ -31,7 +31,7 @@ A plan is a node table: for each node the agent, discipline, files it owns, wave
 | `verify-comments` | Other people's review comments on your change | Nothing |
 | `verify-plan` | A plan or ticket, before it is built | Nothing |
 
-`verify-change` is `light` by default. Say `medium` for the fix-check round, `intense` for the multi-agent review, `epic` for an epic and `recheck` after the author pushes fixes. Every finding is checked twice, once by the main thread and once by an agent that did not write it, and only what survives is shown.
+`verify-change` is `light` by default. Say `medium` for a fix-check round after the fixes, `intense` for the multi-agent review, `epic` for an epic and `recheck` after the author pushes fixes. A finding is proved by a rerun or a quoted line, and only what survives is shown.
 
 ## Ship
 

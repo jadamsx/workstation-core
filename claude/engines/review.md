@@ -14,7 +14,7 @@ The bar in the brief is the whole bar: reviewers add no checks or rounds the pla
 | `intensity` | `light` (default), `medium`, `intense` |
 | `target` | branch, change URL, epic key, list of URLs, pasted comments, ticket or doc |
 
-The owner's argument wins. A node reviews at the `intensity` in the plan's node table (`engines/plan.md`); `self` uses the highest of them; no plan means `light`. Auth, input, secrets or permissions in the diff raise the review to at least `medium`.
+The owner's argument wins. A node reviews at the `intensity` in the plan's node table (`engines/plan.md`); `self` uses the highest of them; no plan means `light`. Auth, input, secrets or permissions in the diff raise the review to at least `medium`, unless the owner named a level, which wins.
 
 ## Round shapes
 
@@ -30,7 +30,8 @@ Plan finders: `light` `premise-attacker`; `medium` adds `approach-reviewer`; `in
 
 Rules for every round:
 - The findings file starts with `Round: n of 3`, written from the spawn prompt. A round with n > 3 is refused: no agent is spawned and the report says so.
-- An open Blocker after round 3 stops the run and goes to the owner with each finding and your position. There is never a round 4.
+- An open Blocker after the last round the intensity defines (round 2 at `light`, round 3 otherwise) stops the run and goes to the owner with each finding and your position. There is never a further round.
+- On `change` and `epic`, rounds 2 and 3 run only as an owner-triggered recheck.
 - Stop after any round with zero Blocker and zero Should-fix.
 - `comment-cutter` runs at `medium` and above over the branch diff. `comprehension-cutter` runs on posted comments at `intense`.
 - A rebase that leaves `git patch-id --stable` unchanged skips re-review only when CI is green and the base diff does not touch the patch's files.
@@ -64,7 +65,7 @@ Any source change after the final pass goes back through this mode before the pu
 
 Optional review note `${NOTES_DIR:-~/notes}/projects/reviews/<repo>-<number>.md` per `templates/review.md`, with `reviewed_sha`, `verdict` and one line per posted thread.
 
-`light` and `medium` skip the area index, ledger, approach pass and merge-time checks. Read the cited code yourself for anything Blocker or Refuse. A control missing from this repo may live in the caller, gateway or shared library.
+`light` and `medium` skip the ledger, approach pass and merge-time checks. Read the cited code yourself for anything Blocker or Refuse. A control missing from this repo may live in the caller, gateway or shared library.
 
 `intense` adds the ledger and an approach pass; it costs 50 to 100 times `medium`: use it when the owner asks, or offer it for auth, migrations, money or public contracts. The approach pass: read the whole ticket and description; does the premise hold and the bug reproduce by the path a caller takes; does the control run or is it only declared; does the work already exist in a sibling repo. Name approach-level findings in the report.
 
@@ -74,7 +75,7 @@ Recheck runs only on the owner's request, for a note with a `reviewed_sha`. Same
 
 `change-reader` for the epic and children. Each change through `change` in parallel, one `finding-refuter` over all findings. Seam pass: `approach-reviewer` in gap mode, `caller-mapper`, `claim-prover`; each seam names its owner change, a safe merge order, and what is inert until another change lands. Show the owner the three lines, drafts and epic table; post per change after their go. After every change merges, run the epic column of "Post-completion checks" on merged main.
 
-Delivery check (after merge): `approach-reviewer` gets the epic, its stories and the designs, not any story's ticket text, and reads the merged code on `origin/<base>`. Per story `delivered`, `partial` or `missing` with `file:line`, then anything built that nobody asked for.
+Delivery check (after merge): `approach-reviewer` in delivery mode: per story `delivered`, `partial` or `missing` against the epic and designs, then anything built that nobody asked for.
 
 ### Mode `comments`
 

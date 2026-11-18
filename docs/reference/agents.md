@@ -2,15 +2,16 @@
 
 An agent is a single-purpose subagent in `claude/agents/<name>.md`. Its `model:` line is the only place a model is set: engines, skills and prompts never state or override it. The `agent-model-gate` hook refuses a spawn that would run on the session model.
 
-Every agent is read-only except `builder`, `comment-cutter` and `rebase-resolver`. Agents never dispatch other agents. A refusal is one line: `<slug>. ask: <one question>.` The shared rules are in `claude/engines/agent-core.md`.
+Every agent is read-only except `builder`, `builder-small`, `comment-cutter` and `rebase-resolver`. Agents never dispatch other agents. A refusal is one line: `<slug>. ask: <one question>.` The shared rules are in `claude/engines/agent-core.md`.
 
 The table is read from the agents' frontmatter. `claude/templates/agent.md` is the starting point for a new one.
 
 | Agent | Model | Job |
 | --- | --- | --- |
 | `a11y-auditor` | haiku | Run axe on each UI state and tab through the flow, checking focus and labels. Reports violations with selectors. |
-| `approach-reviewer` | opus | Review a design, plan or change's approach: alternatives, fit with recorded decisions, contracts, failure modes, rollout, tests, sequencing. Gap mode: what a set of tickets or designs misses. Reports only. |
+| `approach-reviewer` | opus | Review a design, plan or change's approach: alternatives, fit with recorded decisions, contracts, failure modes, rollout, tests, sequencing. Reports only. Gap mode finds what a set misses; delivery mode checks shipped behaviour. |
 | `builder` | sonnet | Make the edit you were handed. Scope one-file for a bounded edit in 1-2 files, scope node for one plan node in your own worktree. |
+| `builder-small` | haiku | Make a small, mechanical edit in 1-2 files, or one low-risk node. Hands back anything bigger. |
 | `caller-mapper` | haiku | List callers and importers of one function or type with file:line. Use for what-calls-X and blast radius. |
 | `claim-prover` | sonnet | Run the real suite or endpoint to confirm behaviours, or replay build-time bugs. Pass or fail with output tail. |
 | `clean-code` | sonnet | Judge code shape across a whole diff: duplicated knowledge, mixed jobs, branching that wants dispatch, invariants asserted in comments. |
@@ -18,6 +19,7 @@ The table is read from the agents' frontmatter. `claude/templates/agent.md` is t
 | `cold-reviewer` | sonnet | Review a diff with ticket and code only, never the plan or authoring session. Finds correctness, security and contract bugs. |
 | `comment-cutter` | sonnet | Strip AI comment slop from a branch before push: restated-what comments, ticket references, tutorial docstrings. Edits comments only. |
 | `comprehension-cutter` | haiku | Cut draft review comments to what the author can act on. Never judges whether a finding is true. |
+| `done-check` | haiku | Check a node's Owns diff against its Decided and Not-building lines before a done report. Use last, before every done report. Never edits. |
 | `edge-case-explorer` | sonnet | Run exploratory charters against a flow: empty, huge, concurrent, revoked mid-flow, long text, keyboard-only. One line per charter. |
 | `finding-refuter` | sonnet | Reproduce draft review findings on a pinned checkout, and fix-check them in round 2. Never posts. |
 | `change-reader` | haiku | Read one ticket or one change from the tracker or the source control host, read-only. Ticket text verbatim, change status as a table. |
