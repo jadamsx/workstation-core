@@ -142,8 +142,7 @@ JSON
 | Node | Discipline |
 |---|---|
 | Unknown cause, intermittent, performance | `disciplines/investigate-first.md` |
-| Bug or small behaviour change | `disciplines/tdd.md` |
-| New behaviour with a clear input and output | `disciplines/tdd.md` |
+| New behaviour with a clear input and output, or a bug or small behaviour change | `disciplines/tdd.md` |
 | New behaviour, product slice, integration | `disciplines/acceptance-first.md` |
 | Behaviour-preserving restructure | `disciplines/refactor.md` |
 | Schema, API, protocol, config, dependency | `disciplines/migration.md` |
