@@ -8,7 +8,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "lib"))
-import browser_common  # noqa: E402
+try:
+    import browser_common  # noqa: E402
+except ModuleNotFoundError as err:
+    raise unittest.SkipTest(f"{err.name} is not installed") from err
 
 
 def load_script(name: str):

@@ -430,7 +430,8 @@ class ReviewNoteTest(LintCase):
                 "review", "Reviewed under [[projects/p/index|P]], whose rules apply."
             ),
         )
-        self.assertIn("structure", self.rules())
+        with mock.patch.dict("os.environ", {"NOTES_EXTRA_SUBS": ""}):
+            self.assertIn("structure", self.rules())
         with mock.patch.dict("os.environ", {"NOTES_EXTRA_SUBS": "mrs:review"}):
             self.assertEqual(self.lint(), (0, []))
 
