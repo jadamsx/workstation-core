@@ -12,7 +12,8 @@ The artifact type and its audience.
 ## Differs
 1. Read `checklists/prose.md`: killer items first, then §7 for the register and §8 for content rules.
 2. Follow `engines/write.md` for the order of work, templates, the description budget and the three lines.
-3. Quote the numbers you checked when reporting.
+3. Reports open with `Status:` on line 1 and a BLUF on line 2 (outcome, then what the reader must do), per `templates/report.md`. `change-write`, `ticket-write` and `standup` fill repo or tracker templates and are exempt. Guides name one Diátaxis kind (tutorial, how-to, reference, explanation), per `templates/guide.md`.
+4. Quote the numbers you checked when reporting.
 
 ## Output
 The text, plus one short line per non-obvious change when editing someone's draft.

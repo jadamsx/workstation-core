@@ -74,7 +74,7 @@ One vault note per ticket: `${NOTES_DIR:-~/notes}/projects/<slug>/designs/<KEY>-
 - The node table is the decision log: a cleared work tab must be able to resume from the note and the table alone, so every row carries what it needs without chat history.
 - A quick plan with no ticket key is not written down; the build takes the table from the chat.
 - When `projects/<slug>/index.md` still holds the template placeholders, fill "What this stream is" and "Current state" first.
-- A proposal for people who will not build it uses `templates/proposal.md` and links the design note.
+- A proposal for people who will not build it is the design note with `status: proposed`.
 - Before asking for the go, `notes-lint <note>` passes.
 
 ### Plan header

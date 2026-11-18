@@ -13,7 +13,7 @@ The content and its subject. A subject too vague to find a home is asked for onc
 Steps, in order:
 1. Find the home: `code-locator` in notes mode, by filename, frontmatter title, alias, area index and body. More than one hit is a duplicate set.
 2. Decide: update the existing note in place (change the lines the new content changes, keep the rest), merge duplicates into the best-linked note leaving nothing that points nowhere, or create one only when no home exists. Before updating, re-check the note's stale facts against the code and the tracker; bump `verified:` only for what was checked, else set `status: stale`.
-3. Write per `engines/write.md` (register "Note"): one current statement, no append log. Copy the vault's `templates/<type>.md` (starters in `templates/`: design, proposal, review), never write from memory.
+3. Write per `engines/write.md` (register "Note"): one current statement, no append log. Copy the vault's `templates/<type>.md` (a guide is `templates/guide.md`, a decision `templates/decision.md`) (starters in `templates/`: design, decision, guide, review), never write from memory.
 4. Repair links: `caller-mapper` finds every note linking to a merged or renamed note; repoint each at the survivor.
 5. Lint and commit: run the vault's lint script on the whole vault if present; a failing lint means fix the note. Commit in the notes repo with a short message and no ticket ID. Nothing is pushed.
 

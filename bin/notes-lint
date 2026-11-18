@@ -32,7 +32,7 @@ LEGACY_DESIGN_HEADINGS = ["Approach", "Why", "Plan header", "Node table", "Progr
                           "Out", "Links"]
 V2_OPTIONAL = {"Context and scope", "Goals and non-goals", "Design", "Alternatives considered", "Cross-cutting concerns",
                "User Scenarios & Testing", "Success Criteria"}
-FORMATS = {"v2": "design", "proposal": "proposal"}
+FORMATS = {"v2": "design"}
 FR_DEF = re.compile(r"^\s*[-*]\s+\**(FR-\d+)\**\s*:")
 FR_ID = re.compile(r"FR-\d+")
 SC_DEF = re.compile(r"^\s*[-*]\s+\**(SC-\d+)\**\s*:")
