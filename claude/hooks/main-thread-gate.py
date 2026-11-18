@@ -284,6 +284,8 @@ def ask_allows(tokens: list[str]) -> bool:
         return True
     if head == "git":
         while rest[:1] == ["-C"]:
+            if len(rest) < 2 or rest[1].startswith(("/", "~")) or ".." in rest[1]:
+                return False
             rest = rest[2:]
         sub, args = (rest[:1] or [""])[0], rest[1:]
         if any(a.startswith(("--output", "--textconv", "--ext-diff", "--no-index")) for a in args):

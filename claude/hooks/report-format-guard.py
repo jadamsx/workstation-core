@@ -23,7 +23,7 @@ STATUS_LINES = {"Status: decision", "Status: done"}
 PATH_CHARS = r"(?:\$\([^)]*\)|[^\s\"';|&<>)])*"
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*)", re.S)
 DONE_CHECK = re.compile(r"^Done-check: (pass|deviation [0-9a-f]{7,40})\s*$", re.M)
-ROUND = re.compile(r"^Round:\s*(\d+)(?:\s+of\s+\d+)?", re.I | re.M)
+ROUND = re.compile(r"^[\s>*_-]*Round\**(?:\s*:\**\s*(\d+)(?:\s+of\s+\d+)?|\s+(\d+)\s+of\s+\d+)", re.I | re.M)
 INLINE = re.compile(r"\b(?:echo|printf)\s+(?:-\w+\s+)*([\"'])(.*?)\1", re.S)
 
 
@@ -52,7 +52,7 @@ def first_line_problem(text: str) -> str:
         return f"The first line is `{first}`, not a Status line."
     if first == "Status: done" and not DONE_CHECK.search(text):
         return "A done report needs a `Done-check: pass` or `Done-check: deviation <sha>` line."
-    late = [m.group(0) for m in ROUND.finditer(text) if int(m.group(1)) > 3]
+    late = [m.group(0) for m in ROUND.finditer(text) if int(m.group(1) or m.group(2)) > 3]
     return f"`{late[0]}`: a review stops by round 3, escalate an open Blocker." if late else ""
 
 

@@ -443,6 +443,8 @@ class PayloadTest(unittest.TestCase):
             "git show --ext-diff HEAD",
             "git diff --no-index /dev/null ~/.aws/credentials",
             "git diff --no-index a b",
+            "git -C ~ diff .zshenv .zshrc",
+            "git -C ../other diff a b",
             "git log -p -- /etc/passwd",
             "git show HEAD:../x",
             "git diff ~/.ssh/id_rsa",

@@ -763,7 +763,7 @@ class ReportDoneCheckTest(unittest.TestCase):
         self.assertEqual(self.write("Status: decision\nbluf\n").returncode, 0)
 
     def test_round_cap_forms_and_short_sha_refused(self) -> None:
-        for line in ("Round: 4 of 4", "round: 5", "Round:4 of 3"):
+        for line in ("Round: 4 of 4", "round: 5", "Round:4 of 3", "Round 4 of 3", "- Round: 4", "**Round:** 4 of 3"):
             self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 2, line)
         self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation abc123\n").returncode, 2)
 
