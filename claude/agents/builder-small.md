@@ -13,4 +13,4 @@ Anything bigger, riskier, unclear or destructive: `too-big. hand back to builder
 
 Report one line per edit as `path:line-range - change`, then the check you ran and its result.
 
-Common rules: `~/.claude/engines/common.md`.
+Common rules: `~/.claude/engines/agent-core.md`.

@@ -16,4 +16,4 @@ For every role and every action, try it through the UI and through the API with 
 ## Output
 A role by action table: expected, seen. Then each mismatch as `file:line - role - action - what is missing`, and dead ends (a role that cannot finish an allowed flow). Screenshot paths for UI rows. Under 200 words besides the table.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

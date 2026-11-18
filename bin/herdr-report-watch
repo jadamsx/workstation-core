@@ -15,6 +15,10 @@ since its newest report or the last `/clear`. A manager idle for 15 minutes with
 message does not start with `WAITING:`, produces `[worker-report] <name> idle, no report` plus the last lines of its
 pane, once per idle spell.
 
+Jobs `manager-send` parked at the usage limit sit under `parked` in the same file. Once `usage-gate` is open and
+a job's reset time has passed, the watcher sends them in order and each coordinator gets one
+`[worker-report] resumed parked jobs: <names>` line.
+
 Sent files are recorded in `<root>/.watch-state.json`. Every send and retry is logged to stdout, which
 the launchd agent writes to ~/Library/Logs/herdr-report-watch.log.
 """
@@ -23,10 +27,13 @@ import json
 import subprocess
 import sys
 import time
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import IDLE_STATES, ReportsError, close_manager, is_done, pane_states, pane_text, read_manager, reports_root, write_atomic  # noqa: E402
+
+usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent / "usage-gate")).load_module()
 
 RETRY_SECONDS = 15
 IDLE_SECONDS = 900
@@ -44,7 +51,7 @@ class Watcher:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.state_file = root / ".watch-state.json"
-        self.state = {"sent": [], "exited": [], "idle": [], "cleared": []}
+        self.state = {"sent": [], "exited": [], "idle": [], "cleared": [], "parked": []}
         if self.state_file.exists():
             self.state.update(json.loads(self.state_file.read_text()))
         self.retry_at: dict[str, float] = {}
@@ -115,10 +122,36 @@ class Watcher:
         tail = "\n".join([line for line in text.splitlines() if line.strip()][-TAIL_LINES:])
         self.deliver(pane, coordinator, f"[worker-report] {manager.name} idle, no report\n{tail}", "idle", now)
 
+    def resume_parked(self) -> None:
+        wall = time.time()
+        if usage_gate.parked_until(wall) is not None:
+            return
+        resumed: dict[str, list[str]] = {}
+        for job in list(self.state["parked"]):
+            if job["until"] > wall:
+                continue
+            folder = Path(job["folder"])
+            pane = read_manager(folder)["pane_id"]
+            done = subprocess.run(["herdr", "agent", "prompt", pane, f"[coordinator] {job['text']}"], capture_output=True, text=True)
+            if done.returncode:
+                self.log(f"could not resume {folder.name}: {done.stderr.strip() or done.stdout.strip()}")
+                break
+            self.state["parked"].remove(job)
+            write_atomic(self.state_file, json.dumps(self.state))
+            resumed.setdefault(str(folder.parent / "coordinator"), []).append(folder.name)
+            self.log(f"resumed {folder.name}")
+        for coordinator_file, names in resumed.items():
+            path = Path(coordinator_file)
+            coordinator = path.read_text().strip() if path.exists() else None
+            self.deliver(f"resumed:{wall}:{coordinator_file}", coordinator, f"[worker-report] resumed parked jobs: {', '.join(names)}", "sent", wall)
+
     def scan(self, now: float) -> None:
         if self.state_file.exists():
-            on_disk = json.loads(self.state_file.read_text()).get("cleared", [])
+            disk = json.loads(self.state_file.read_text())
+            self.state["parked"] = disk.get("parked", [])
+            on_disk = disk.get("cleared", [])
             self.state["cleared"] = [*self.state["cleared"], *(k for k in on_disk if k not in self.state["cleared"])]
+        self.resume_parked()
         panes: dict[str, str] | None = None
         for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
             coordinator_file = space / "coordinator"

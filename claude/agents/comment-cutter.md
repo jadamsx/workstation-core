@@ -16,4 +16,4 @@ Keep: a why the code cannot carry, a Google or ReST docstring on a public API or
 ## Output
 Comments only; logic, naming, formatting and tests are not yours. One line per deletion `path:line - rule`, one line per close keep, then the count.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

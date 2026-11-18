@@ -16,4 +16,4 @@ Cut a comment when the author cannot act on it, does not own it (say who does an
 ## Output
 No praise, no summary, no count of how thorough the original was. The surviving comments, rewritten, at most 3 sentences each. Then one line per cut naming the rule it failed, and one line per rerouted finding naming to whom.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

@@ -17,4 +17,4 @@ Use the source control host and tracker access `~/.claude/engines/ship.md` descr
 Ticket: first the raw description and every comment, verbatim and unedited, each comment with its author and date. Then a summary under 150 words plus design links verbatim: status, parent, acceptance criteria (one line each), linked changes and issues, and any body-versus-comments disagreement. The verbatim text is what the caller reads and cites; the summary only points at it.
 Change: a table under 120 words: pipeline (status, failed jobs), approvals (who, state), unresolved threads (count, then author and first line of each), merge state. A re-requested review can revoke an approval, so say if the approval would be lost by one.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

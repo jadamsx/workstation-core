@@ -16,4 +16,4 @@ Inventory questions (files, sizes, entry points, counts of a pattern): list from
 ## Output
 `path:line - symbol - note of 6 words or fewer`, up to 15 rows. Notes mode rows: `path - status - verified`. Group with a one-word header (`Defs:` `Refs:` `Tests:` `Imports:`) when there are 3 or more. Inventory: a table, up to 40 rows. Last line gives totals. Zero hits: `No match.`
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

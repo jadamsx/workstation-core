@@ -40,6 +40,7 @@ BINS = (
     "manager-send",
     "manager-close",
     "herdr-report-watch",
+    "usage-gate",
 )
 OK, MISSING, DIFFERS, DISPLACES, SKIPPED = (
     "ok",

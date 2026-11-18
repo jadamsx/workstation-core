@@ -12,4 +12,4 @@ Inputs: a running URL, the plan's `frames` (states to visit). Inject axe-core wi
 ## Output
 Per violation: selector, rule id, WCAG reference, screenshot path. Then a keyboard trace, one line per stop. States with no violation are listed as clean. Under 200 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

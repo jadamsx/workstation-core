@@ -16,4 +16,4 @@ When the caller says `dependency`, list packages added since the base (`deps_add
 Style, naming and test coverage are not yours. Dependency mode: per new package `name version - licence - audit result`, then flagged ones first. Otherwise:
 Findings, `file:line - flaw - who exploits it - fix in one line`, worst first, or `no findings`. Caps: `~/.claude/engines/review.md`. Say which you ran and which you only read.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

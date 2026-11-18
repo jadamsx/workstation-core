@@ -12,4 +12,4 @@ Inputs: the plan's `hot_path` (endpoint or flow, target p95, error budget, expec
 ## Output
 p50, p95, p99, error rate for the default branch and the branch, the delta, and threshold pass or fail. Script path. Under 120 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

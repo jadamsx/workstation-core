@@ -21,6 +21,11 @@ Planning: sizing, interview, the plan note, the node table. Epic mode: `engines/
 8. Plan note: write it (below), status `proposed`. Done when the note passes `notes-lint` and the owner has the summary.
 9. Approve: the owner ticks Assumptions (yes/no) and the Not-building list, and says go. Only then set `status: approved` and `date:`, write the Progress checklist, stamp the `Decided:`, `Standing:` and `Not-building:` lines, and record the nodes with `node-index` (below). A keyless quick plan has no note; the go in the session is the approval.
 
+Per kind, beyond what the skill for the kind lists:
+- `bug`: acceptance names the test that fails now and passes after.
+- `spike`: the box (hours or attempts), the cheapest experiment that can say no, and the next step if yes; a spike that informs no decision does not run.
+- `fix`: every fix thread is covered by a node with an acceptance sentence; nothing is built or posted before the owner's go.
+
 Ends early on `don't`, `already exists`, a false premise, or (quick) a second file or interface appearing: re-size to full and say so. A spike also ends when its box runs out or one attempt answers the question.
 
 ## Sizing
@@ -50,7 +55,7 @@ Never draft, guess or offer candidate answers. Challenge a vague answer once, th
 
 ## Lookup
 
-- Vault: resolve the project with `current-project`, read `projects/<slug>/index.md`, then search `${NOTES_DIR:-~/notes}` for the ticket key, each service or repo touched and the decision records in play (`grepai search` from the vault, then `rg`). A note marked stale or last verified over 60 days ago is a lead, not a fact; check it against the code.
+- Vault: resolve the project with `current-project`, read `projects/<slug>/index.md`, then search `${NOTES_DIR:-~/notes}` for the ticket key, each service or repo touched and the decision records in play (`grepai search` from the vault, then `rg`); read the matching lines of `index.md` before opening notes. A note marked stale or last verified over 60 days ago is a lead, not a fact; check it against the code.
 - Past corrections: `run-digest` returns the memory feedback files that match the plan's topic. Quote each match in the plan; the plan obeys it or names the `Decided:` line that overrides it.
 
 ## The five answers
@@ -110,11 +115,11 @@ A plan is a graph of nodes. A Mermaid graph is drawn when the work crosses more 
 | Column | Holds |
 |---|---|
 | **agent** | a digest agent (`code-locator`, `caller-mapper`) for location and bulk reads; `builder` for edits (scope `one-file` for 1 to 2 files, `node` across more); `user` for a `decision` node. Self only where judgement cannot be written into a prompt; "faster if I just do it" is not that reason |
-| **discipline** | the file in `disciplines/` (table below); `none` for read-only nodes |
+| **discipline** | the file in `disciplines/` (table below); `none` for read-only nodes; a node with neither agent nor discipline is incomplete |
 | **owns** | files and directories the node writes, including lockfiles, generated files and shared config; each sits in exactly one node. Then, in the same cell, `lives:` where the thing the node changes lives and who owns it, and `preflight:` the resources it needs (service, port, credentials, data, server) and whether they are available. A node that cannot answer preflight is not ready to build |
 | **wave** | derived, never chosen: 1 plus the highest wave among its needs. Each need is written as `needs N<k>'s <data or file>` |
 | **intensity** | `light` by default; see Intensity |
-| **review** | `cold-reviewer` at the node boundary, plus `clean-code` when structural; the intensity decides the rounds |
+| **review** | `cold-reviewer` at the node boundary, never after every edit, plus `clean-code` when structural (new function, moved or duplicated code, interface change); no exceptions for renames or quick plans. The intensity decides the rounds |
 | **acceptance** | one sentence saying how we know it is done |
 
 The plan names what each node must prove (`checklists/design.md` §15); `test-gap-auditor` checks it.

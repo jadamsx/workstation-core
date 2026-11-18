@@ -5,6 +5,7 @@ import sys
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -83,6 +84,8 @@ class ReportsCase(unittest.TestCase):
             "FAKE_TABS": "",
             "FAKE_CMDLINE": "claude --model sonnet --append-system-prompt-file brief.md",
             "WORKSTATION_REPORTS_ROOT": str(self.root),
+            "USAGE_FILE": str(base / "usage.json"),
+            "USAGE_OVERRIDE_FILE": str(base / "usage-override"),
             "HERDR_WORKSPACE_ID": "w1",
             "HERDR_PANE_ID": "w1:p1",
         }
@@ -170,6 +173,44 @@ class WatcherTests(ReportsCase):
         (self.space / "coordinator").write_text("w1:p9\n")
         watcher.scan(20)
         self.assertEqual(self.prompts(), [f"agent prompt w1:p9 [worker-report] {folder / 'result-1.md'}"])
+
+
+class ParkedResumeTests(ReportsCase):
+    def park(self, *jobs: tuple[str, str, float]) -> None:
+        panes = ['{"pane_id":"w1:p1"}']
+        for name, text, until in jobs:
+            self.manager(name, f"w1:p{4 + len(name)}")
+            panes.append(f'{{"pane_id":"w1:p{4 + len(name)}"}}')
+        os.environ["FAKE_PANES"] = ",".join(panes)
+        (self.root / ".watch-state.json").write_text(
+            json.dumps({"parked": [{"folder": str(self.space / n), "text": t, "until": u} for n, t, u in jobs]})
+        )
+
+    def test_resumes_due_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
+        now = time.time()
+        self.park(("alpha", "/plan-task a", now - 5), ("beta", "/plan-task b", now - 4), ("late", "/plan-task c", now + 3600))
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": 95, "resets_at": now + 3600}}))
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        self.assertEqual(self.prompts(), [])
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": 5, "resets_at": now + 9000}}))
+        watcher.scan(1)
+        watcher.scan(2)
+        self.assertEqual(
+            self.prompts(),
+            [
+                "agent prompt w1:p9 [coordinator] /plan-task a",
+                "agent prompt w1:p8 [coordinator] /plan-task b",
+                "agent prompt w1:p1 [worker-report] resumed parked jobs: alpha, beta",
+            ],
+        )
+        left = json.loads((self.root / ".watch-state.json").read_text())["parked"]
+        self.assertEqual([p["folder"] for p in left], [str(self.space / "late")])
+
+    def test_a_job_whose_reset_has_not_passed_stays_parked_even_when_the_reading_is_stale(self) -> None:
+        self.park(("alpha", "/plan-task a", time.time() + 3600))
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.prompts(), [])
 
 
 class DoneReportTests(ReportsCase):
@@ -316,6 +357,31 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertGreater(len(self.prompts()), 1)
         self.assertEqual(self.prompts()[-1], "agent prompt w1:p4 [coordinator] OK to push")
+
+    def usage(self, five: float, reset: float) -> None:
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
+
+    def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
+        folder = self.manager()
+        self.usage(90, time.time() + 3600)
+        r = self.bin("manager-send", "alpha", "/build plan.md node N1 worktree /tmp")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.usage(90, time.time() + 3600)
+        r = self.bin("manager-send", "alpha", "/plan-task x")
+        self.assertEqual((r.returncode, r.stdout.count("\n"), r.stdout.startswith("parked until ")), (0, 1, True))
+        self.assertEqual(self.prompts(), [])
+        parked = json.loads((self.root / ".watch-state.json").read_text())["parked"]
+        self.assertEqual([(p["folder"], p["text"]) for p in parked], [(str(folder), "/plan-task x")])
+        self.assertEqual(self.bin("manager-send", "alpha", "OK to push").returncode, 0)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] OK to push"])
+
+    def test_the_override_lifts_the_park(self) -> None:
+        self.manager()
+        self.usage(90, time.time() + 3600)
+        os.environ["USAGE_GATE"] = "off"
+        self.addCleanup(os.environ.pop, "USAGE_GATE", None)
+        self.assertEqual(self.bin("manager-send", "alpha", "/plan-task x").returncode, 0)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] /plan-task x"])
 
     def standing_send(self, status: str, keep: bool = False, standing: bool = True) -> Path:
         folder = self.manager()
