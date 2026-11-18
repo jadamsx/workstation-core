@@ -58,8 +58,19 @@ def settle_standing(folder: Path, pane: str, deadline: float, interval: float) -
         wait_idle(pane, deadline, interval)
 
 
+def exclude_owns(tree: Path) -> None:
+    """Keep `.owns` out of `git add -A`: it is untracked state, not part of the node's commit."""
+    path = subprocess.run(["git", "-C", str(tree), "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], capture_output=True, text=True).stdout.strip()
+    exclude = Path(path)
+    present = exclude.read_text().splitlines() if exclude.exists() else []
+    missing = [name for name in ("/.owns", "/.owns.tmp") if name not in present]
+    if missing:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("".join(f"{line}\n" for line in [*present, *missing]))
+
+
 def write_owns(text: str) -> None:
-    """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided, Standing and Not-building lines."""
+    """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided and Not-building lines and any Standing line."""
     if not re.match(r"/build(\s|$)", text):
         return
     fields = {
@@ -78,6 +89,7 @@ def write_owns(text: str) -> None:
     top = subprocess.run(["git", "-C", str(tree), "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
     if not top or Path(top).resolve() != tree.resolve():
         raise ReportsError(f"{tree} is not the top level of a git worktree")
+    exclude_owns(tree)
     note = plan.read_text()
     if re.search(r"^legacy: true\s*$|^- size:.*\blegacy: true", note, re.M):
         write_atomic(tree / ".owns", f"node: {node}\nlegacy: true\n")
@@ -86,10 +98,10 @@ def write_owns(text: str) -> None:
     if not row:
         raise ReportsError(f"node {node} is not in {plan}")
     cells = row.group(0).split("|")
-    owns = re.findall(r"`([^`]+)`", cells[4] if len(cells) > 4 else "")
+    owns = re.findall(r"`([^`]+)`", re.split(r"lives:|preflight:", cells[4] if len(cells) > 4 else "")[0])
     lines = re.findall(r"^- ((?:Decided|Standing|Not-building): .+)$", note, re.M)
     kinds = {line.split(":", 1)[0] for line in lines}
-    absent = {"Decided", "Standing", "Not-building"} - kinds
+    absent = {"Decided", "Not-building"} - kinds
     if not owns:
         raise ReportsError(f"{plan} lists no Owns for {node}")
     if absent:

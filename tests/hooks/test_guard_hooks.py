@@ -763,9 +763,13 @@ class ReportDoneCheckTest(unittest.TestCase):
         self.assertEqual(self.write("Status: decision\nbluf\n").returncode, 0)
 
     def test_round_cap_forms_and_short_sha_refused(self) -> None:
-        for line in ("Round: 4 of 4", "round 5", "Round:4 of 3"):
+        for line in ("Round: 4 of 4", "round: 5", "Round:4 of 3"):
             self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 2, line)
         self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation abc123\n").returncode, 2)
+
+    def test_round_in_prose_passes(self) -> None:
+        for line in ("bench round 12 ms", "round 4 refused"):
+            self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 0, line)
 
     def test_fourth_round_refused(self) -> None:
         result = self.write("Status: decision\nbluf\nRound: 4 of 3\n")
@@ -779,7 +783,7 @@ class ManagerSendOwnsTest(unittest.TestCase):
         "- size: full; plan kind: epic{legacy}\n\n"
         "| Node | Agent | Discipline | Owns | Wave |\n"
         "| N1 Hooks | builder | tdd | core: `bin/x`, `lib/y.py`; company: `z/w.md` | 4 |\n\n"
-        "- Decided: one thing (Jack).\n- Standing: keep it simple.\n{notbuilding}"
+        "- Decided: one thing (sample).\n- Standing: keep it simple.\n{notbuilding}"
     )
 
     def setUp(self) -> None:
@@ -811,7 +815,7 @@ class ManagerSendOwnsTest(unittest.TestCase):
         lines = self.send(self.plan()).read_text().splitlines()
         self.assertEqual(lines[0], "node: N1")
         self.assertEqual(lines[1], "owns: bin/x, lib/y.py, z/w.md")
-        self.assertIn("Decided: one thing (Jack).", lines)
+        self.assertIn("Decided: one thing (sample).", lines)
         self.assertIn("Standing: keep it simple.", lines)
         self.assertIn("Not-building: no registry.", lines)
 
@@ -826,6 +830,24 @@ class ManagerSendOwnsTest(unittest.TestCase):
         with self.assertRaises(self.module.ReportsError):
             self.send(self.plan(notbuilding=False))
         self.assertFalse((self.root / "tree/.owns").exists())
+
+    def test_standing_line_is_optional(self) -> None:
+        plan = self.plan().replace("- Standing: keep it simple.\n", "")
+        self.assertIn("Not-building: no registry.", self.send(plan).read_text())
+
+    def test_owns_ignore_paths_after_lives_and_preflight(self) -> None:
+        plan = self.plan().replace("`z/w.md` |", "`z/w.md`; lives: `a/b`; preflight: `c/d` |")
+        self.assertEqual(self.send(plan).read_text().splitlines()[1], "owns: bin/x, lib/y.py, z/w.md")
+
+    def test_owns_file_is_git_excluded_once(self) -> None:
+        plan = self.plan()
+        tree = self.send(plan).parent
+        self.send(plan)
+        subprocess.run(["git", "add", "-A"], cwd=tree, check=True)
+        staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=tree, capture_output=True, text=True).stdout
+        self.assertEqual(staged, "")
+        exclude = Path(subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], cwd=tree, capture_output=True, text=True).stdout.strip())
+        self.assertEqual(exclude.read_text().splitlines().count("/.owns"), 1)
 
     def test_unknown_node_writes_nothing(self) -> None:
         with self.assertRaises(self.module.ReportsError):
@@ -842,6 +864,7 @@ class ManagerSendOwnsTest(unittest.TestCase):
 
     def test_non_build_text_writes_nothing(self) -> None:
         self.module.write_owns("check in please")
+        self.assertEqual(list(self.root.rglob(".owns")), [])
 
 
 class RemotePathTest(unittest.TestCase):

@@ -23,7 +23,7 @@ STATUS_LINES = {"Status: decision", "Status: done"}
 PATH_CHARS = r"(?:\$\([^)]*\)|[^\s\"';|&<>)])*"
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*)", re.S)
 DONE_CHECK = re.compile(r"^Done-check: (pass|deviation [0-9a-f]{7,40})\s*$", re.M)
-ROUND = re.compile(r"\bround:?\s*(\d+)(?:\s+of\s+\d+)?", re.I)
+ROUND = re.compile(r"^Round:\s*(\d+)(?:\s+of\s+\d+)?", re.I | re.M)
 INLINE = re.compile(r"\b(?:echo|printf)\s+(?:-\w+\s+)*([\"'])(.*?)\1", re.S)
 
 
