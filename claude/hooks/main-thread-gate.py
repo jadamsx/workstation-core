@@ -94,7 +94,7 @@ QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
-ASK_REDIRECT = re.compile(r">{1,2}(?:&\d+|\s*/dev/null(?![\w/.]))")
+ASK_REDIRECT = re.compile(r">{1,2}(?:&\d+(?![\w/.~-])|\s*/dev/null(?![\w/.]))")
 ASK_READ_HEADS = {
     "ls", "cat", "head", "tail", "wc", "rg", "grep", "find", "cut", "tr", "basename",
     "dirname", "pwd", "echo", "printf", "date", "stat", "file", "du", "jq", "diff", "cd",
@@ -108,10 +108,6 @@ ASK_HERDR_READS = {
     ("pane", "read"), ("pane", "list"), ("tab", "list"),
     ("workspace", "list"), ("workspace", "get"), ("agent", "list"),
 }
-ASK_CURL_FLAGS = {
-    "-s", "-S", "-sS", "-L", "-sL", "-sSL", "-I", "-i", "-f", "-H", "-m",
-    "--silent", "--show-error", "--location", "--head", "--include", "--fail", "--header", "--max-time",
-}
 ASK_AGENTS = {
     "code-locator",
     "researcher",
@@ -124,8 +120,8 @@ ASK_AGENTS = {
 ASK_ALLOWED = (
     "Allowed in the ask tab: read-only agents (" + ", ".join(sorted(ASK_AGENTS)) + "), "
     "and Bash that runs only listed read-only commands (ls, cat, head, tail, wc, rg, grep, find, jq, diff, "
-    "git, gh and glab reads, curl GET, `herdr pane read|list`, `herdr tab list`, `herdr workspace list|get`, "
-    "`herdr agent list`), joined by && || ; |, with no command substitution and no redirect except to /dev/null. "
+    "git, gh and glab reads, `herdr pane read|list`, `herdr tab list`, `herdr workspace list|get`, "
+    "`herdr agent list`), joined by && || ; |, with no command substitution or `$` and no redirect except to /dev/null. "
     "No file edits, no SendMessage. Point the human to the lead tab."
 )
 
@@ -219,6 +215,8 @@ def blocked_command(command: str) -> bool:
 
 def ask_segments(command: str) -> list[list[str]] | None:
     """Split into commands of unquoted-word lists, or None for syntax the allowlist cannot judge."""
+    if "$" in command or "`" in command or "\\\n" in command:
+        return None
     segments: list[list[str]] = [[]]
     word, quote, live, i = "", "", False, 0
     while i < len(command):
@@ -226,8 +224,6 @@ def ask_segments(command: str) -> list[list[str]] | None:
         if quote:
             if ch == quote:
                 quote = ""
-            elif quote == '"' and (ch == "`" or ch == "$" and not re.match(r"[A-Za-z_]", command[i + 1 : i + 2])):
-                return None
             elif quote == '"' and ch == "\\":
                 i += 1
                 word += command[i : i + 1]
@@ -239,7 +235,7 @@ def ask_segments(command: str) -> list[list[str]] | None:
             i += 1
             word += command[i : i + 1]
             live = True
-        elif ch == "`" or ch in "<(" or ch == "$" and not re.match(r"[A-Za-z_]", command[i + 1 : i + 2]):
+        elif ch in "<(":
             return None
         elif ch == ">":
             if live and word.isdigit():
@@ -283,13 +279,13 @@ def ask_allows(tokens: list[str]) -> bool:
             return set(args) <= ASK_GIT_BRANCH_FLAGS
         return sub in ASK_GIT_READS
     if head in ("gh", "glab"):
+        if rest[:1] in (["auth"], ["config"]):
+            return False
         if rest[:1] == ["api"]:
             return not any(t.startswith(ASK_API_WRITES) for t in rest)
         return len(rest) > 1 and rest[1] in ASK_HOST_READS and not rest[0].startswith("-")
     if head == "herdr":
         return tuple(rest[:2]) in ASK_HERDR_READS
-    if head == "curl":
-        return all(t in ASK_CURL_FLAGS for t in rest if t.startswith("-"))
     return False
 
 
@@ -312,10 +308,10 @@ def ask_block_reason(payload: dict) -> str | None:
 
 
 def is_coordination_file(path: str) -> bool:
-    if any(part in path for part in EDIT_EXEMPT_DIRS):
-        return True
     resolved = Path(os.path.realpath(path))
-    return resolved.suffix == ".md" and any(
+    if resolved.suffix != ".md":
+        return False
+    return any(part in f"{resolved}/" for part in EDIT_EXEMPT_DIRS) or any(
         resolved.is_relative_to(os.path.realpath(root)) for root in coordination_dirs()
     )
 
@@ -333,12 +329,13 @@ def block_reason(payload: dict) -> str | None:
 
 
 def main() -> None:
+    fail = 2 if os.environ.get("WORKSTATION_ROLE") == "ask" else 0
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
-        sys.exit(0)
+        sys.exit(fail)
     if not isinstance(payload, dict):
-        sys.exit(0)
+        sys.exit(fail)
     if payload.get("hook_event_name") == "UserPromptSubmit":
         record_prompt(payload)
         sys.exit(0)

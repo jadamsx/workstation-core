@@ -179,6 +179,9 @@ class PayloadTest(unittest.TestCase):
             (root / "link" / ".." / "repo" / "a.md", 2),
             (root / "real" / ".." / "repo" / "a.md", 2),
             (root / "link" / "escape" / "a.md", 2),
+            (root / "repo" / ".claude" / "plans" / ".." / ".." / "src" / "evil.py", 2),
+            (root / "repo" / ".claude" / "projects" / "x.py", 2),
+            (root / "repo" / ".claude" / "plans" / "p.md", 0),
         ):
             for tool in ("Write", "Edit"):
                 result = self.run_hook(self.pre(tool, {"file_path": str(path)}))
@@ -373,6 +376,17 @@ class PayloadTest(unittest.TestCase):
             "curl -d x http://h",
             "find . -fprint f",
             "echo 'unterminated",
+            "find . \\\n-delete",
+            "gh api -\\\nX POST repos/o/r",
+            'find . -ex"$X"ec echo {} \\;',
+            "ls $WORKSTATION_REPORTS_ROOT",
+            "echo hi >&2x",
+            "echo hi >&2/tmp/y",
+            "gh auth status -t",
+            "gh config get oauth_token",
+            "glab auth status",
+            "curl -s http://h",
+            "git -c core.fsmonitor=x status",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
 
@@ -380,12 +394,10 @@ class PayloadTest(unittest.TestCase):
         for command in (
             "git log --format='%h %s' -3",
             'git log --format="%h > %s"',
-            "ls $WORKSTATION_REPORTS_ROOT",
             "cd repo && git status",
             "git status; git diff --stat | head -5",
             "gh api repos/o/r/pulls",
             "gh pr list || glab mr list",
-            "curl -sSL -H 'Accept: x' http://h",
             "h''erdr pane read w1:p1",
             "ls 2>&1 | wc -l",
         ):
@@ -427,7 +439,6 @@ class PayloadTest(unittest.TestCase):
             "find . -name x",
             "gh pr view 1",
             "glab mr list",
-            "curl -s http://h",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
         for agent in ("code-locator", "researcher", "run-digest", "web-fetch", "Explore"):
@@ -447,6 +458,12 @@ class PayloadTest(unittest.TestCase):
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())
         matchers = [g["matcher"] for g in settings["hooks"]["PreToolUse"] if "main-thread-gate.py" in g["hooks"][0]["command"]]
         self.assertTrue(any("Agent" in m.split("|") for m in matchers))
+
+    def test_malformed_payload_fails_closed_for_ask_only(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "ask"
+        for raw in ("nope", "[1]"):
+            result = subprocess.run([sys.executable, str(HOOK)], input=raw, text=True, capture_output=True, env=self.env)
+            self.assertEqual(result.returncode, 2, raw)
 
     def test_malformed_payload_fails_open(self) -> None:
         result = subprocess.run(
