@@ -21,6 +21,8 @@ The plan is the spec; each form below still ends at an approved plan.
 
 Never ask for a ticket, or for the input in a particular shape, when one of these is in front of you. A named node or piece is what gets built. Where the plan names an epic piece, that piece's "Done when" is its acceptance and every node traces to it. A ticket key anywhere in the plan settles branch naming and the change title; with none the work stays local and uncommitted, and the `self` review skips the change, the push and the CI loop.
 
+The bar in the brief is the whole bar: workers add no checks, gates or review rounds the plan didn't set; report older problems in one line.
+
 ## Steps
 
 1. **Gate.** Done when the design note says `status: approved`, and its node table has agent, discipline, owns, wave, intensity, review and acceptance per node. For a `format: v2` note `notes-lint <note>` must report none of `fr-missing`, `fr-uncovered`, `covers-empty`, `covers-unknown`, `covers-column`, `trace-missing`, `trace-column`; refuse while any FR has no covering node or any node has no `covers`, and name the rows. A keyless quick plan has no note: the owner's go in this session and its table in chat are the gate. Otherwise stop and name the plan step to run. Never write a Progress list for an unapproved plan. A request that adds scope beyond the table goes back to plan as a decision node.

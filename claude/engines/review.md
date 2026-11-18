@@ -4,6 +4,8 @@ Review from the code, not the diff text. Verify every finding twice, once yourse
 
 The failure this engine prevents: a plausible finding, posted, that the code does not support. A wrong comment costs the author more than a missed one.
 
+The bar in the brief is the whole bar: reviewers add no checks or review rounds the plan didn't set, and report older problems in one line.
+
 ## Params
 
 | Param | Values |
