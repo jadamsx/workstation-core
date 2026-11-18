@@ -17,6 +17,6 @@ When the plan picks this: an unknown cause, intermittent behaviour or a performa
 Name the cause with the file:line and the run or log that shows it. Say what you ruled out.
 
 ## Stop
-Evidence is enough to name the cause or the exact blocker. Make no fix unless the plan authorises one, and then switch to reproduce-first.
+Evidence is enough to name the cause or the exact blocker. Make no fix unless the plan authorises one, and then switch to tdd.
 
 Process: engines/build.md
