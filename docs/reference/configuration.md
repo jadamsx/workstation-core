@@ -10,8 +10,8 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | --- | --- |
 | `sandbox.enabled`, `autoAllowBashIfSandboxed` | on |
 | `sandbox.allowUnsandboxedCommands` | off: a command the sandbox blocks fails instead of retrying outside it |
-| `sandbox.excludedCommands` | `herdr *` only, because herdr talks to its own socket |
-| `sandbox.filesystem.allowWrite` | `~/notes`, `~/drafts`, `~/.cache`, `~/.npm`, `~/Library/Caches`, `~/.local/state` |
+| `sandbox.excludedCommands` | `herdr *`, `gh *`, `launchctl *` and the git network commands (`fetch`, `push`, `pull`, `clone`, `ls-remote`), which need the keychain, `known_hosts` or their own sockets |
+| `sandbox.filesystem.allowWrite` | `~/notes`, `~/drafts`, `~/.cache`, `~/.npm`, `~/Library/Caches`, `~/.local/state`, `**/.git`, `~/.gitconfig`, `~/.config/git`, `~/.local/share/uv` |
 | `sandbox.filesystem.denyRead` | `~/.ssh`, `~/.aws` |
 | `sandbox.network.allowedDomains` | GitHub, GitLab, npm, PyPI, `ghcr.io`, Docker Hub |
 | `permissions.deny`, `permissions.ask` | Listed in [hooks](hooks.md#permission-rules) |

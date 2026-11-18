@@ -16,7 +16,7 @@ Every spawned agent loads this file.
 - Say what you ran versus what you only read, and what you could not check.
 
 ## Shell
-- After a sandbox denial retry once unsandboxed. If that is blocked or would prompt, report a decision and never wait on a prompt.
+- Never set `dangerouslyDisableSandbox` pre-emptively. After a real denial retry once unsandboxed, never for `rm`, `cp` or `mv` outside allow paths, `curl`, `wget`, `ssh`, `scp`, anything touching `~/.ssh`, `~/.aws`, credentials or `~/.claude.json`, `osascript`, `open`, `sudo`, `chmod` or `kill`. If the retry is blocked or would prompt, report a decision and never wait on a prompt.
 - A search that may find nothing ends in `|| true`; a final step whose non-zero exit is only a result ends in `; true`.
 - Check a path exists before `ls`, `cat` or `rg` on it.
 - macOS `sed -i` needs `sed -i ''`; use python, or better the Edit tool.
