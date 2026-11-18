@@ -107,7 +107,7 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     try:
         if not wait_for_shell(pane, SHELL_TIMEOUT):
             raise ReportsError(f"the shell in pane {pane} never settled")
-        blocked = agent_start(name, pane, claude_args)
+        blocked = agent_start(f"{name}-{space_dir().name}", pane, claude_args)
         accept_trust_dialog(pane, directory, blocked)
     except Exception:
         with suppress(subprocess.CalledProcessError, OSError):

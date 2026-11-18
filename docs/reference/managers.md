@@ -15,7 +15,7 @@ Delegated work runs inside [herdr](https://herdr.dev). The coordinator is the ma
 | `herdr-manager list` | Managers of this workspace, whether their pane is alive, and their newest result file |
 | `herdr-report-watch [--once] [--interval <seconds>]` | The watcher, normally run by launchd |
 
-`herdr-manager start` waits until the new pane holds only the shell, then runs `herdr agent start`, retrying up to three times, 2 seconds apart, while herdr reports the pane busy.
+`herdr-manager start` waits until the new pane holds only the shell, then runs `herdr agent start <name>-<space>` (herdr agent names are global across spaces), retrying up to three times, 2 seconds apart, while herdr reports the pane busy.
 
 ## Reports
 

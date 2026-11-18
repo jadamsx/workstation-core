@@ -19,7 +19,7 @@ watch = SourceFileLoader("herdr_report_watch_under_test", str(REPO / "bin/herdr-
 FAKE_HERDR = """#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
 case "$1 $2" in
-  "workspace get") echo '{"result":{"workspace":{"label":"Space One"}}}' ;;
+  "workspace get") echo "{\\"result\\":{\\"workspace\\":{\\"label\\":\\"${FAKE_LABEL:-Space One}\\"}}}" ;;
   "tab create") echo '{"result":{"tab":{"tab_id":"w1:t4"},"root_pane":{"pane_id":"w1:p4"}}}' ;;
   "agent wait") if [ -e "$FAKE_WAIT_FAIL" ]; then echo "timeout" >&2; exit 1; fi; echo '{"result":{}}' ;;
   "agent start")
@@ -306,6 +306,14 @@ class ManagerTests(ReportsCase):
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
 
+    def test_setup_in_two_spaces_passes_distinct_agent_names(self) -> None:
+        self.setup_run()
+        os.environ["FAKE_LABEL"] = "Space Two"
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1","tab_id":"w1:t1"}'
+        self.setup_run()
+        names = [c.split()[2] for c in self.calls() if c.startswith("agent start")]
+        self.assertEqual(names, ["work-space-one", "ask-space-one", "work-space-two", "ask-space-two"])
+
     def test_setup_twice_changes_nothing(self) -> None:
         self.setup_run()
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
@@ -334,7 +342,7 @@ class ManagerTests(ReportsCase):
         self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
         self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
         start = next(c for c in self.calls() if c.startswith("agent start"))
-        self.assertIn("alpha --kind claude --pane w1:p4 -- --model sonnet --resume 0a1b2c3d", start)
+        self.assertIn("agent start alpha-space-one --kind claude --pane w1:p4 -- --model sonnet --resume 0a1b2c3d", start)
         self.assertIn("--append-system-prompt-file", start)
         self.assertTrue((REPO / "claude/templates/manager-brief.md").exists())
         self.assertEqual(json.loads((self.space / "alpha/manager.json").read_text())["pane_id"], "w1:p4")
