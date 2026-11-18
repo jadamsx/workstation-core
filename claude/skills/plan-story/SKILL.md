@@ -11,6 +11,7 @@ One story, or any change larger than quick. Under a story: `plan-task` or `plan-
 A ticket key, epic design piece, description or plan note. A vague input starts the interview in `engines/plan.md`.
 
 ## Differs
+- After the go, a coordinator hands the build to a manager per Handoff in `engines/common.md`.
 - Sizes quick: follow `plan-task`.
 - Reads the ticket as in epic mode "Read what was asked for", scoped to this story, plus the design frames if the project has them.
 - Epic-mode "Draw the flow" only when the story moves a boundary (`diagrams`).

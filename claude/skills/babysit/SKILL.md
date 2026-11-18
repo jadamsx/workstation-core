@@ -11,6 +11,7 @@ After a change is open, or the owner says babysit. Reviewing happens before the 
 A change URL or `<project> #<number>`. Absent: the change for the current branch.
 
 ## Differs
+- A coordinator hands the loop to a manager per Handoff in `engines/common.md`.
 - Never stops to ask; only reports.
 - Rewrites the title and description once at the start, without being asked, per `engines/write.md` target `change` and the repo template.
 - Any reply drafted to a review comment follows `checklists/prose.md` §7.

@@ -11,6 +11,7 @@ After a plan skill produced a plan and you said go. Anything without an approved
 A plan note, a ticket key with an approved design note, an epic piece, or a plan from this session. Routes: `engines/build.md` "Input".
 
 ## Differs
+- In a coordinator this goes to a manager (`engines/common.md` Delegation, Handoff).
 - Next unbuilt wave unless a node or piece is named; say which.
 - Notes are written with `notes-write`.
 - Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts".

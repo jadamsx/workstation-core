@@ -11,6 +11,7 @@ A product brief or epic key spanning several stories or repos. One story is `pla
 An epic key, a brief or a description. A vague brief starts the interview; a missing key is asked for once.
 
 ## Differs
+- Once approved, each build goes to a manager per Handoff in `engines/common.md`.
 - Runs epic mode in `engines/plan.md` in order: read, attack, platform questions, decision records, flow, converge, cut, report. A false premise or a platform seam you must rule on stops the run; say which.
 - Diagrams use `diagrams`. New ticket text uses `ticket-write`, kept as drafts in the note; no story is created before approval.
 - Notes lookup includes the relevant `${NOTES_DIR:-~/notes}/areas/` index.

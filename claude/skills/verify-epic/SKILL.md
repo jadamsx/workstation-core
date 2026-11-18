@@ -11,6 +11,7 @@ An epic with several open changes, before any merges; the post-completion step r
 The epic key (its changes are found through the tickets) or the list of change URLs, plus the epic's design note if one exists.
 
 ## Differs
+- A coordinator hands the epic review to a manager per Handoff in `engines/common.md`.
 - Nothing is posted before the owner's go; per-change posting follows the `change` rules.
 - Load `house-style` before writing drafts.
 
