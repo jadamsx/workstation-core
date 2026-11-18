@@ -157,7 +157,7 @@ def setup(work: bool | None) -> int:
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
     if not any(tab.get("label") == ASK_TAB for tab in tabs):
         pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory,
-                      ["--model", "haiku", "--strict-mcp-config", "--mcp-config", str(ASK_MCP_CONFIG), "--disable-slash-commands", "--append-system-prompt-file", str(ASK_BRIEF)])
+                      ["--model", "haiku", "--strict-mcp-config", "--mcp-config", str(ASK_MCP_CONFIG), "--append-system-prompt-file", str(ASK_BRIEF)])
         print(f"ask: pane {pane}")
     return 0
 
