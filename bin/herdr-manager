@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, space_dir, wait_for_pane, wait_for_shell, write_atomic,
+    INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, pane_text, space_dir, wait_for_pane, wait_for_shell, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -46,28 +46,40 @@ def register() -> int:
     return 0
 
 
-def accept_trust_dialog(pane: str, directory: Path) -> None:
+def accept_trust_dialog(pane: str, directory: Path, blocked: bool = False) -> None:
     """Answer Claude Code's folder-trust prompt, but only for folders under the coordinator's own directory."""
-    text = wait_for_pane(pane, lambda t: TRUST_DIALOG in t or INPUT_BOX.search(t), STARTUP_TIMEOUT)
-    if text is None or TRUST_DIALOG not in text:
-        return
+    if blocked:
+        text = pane_text(pane)
+        if TRUST_DIALOG not in text:
+            tail = "\n".join(text.splitlines()[-5:])
+            raise ReportsError(f"the agent in pane {pane} is blocked during startup and no trust dialog is visible:\n{tail}")
+    else:
+        text = wait_for_pane(pane, lambda t: TRUST_DIALOG in t or INPUT_BOX.search(t), STARTUP_TIMEOUT)
+        if text is None or TRUST_DIALOG not in text:
+            return
     cwd = Path.cwd().resolve()
     if directory != cwd and cwd not in directory.parents:
         raise ReportsError(f"Claude Code does not trust {directory} and it is outside {cwd}; run claude there once to trust it")
-    keys = ["Enter"] if re.search(r"❯\s*1\.\s*Yes", text) else ["Down", "Enter"]
+    keys = ["Enter"] if re.search(r"❯\s*(1\.\s*)?Yes", text) else ["Down", "Enter"]
     herdr("agent", "send-keys", pane, *keys)
+    if wait_for_pane(pane, INPUT_BOX.search, STARTUP_TIMEOUT) is None:
+        raise ReportsError(f"the input box in pane {pane} never appeared after trusting {directory}")
 
 
-def agent_start(name: str, pane: str, claude_args: list[str]) -> None:
-    """`herdr agent start`, retried while herdr still reports the new pane busy."""
+def agent_start(name: str, pane: str, claude_args: list[str]) -> bool:
+    """`herdr agent start`, retried while herdr still reports the new pane busy; True if it started blocked on a prompt."""
     for attempt in range(START_RETRIES + 1):
         try:
             herdr("agent", "start", name, "--kind", "claude", "--pane", pane, "--", *claude_args)
-            return
+            return False
         except subprocess.CalledProcessError as err:
-            if "agent_pane_busy" not in f"{err.stderr}{err.stdout}" or attempt == START_RETRIES:
+            output = f"{err.stderr}{err.stdout}"
+            if "agent_not_ready" in output:
+                return True
+            if "agent_pane_busy" not in output or attempt == START_RETRIES:
                 raise
             time.sleep(float(os.environ.get("AGENT_START_RETRY_SECONDS", "2")))
+    return False
 
 
 def start(name: str, resume: str | None, directory: str) -> int:
@@ -80,15 +92,15 @@ def start(name: str, resume: str | None, directory: str) -> int:
     directory = Path(directory).resolve()
     tab = herdr(
         "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory),
-        "--label", MANAGER_TAB + name, "--env", f"WORKSTATION_REPORTS={reports}", "--no-focus",
+        "--label", MANAGER_TAB + name, "--env", f"WORKSTATION_REPORTS={reports}", "--env", "DISABLE_AUTO_UPDATE=true", "--no-focus",
     )
     pane = tab["root_pane"]["pane_id"]
     claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]
     try:
         if not wait_for_shell(pane, SHELL_TIMEOUT):
             raise ReportsError(f"the shell in pane {pane} never settled")
-        agent_start(name, pane, claude_args)
-        accept_trust_dialog(pane, directory)
+        blocked = agent_start(name, pane, claude_args)
+        accept_trust_dialog(pane, directory, blocked)
     except Exception:
         with suppress(subprocess.CalledProcessError, OSError):
             herdr("tab", "close", tab["tab"]["tab_id"])

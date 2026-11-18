@@ -25,6 +25,7 @@ case "$1 $2" in
   "agent start")
     n=$(cat "$FAKE_STARTS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_STARTS"
     if [ "$n" -lt "${FAKE_START_BUSY:-0}" ]; then echo '{"error":{"code":"agent_pane_busy"}}' >&2; exit 1; fi
+    if [ -e "$FAKE_NOT_READY" ]; then echo '{"error":{"code":"agent_not_ready","message":"agent is blocked during startup and is not ready for prompts"}}' >&2; exit 1; fi
     echo '{"result":{}}' ;;
   "tab rename"|"tab close") echo '{"result":{}}' ;;
   "agent send-keys") cp "$FAKE_READY" "$FAKE_PANE"; echo '{"result":{}}' ;;
@@ -72,6 +73,7 @@ class ReportsCase(unittest.TestCase):
             "SHELL": "/bin/zsh",
             "AGENT_START_RETRY_SECONDS": "0.05",
             "FAKE_WAIT_FAIL": str(base / "wait-fail"),
+            "FAKE_NOT_READY": str(base / "not-ready"),
             "FAKE_PANES": '{"pane_id":"w1:p1","tab_id":"w1:t1"},{"pane_id":"w1:p4","tab_id":"w1:t4","agent":"claude"}',
             "FAKE_CMDLINE": "claude --model sonnet --append-system-prompt-file brief.md",
             "WORKSTATION_REPORTS_ROOT": str(self.root),
@@ -235,6 +237,7 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         tab = next(c for c in self.calls() if c.startswith("tab create"))
         self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
+        self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
         start = next(c for c in self.calls() if c.startswith("agent start"))
         self.assertIn("alpha --kind claude --pane w1:p4 -- --model sonnet --resume 0a1b2c3d", start)
         self.assertIn("--append-system-prompt-file", start)
@@ -243,6 +246,11 @@ class ManagerTests(ReportsCase):
 
     def trust_dialog(self) -> None:
         self.pane.write_text(f"Quick safety check\n{herdr_reports.TRUST_DIALOG}\n❯ 1. Yes, I trust this folder\n  2. No, exit\n")
+
+    def real_trust_dialog(self) -> None:
+        self.pane.write_text(
+            f"Quick safety check: {herdr_reports.TRUST_DIALOG}\n ❯ No, exit\n   Yes, I trust this folder\n Enter to confirm · Esc to cancel\n"
+        )
 
     def start_in(self, directory: Path, cwd: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -296,6 +304,34 @@ class ManagerTests(ReportsCase):
         self.assertNotIn("agent send-keys", " ".join(self.calls()))
         self.assertIn("tab close w1:t4", self.calls())
         self.assertFalse((self.space / "beta/manager.json").exists())
+
+    def test_blocked_start_with_the_trust_dialog_visible_sends_down_enter_and_records_the_manager(self) -> None:
+        (self.root.parent / "not-ready").write_text("")
+        self.real_trust_dialog()
+        inside = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(inside.rmdir)
+        r = self.start_in(inside, self.root.parent)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len([c for c in self.calls() if c.startswith("agent start")]), 1)
+        self.assertIn("agent send-keys w1:p4 Down Enter", self.calls())
+        self.assertTrue((self.space / "beta/manager.json").exists())
+
+    def test_blocked_start_without_a_trust_dialog_fails_with_the_pane_tail_and_closes_the_tab(self) -> None:
+        (self.root.parent / "not-ready").write_text("")
+        self.pane.write_text("something else\n")
+        r = self.bin("herdr-manager", "start", "beta", "--dir", "/tmp")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("something else", r.stderr)
+        self.assertNotIn("agent send-keys", " ".join(self.calls()))
+        self.assertIn("tab close w1:t4", self.calls())
+        self.assertFalse((self.space / "beta/manager.json").exists())
+
+    def test_trust_accepted_but_no_input_box_raises(self) -> None:
+        self.trust_dialog()
+        self.ready.write_text("still loading\n")
+        manager = SourceFileLoader("herdr_manager_under_test", str(REPO / "bin/herdr-manager")).load_module()
+        with mock.patch.object(manager, "STARTUP_TIMEOUT", 0.3), self.assertRaises(herdr_reports.ReportsError):
+            manager.accept_trust_dialog("w1:p4", Path.cwd().resolve())
 
     def test_wait_timeout_with_the_input_box_visible_still_submits_the_prompt(self) -> None:
         (self.root.parent / "wait-fail").write_text("")
