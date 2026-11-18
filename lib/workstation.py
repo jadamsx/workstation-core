@@ -29,7 +29,18 @@ LIVE = HOME == REAL_HOME
 CLAUDE = HOME / ".claude"
 BACKUPS = HOME / "workstation-backups"
 MERGE = ROOT / "lib" / "merge-settings.py"
-BINS = ("shot", "browser-login", "notes-lint", "current-project", "node-index")
+BINS = (
+    "shot",
+    "browser-login",
+    "notes-lint",
+    "current-project",
+    "node-index",
+    "herdr-manager",
+    "manager-start",
+    "manager-send",
+    "manager-close",
+    "herdr-report-watch",
+)
 OK, MISSING, DIFFERS, DISPLACES, SKIPPED = (
     "ok",
     "missing",

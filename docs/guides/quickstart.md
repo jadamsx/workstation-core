@@ -26,7 +26,7 @@ Each one is used when present; the setup works without it.
 ./install.sh status      # compare the repo with the live machine
 ```
 
-Read `install.sh` and `lib/workstation.py` first, since the installer writes into `~/.claude` and `~/.local/bin`. It symlinks skills, agents, hooks, engines, checklists, disciplines and templates, merges `claude/settings.base.json` into your `settings.json`, applies the MCP servers in `claude/mcp.json`, and links five helper commands. A file it displaces is moved to `~/workstation-backups/<timestamp>/` with a manifest. `./install.sh uninstall` restores from it.
+Read `install.sh` and `lib/workstation.py` first, since the installer writes into `~/.claude` and `~/.local/bin`. It symlinks skills, agents, hooks, engines, checklists, disciplines and templates, merges `claude/settings.base.json` into your `settings.json`, applies the MCP servers in `claude/mcp.json`, and links the helper commands. A file it displaces is moved to `~/workstation-backups/<timestamp>/` with a manifest. `./install.sh uninstall` restores from it.
 
 Make sure `~/.local/bin` is on your `PATH`, then create the two folders the skills write to:
 

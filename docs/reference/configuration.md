@@ -2,7 +2,7 @@
 
 ## Settings
 
-`claude/settings.base.json` is merged into `~/.claude/settings.json`. The installer owns only these keys, listed under `x-workstation.ownedKeys`: `permissions`, `effortLevel`, `env`, `statusLine`, `attribution`, `sandbox`. Your other keys and any hooks that are not this repo's are left alone.
+`claude/settings.base.json` is merged into `~/.claude/settings.json`. The installer owns only these keys, listed under `x-workstation.ownedKeys`: `permissions`, `effortLevel`, `autoCompactWindow`, `modelSettings`, `env`, `statusLine`, `attribution`, `sandbox`. Your other keys and any hooks that are not this repo's are left alone.
 
 A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `machines/` in the repo, or in the folder `WORKSTATION_MACHINES` names. Use it for extra sandbox exclusions, allowed domains and write paths, and your own hooks.
 
@@ -17,6 +17,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `permissions.deny`, `permissions.ask` | Listed in [hooks](hooks.md#permission-rules) |
 | `attribution` | Empty, so commits and changes carry no tool trailer |
 | `effortLevel` | `medium` |
+| `autoCompactWindow` | `300000`, also for `claude-opus-5-5` under `modelSettings` |
 
 ## MCP servers
 

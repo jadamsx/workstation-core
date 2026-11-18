@@ -98,6 +98,25 @@
             "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
           }
         ]
+      },
+      {
+        "matcher": "Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/report-format-guard.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/report-stop-guard.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -129,6 +148,15 @@
             "command": "python3 __HOME__/.claude/hooks/project-context.py"
           }
         ]
+      },
+      {
+        "matcher": "compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/manager-brief-inject.py"
+          }
+        ]
       }
     ]
   },
@@ -137,6 +165,12 @@
     "command": "bash __HOME__/.claude/statusline-command.sh"
   },
   "effortLevel": "medium",
+  "autoCompactWindow": 300000,
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "autoCompactWindow": 300000
+    }
+  },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
@@ -181,6 +215,8 @@
     "ownedKeys": [
       "permissions",
       "effortLevel",
+      "autoCompactWindow",
+      "modelSettings",
       "env",
       "statusLine",
       "attribution",

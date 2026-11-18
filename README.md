@@ -34,7 +34,7 @@ claude                   # in any git repo, then:
 
 Guides: [quickstart](docs/guides/quickstart.md), [make it yours](docs/guides/make-it-yours.md), [the workflow](docs/guides/the-workflow.md), [automated reviewers](docs/guides/automated-reviewers.md).
 
-Reference: [engines](docs/reference/engines.md), [skills](docs/reference/skills.md), [agents](docs/reference/agents.md), [hooks](docs/reference/hooks.md), [checklists and disciplines](docs/reference/checklists-and-disciplines.md), [configuration](docs/reference/configuration.md).
+Reference: [engines](docs/reference/engines.md), [skills](docs/reference/skills.md), [agents](docs/reference/agents.md), [hooks](docs/reference/hooks.md), [managers](docs/reference/managers.md), [checklists and disciplines](docs/reference/checklists-and-disciplines.md), [configuration](docs/reference/configuration.md).
 
 ## Configuration
 

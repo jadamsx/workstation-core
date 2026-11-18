@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Usage: manager-send <name> "<text>"
+
+The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
+`herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
+manager is blocked.
+"""
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from herdr_reports import ReportsError, manager_folder, read_manager  # noqa: E402
+
+GIVE_UP_SECONDS = 600
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+    name, text = argv
+    interval = float(os.environ.get("MANAGER_SEND_RETRY_SECONDS", "15"))
+    try:
+        info = read_manager(manager_folder(name))
+        if info.get("closed"):
+            raise ReportsError(f"manager {name!r} is closed")
+    except ReportsError as err:
+        print(f"manager-send: {err}", file=sys.stderr)
+        return 2
+    deadline = time.monotonic() + GIVE_UP_SECONDS
+    while True:
+        done = subprocess.run(["herdr", "agent", "prompt", info["pane_id"], f"[coordinator] {text}"], capture_output=True, text=True)
+        if done.returncode == 0:
+            return 0
+        error = (done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0]
+        if time.monotonic() + interval > deadline:
+            print(f"manager-send: gave up on {name}: {error}", file=sys.stderr)
+            return 1
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

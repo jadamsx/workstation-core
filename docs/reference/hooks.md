@@ -13,6 +13,9 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | `agent-model-gate.py` | Before Agent | A subagent spawn that would run on the session model or the wrong model for the agent |
 | `main-thread-gate.py` | Before Edit, Write, NotebookEdit, Bash, and on prompt submit | The main thread editing files or running tests, builds, linters and formatters. Put `main-thread-ok` in a prompt to lift it for that turn |
 | `notes-lint-guard.py` | After Edit, Write | Nothing. It runs `notes-lint` on a note you just wrote and hands failures back to Claude |
+| `report-format-guard.py` | Before Write and Bash, manager sessions only | A manager report that is not `result-*.md` with a `Status: decision` or `Status: done` first line |
+| `report-stop-guard.py` | On stop, manager sessions only | One stop when the turn wrote no report and the last message does not start with `WAITING:` |
+| `manager-brief-inject.py` | Session start after compact or clear, manager sessions only | Nothing. It hands the manager brief back as context |
 | `project-context.py` | Session start | Nothing. It loads the project's index note into the session, capped at 4000 characters |
 
 ## Permission rules

@@ -50,7 +50,7 @@ class HomeOverrideTest(unittest.TestCase):
 
 
 class PlanTest(ScratchCase):
-    def test_links_only_the_five_helper_bins(self) -> None:
+    def test_links_only_the_helper_bins(self) -> None:
         names = sorted(
             i.dest.name
             for i in self.ws.plan()

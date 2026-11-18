@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Usage: manager-close <name>
+
+Closes the manager's tab and marks it closed in its manager.json, so the watcher sends no exited line and
+`workspace --repair` does not restart it.
+"""
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from herdr_reports import ReportsError, close_manager, manager_folder  # noqa: E402
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 1:
+        print(__doc__, file=sys.stderr)
+        return 2
+    try:
+        close_manager(manager_folder(argv[0]))
+    except ReportsError as err:
+        print(f"manager-close: {err}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as err:
+        print(f"manager-close: {' '.join(err.cmd[:3])} failed: {err.stderr.strip()}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

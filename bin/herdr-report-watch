@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Usage: herdr-report-watch [--once] [--interval <seconds>]
+
+Carries manager reports to the coordinator without spending tokens: every pass, each new
+`*.md` file in a manager folder is sent once as `[worker-report] <path>` with `herdr agent prompt`
+to the pane saved by `herdr-manager register`. A send that fails, including while the coordinator sits
+at a permission prompt (agent_blocked), is retried every 15 seconds. A manager whose pane is gone and
+that has nothing unsent produces `[worker-report] <name> exited without a report`, once per pane. A report whose first
+line is `Status: done` also closes that manager's tab (as `manager-close` does) and silences the exited line; a
+`Status: decision` report leaves the tab open. A manager idle for 15 minutes without writing a report, whose last
+message does not start with `WAITING:`, produces `[worker-report] <name> idle, no report` plus the last lines of its
+pane, once per idle spell.
+
+Sent files are recorded in `<root>/.watch-state.json`. Every send and retry is logged to stdout, which
+the launchd agent writes to ~/Library/Logs/herdr-report-watch.log.
+"""
+import argparse
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from herdr_reports import ReportsError, close_manager, pane_states, pane_text, reports_root, write_atomic  # noqa: E402
+
+RETRY_SECONDS = 15
+IDLE_SECONDS = 900
+IDLE_STATES = {"idle", "done"}
+TAIL_LINES = 15
+WAITING = "WAITING:"
+
+
+def is_done(result: Path) -> bool:
+    lines = result.read_text().splitlines()
+    return bool(lines) and lines[0].strip() == "Status: done"
+
+
+def last_message(text: str) -> str:
+    """The text of the newest assistant message in a pane read, whose lines start with `●`."""
+    marked = [line.strip() for line in text.splitlines() if line.strip().startswith("●")]
+    return marked[-1].lstrip("● ").strip() if marked else ""
+
+
+class Watcher:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.state_file = root / ".watch-state.json"
+        self.state = {"sent": [], "exited": [], "idle": []}
+        if self.state_file.exists():
+            self.state.update(json.loads(self.state_file.read_text()))
+        self.retry_at: dict[str, float] = {}
+        self.spells: dict[str, dict] = {}
+
+    def log(self, message: str) -> None:
+        print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}", flush=True)
+
+    def deliver(self, key: str, coordinator: str | None, text: str, record: str, now: float) -> bool:
+        if now < self.retry_at.get(key, 0):
+            return False
+        if coordinator is None:
+            error = "no coordinator registered"
+        else:
+            done = subprocess.run(["herdr", "agent", "prompt", coordinator, text], capture_output=True, text=True)
+            if done.returncode == 0:
+                self.state[record].append(key)
+                write_atomic(self.state_file, json.dumps(self.state))
+                self.retry_at.pop(key, None)
+                self.log(f"sent {text}")
+                return True
+            error = (done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0]
+        self.retry_at[key] = now + RETRY_SECONDS
+        self.log(f"retry in {RETRY_SECONDS}s {text}: {error}")
+        return False
+
+    def close(self, manager: Path) -> None:
+        try:
+            close_manager(manager)
+            self.log(f"closed {manager.name}")
+        except (ReportsError, subprocess.CalledProcessError) as err:
+            self.log(f"could not close {manager.name}: {err}")
+
+    def track_idle(self, pane: str, status: str, results: int, now: float) -> dict:
+        """Per-pane idle bookkeeping: when the current idle spell began and whether a report came with it."""
+        spell = self.spells.get(pane)
+        if status not in IDLE_STATES:
+            self.spells[pane] = {"active_results": results, "since": None, "reported": True, "checked": False}
+            if pane in self.state["idle"]:
+                self.state["idle"].remove(pane)
+                write_atomic(self.state_file, json.dumps(self.state))
+        elif spell is None:
+            self.spells[pane] = {"active_results": results, "since": now, "reported": bool(results), "checked": False}
+        elif spell["since"] is None:
+            spell.update(since=now, reported=results > spell["active_results"])
+        return self.spells[pane]
+
+    def report_idle(self, manager: Path, pane: str, spell: dict, coordinator: str | None, now: float) -> None:
+        if spell["reported"] or spell["checked"] or pane in self.state["idle"] or now - spell["since"] < IDLE_SECONDS:
+            return
+        try:
+            text = pane_text(pane)
+        except (subprocess.CalledProcessError, OSError):
+            return
+        if last_message(text).startswith(WAITING):
+            spell["checked"] = True
+            return
+        tail = "\n".join([line for line in text.splitlines() if line.strip()][-TAIL_LINES:])
+        self.deliver(pane, coordinator, f"[worker-report] {manager.name} idle, no report\n{tail}", "idle", now)
+
+    def scan(self, now: float) -> None:
+        panes: dict[str, str] | None = None
+        for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
+            coordinator_file = space / "coordinator"
+            coordinator = coordinator_file.read_text().strip() if coordinator_file.exists() else None
+            for manager in sorted(p for p in space.glob("*") if (p / "manager.json").exists()):
+                results = sorted(manager.glob("*.md"))
+                pending = [r for r in results if str(r) not in self.state["sent"]]
+                for result in pending:
+                    if not self.deliver(str(result), coordinator, f"[worker-report] {result}", "sent", now):
+                        break
+                    if result == results[-1] and is_done(result):
+                        self.close(manager)
+                else:
+                    info = json.loads((manager / "manager.json").read_text())
+                    pane = info["pane_id"]
+                    if pane in self.state["exited"] or info.get("closed") or (results and is_done(results[-1])):
+                        continue
+                    panes = pane_states() if panes is None else panes
+                    if panes is None:
+                        continue
+                    if pane not in panes:
+                        self.deliver(pane, coordinator, f"[worker-report] {manager.name} exited without a report", "exited", now)
+                    else:
+                        spell = self.track_idle(pane, panes[pane], len(results), now)
+                        self.report_idle(manager, pane, spell, coordinator, now)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="herdr-report-watch")
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--interval", type=float, default=3.0)
+    args = parser.parse_args(argv)
+    watcher = Watcher(reports_root())
+    while True:
+        watcher.scan(time.monotonic())
+        if args.once:
+            return 0
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
