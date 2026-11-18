@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Block the main thread from editing files or running tests, builds, linters and formatters.
 
-The main thread coordinates; subagents do the work. Subagent tool calls carry `agent_id` in
-the hook payload, the main thread's do not. Putting `main-thread-ok` in a prompt lifts the
+The coordinator (lead or plain main thread) coordinates; subagents do the work. Subagent tool calls
+carry `agent_id` in the hook payload, the main thread's do not. A manager tab, recognised by a
+non-empty WORKSTATION_REPORTS, may edit and run tests directly. Putting `main-thread-ok` in a prompt lifts the
 edit gate for the main thread this turn: the UserPromptSubmit wiring records it per session,
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
@@ -114,6 +115,10 @@ ASK_ALLOWED = (
 
 def is_subagent(payload: dict) -> bool:
     return bool(payload.get("agent_id"))
+
+
+def is_manager() -> bool:
+    return bool(os.environ.get("WORKSTATION_REPORTS"))
 
 
 def state_dir() -> Path:
@@ -250,7 +255,7 @@ def main() -> None:
         if reason:
             print(reason, file=sys.stderr)
             sys.exit(2)
-    if is_subagent(payload) or escaped(payload):
+    if is_subagent(payload) or is_manager() or escaped(payload):
         sys.exit(0)
     reason = block_reason(payload)
     if reason:

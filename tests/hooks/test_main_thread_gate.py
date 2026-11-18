@@ -79,6 +79,7 @@ class PayloadTest(unittest.TestCase):
             "NOTES_DIR": "/home/u/notes",
             "DRAFTS_DIR": "/home/u/drafts",
         }
+        self.env.pop("WORKSTATION_REPORTS", None)
 
     def run_hook(self, payload: dict) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -223,6 +224,19 @@ class PayloadTest(unittest.TestCase):
         other = self.pre("Bash", {"command": "pytest"})
         other["session_id"] = "s2"
         self.assertEqual(self.run_hook(other).returncode, 2)
+
+    def test_manager_may_edit_and_run_tests(self) -> None:
+        self.env["WORKSTATION_REPORTS"] = "/tmp/reports"
+        self.assertEqual(self.run_hook(self.pre("Edit", {"file_path": "/repo/a.py"})).returncode, 0)
+        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "pytest -q"})).returncode, 0)
+
+    def test_empty_reports_env_is_not_manager(self) -> None:
+        self.env["WORKSTATION_REPORTS"] = ""
+        self.assertEqual(self.run_hook(self.pre("Edit", {"file_path": "/repo/a.py"})).returncode, 2)
+
+    def test_ask_role_with_reports_env_still_blocks_edits(self) -> None:
+        self.env["WORKSTATION_REPORTS"] = "/tmp/reports"
+        self.assertEqual(self.ask_code("Edit", {"file_path": "/repo/a.py"}), 2)
 
     def ask_code(self, tool: str, tool_input: dict, **extra: str) -> int:
         self.env["WORKSTATION_ROLE"] = "ask"
