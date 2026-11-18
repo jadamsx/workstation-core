@@ -22,8 +22,7 @@ A discipline is a way of working that a plan node names. It has Rules, Proof (th
 
 | Discipline | Fits |
 | --- | --- |
-| `tdd` | New behaviour with a clear input and output, where the test comes first |
-| `reproduce-first` | A bug or small change where the failure can be shown before the fix. Extends `tdd` |
+| `tdd` | New behaviour with a clear input and output, or a bug whose failure can be shown first |
 | `investigate-first` | An unknown cause, intermittent behaviour or a performance regression. The output is a cause, not a fix |
 | `refactor` | Extraction, consolidation or an ownership move with no behaviour change |
 | `migration` | Schema, data, API, protocol, configuration or dependency transitions that need a rollback and proof that data survives |
