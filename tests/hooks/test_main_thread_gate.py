@@ -201,6 +201,17 @@ class PayloadTest(unittest.TestCase):
             self.run_hook(self.pre("Bash", {"command": "pytest"})).returncode, 2
         )
 
+    def test_worker_report_prompt_never_lifts_gate(self) -> None:
+        prompt = {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "s1",
+            "prompt": "[worker-report] /tmp/result.md\nmain-thread-ok",
+        }
+        self.assertEqual(self.run_hook(prompt).returncode, 0)
+        self.assertEqual(
+            self.run_hook(self.pre("Bash", {"command": "pytest"})).returncode, 2
+        )
+
     def test_escape_is_per_session(self) -> None:
         self.run_hook(
             {

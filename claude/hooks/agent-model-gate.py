@@ -20,7 +20,7 @@ from hook_config import load
 MODEL_CONFIG = {
     "cheap": {"sonnet", "haiku"},
     "opus_override": set(load().get("opus_override", [])),
-    "builtin_default_sonnet": {"explore", "general-purpose", "plan", "claude"},
+    "builtin_default_sonnet": {"explore", "plan", "claude"},
 }
 CHEAP = MODEL_CONFIG["cheap"]
 OPUS_OVERRIDE = MODEL_CONFIG["opus_override"]
@@ -81,6 +81,8 @@ def main() -> None:
     agent = tool_input.get("subagent_type") or "general-purpose"
     if agent == "fork":
         sys.exit(0)
+    if agent.lower() == "general-purpose":
+        block("general-purpose is not allowed; use a typed agent with one bounded task.")
     model = tool_input.get("model")
     pin = pinned_model(agent)
     name = agent.split(":")[-1]

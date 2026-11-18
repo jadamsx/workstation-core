@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 ESCAPE_PHRASE = "main-thread-ok"
+WORKER_REPORT = re.compile(r"^\s*\[worker-report\]", re.MULTILINE)
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
@@ -110,7 +111,8 @@ def flag_path(session_id: str) -> Path:
 
 def record_prompt(payload: dict) -> None:
     flag = flag_path(payload.get("session_id", ""))
-    if ESCAPE_PHRASE in (payload.get("prompt") or ""):
+    prompt = payload.get("prompt") or ""
+    if ESCAPE_PHRASE in prompt and not WORKER_REPORT.search(prompt):
         flag.parent.mkdir(parents=True, exist_ok=True)
         flag.touch()
     else:

@@ -293,7 +293,7 @@ class AgentModelGateTest(unittest.TestCase):
         )
 
     def test_builtins_without_model_get_sonnet_injected(self) -> None:
-        for agent in ["Explore", "general-purpose", "Plan", "claude", None, ""]:
+        for agent in ["Explore", "Plan", "claude"]:
             tool_input = {"prompt": "x", "subagent_type": agent}
             result = self.spawn(**tool_input)
             self.assertEqual(result.returncode, 0, agent)
@@ -302,6 +302,13 @@ class AgentModelGateTest(unittest.TestCase):
             self.assertEqual(
                 out["updatedInput"], {**tool_input, "model": "sonnet"}, agent
             )
+
+    def test_general_purpose_and_omitted_type_blocked(self) -> None:
+        for agent in ["general-purpose", "General-Purpose", None, ""]:
+            for model in [None, "sonnet"]:
+                result = self.spawn(prompt="x", subagent_type=agent, model=model)
+                self.assertEqual(result.returncode, 2, (agent, model))
+                self.assertIn("typed agent", result.stderr)
 
     def test_explicit_model_passes_untouched(self) -> None:
         for model in ["sonnet", "haiku"]:
