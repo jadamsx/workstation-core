@@ -1,0 +1,25 @@
+{
+  "roles": {
+    "work": [
+      "playwright"
+    ],
+    "ask": [],
+    "manager": [
+      "playwright"
+    ]
+  },
+  "test_workers": {
+    "pytest": 2,
+    "heavy": 4,
+    "n_auto": false,
+    "suites_per_session": 1
+  },
+  "docker": {
+    "stacks_per_session": 1,
+    "stop_when_done": true
+  },
+  "watchers": {
+    "per_space": 1
+  },
+  "build_concurrency_cap": 6
+}
