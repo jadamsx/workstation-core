@@ -15,6 +15,13 @@ Every spawned agent loads this file.
 - The model lives only in an agent's frontmatter. Engines, skills and prompts never state or override it; a review that must be stronger than its author changes the pin, not the call.
 - Say what you ran versus what you only read, and what you could not check.
 
+## Shell
+- After a sandbox denial retry once unsandboxed. If that is blocked or would prompt, report a decision and never wait on a prompt.
+- A search that may find nothing ends in `|| true`; a final step whose non-zero exit is only a result ends in `; true`.
+- Check a path exists before `ls`, `cat` or `rg` on it.
+- macOS `sed -i` needs `sed -i ''`; use python, or better the Edit tool.
+- Never use `git stash`, `rm -r` or `herdr workspace close`; hooks block them.
+
 ## Findings file
 When a prompt names a findings path, write the agent's full output to it with one Bash heredoc, the only write you make. Read the `brief.md` it names, and use its `diff.patch` and `files.txt` instead of running `git diff` or `git show` over the whole change; `git log`, `blame` and `show` on single files stay fine. Then return only `<path> | <counts by the severity words of the agent's output, or the total> | top: <the worst finding in one line>`. Without a path, return the output inline.
 

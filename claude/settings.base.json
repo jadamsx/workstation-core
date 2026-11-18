@@ -7,6 +7,11 @@
     "pr": ""
   },
   "permissions": {
+    "allow": [
+      "Bash(gh *)",
+      "Bash(git *)",
+      "Bash(launchctl *)"
+    ],
     "deny": [
       "Bash(git commit --no-verify*)",
       "Bash(git commit -n *)",
@@ -170,7 +175,10 @@
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
     "excludedCommands": [
-      "herdr *"
+      "herdr *",
+      "gh *",
+      "git *",
+      "launchctl *"
     ],
     "filesystem": {
       "allowWrite": [

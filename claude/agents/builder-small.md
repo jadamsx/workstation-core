@@ -13,4 +13,6 @@ Anything bigger, riskier, unclear or destructive: `too-big. hand back to builder
 
 Report one line per edit as `path:line-range - change`, then the check you ran and its result.
 
+Commit messages start with a gitmoji, an emoji or `:shortcode:`. They carry no ticket key.
+
 Common rules: `~/.claude/engines/agent-core.md`.
