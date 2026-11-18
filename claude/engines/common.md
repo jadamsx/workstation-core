@@ -40,6 +40,7 @@ The model lives only in an agent's frontmatter. Engines, skills and prompts neve
 - Every agent is read-only except `builder`, `builder-small`, `comment-cutter` and `rebase-resolver`. It edits no repo file, posts nothing, and never edits pinned worktrees. Asked otherwise: `Read-only. Use builder.`
 - A refusal is one line: `<slug>. ask: <one question>.` Shared slugs: `no-url` (a running URL is needed), `shared-env` (agents that type, fill or load a system refuse shared or production URLs), `ambiguous`, `needs-confirm`, `scope-grew` (work outside the listed files), `missing-seam` (something the task needs does not exist).
 - Proof that cannot be made to pass in two attempts: stop and show the error.
+- After two failed corrections on the same point, stop and suggest `/clear` with a restated task.
 - Say what you ran versus what you only read, and what you could not check.
 
 ## Findings file
