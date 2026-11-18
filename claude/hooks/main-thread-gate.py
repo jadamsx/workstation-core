@@ -97,13 +97,14 @@ ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 ASK_REDIRECT = re.compile(r">{1,2}(?:&\d+(?![\w/.~-])|\s*/dev/null(?![\w/.]))")
 ASK_READ_HEADS = {
     "ls", "cat", "head", "tail", "wc", "rg", "grep", "find", "cut", "tr", "basename",
-    "dirname", "pwd", "echo", "printf", "date", "stat", "file", "du", "jq", "diff", "cd",
+    "dirname", "pwd", "echo", "printf", "date", "stat", "du", "jq", "diff", "cd",
 }
 ASK_FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
 ASK_GIT_READS = {"status", "log", "diff", "show", "branch", "blame", "ls-files", "rev-parse", "describe"}
 ASK_GIT_BRANCH_FLAGS = {"-a", "-r", "-v", "-vv", "--list", "--show-current", "--all", "--remotes"}
 ASK_HOST_READS = {"view", "list", "status", "diff", "checks"}
-ASK_API_WRITES = ("-X", "-f", "-F", "--method", "--request", "--field", "--raw-field", "--input")
+ASK_API_WRITES = ("--method", "--request", "--field", "--raw-field", "--input")
+ASK_API_SHORT_WRITES = re.compile(r"-[A-Za-z]*[XfF]")
 ASK_HERDR_READS = {
     ("pane", "read"), ("pane", "list"), ("tab", "list"),
     ("workspace", "list"), ("workspace", "get"), ("agent", "list"),
@@ -273,7 +274,7 @@ def ask_allows(tokens: list[str]) -> bool:
         while rest[:1] == ["-C"]:
             rest = rest[2:]
         sub, args = (rest[:1] or [""])[0], rest[1:]
-        if any(a.startswith("--output") for a in args):
+        if any(a.startswith(("--output", "--textconv", "--ext-diff")) for a in args):
             return False
         if sub == "branch":
             return set(args) <= ASK_GIT_BRANCH_FLAGS
@@ -282,7 +283,7 @@ def ask_allows(tokens: list[str]) -> bool:
         if rest[:1] in (["auth"], ["config"]):
             return False
         if rest[:1] == ["api"]:
-            return not any(t.startswith(ASK_API_WRITES) for t in rest)
+            return not any(t.startswith(ASK_API_WRITES) or ASK_API_SHORT_WRITES.match(t) for t in rest)
         return len(rest) > 1 and rest[1] in ASK_HOST_READS and not rest[0].startswith("-")
     if head == "herdr":
         return tuple(rest[:2]) in ASK_HERDR_READS

@@ -387,6 +387,15 @@ class PayloadTest(unittest.TestCase):
             "glab auth status",
             "curl -s http://h",
             "git -c core.fsmonitor=x status",
+            "file -C -m x",
+            "gh api -iX POST repos/o/r",
+            "gh api -if query=x graphql",
+            "glab api -pX PUT projects/1",
+            "gh api -iFa=b graphql",
+            "gh api -fa=b graphql",
+            "git diff --textconv",
+            "git log -p --ext-diff",
+            "git show --ext-diff HEAD",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
 
