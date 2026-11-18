@@ -1,10 +1,12 @@
 {
   "roles": {
-    "lead": [],
-    "work": ["playwright"],
+    "work": [
+      "playwright"
+    ],
     "ask": [],
-    "review": ["playwright"],
-    "manager": ["playwright"]
+    "manager": [
+      "playwright"
+    ]
   },
   "test_workers": {
     "pytest": 2,

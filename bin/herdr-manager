@@ -45,14 +45,16 @@ SESSION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 
 def mcp_args(role: str, folder: Path) -> list[str]:
     """Claude args that start only the MCP servers the resource policy (plus the mcp.json overlay) lists for the role."""
-    catalog = json.loads(MCP_SERVERS.read_text())
-    names = [*json.loads(POLICY.read_text())["roles"][role], *catalog.get("roles", {}).get(role, [])]
-    missing = [n for n in names if n not in catalog["mcpServers"]]
-    if missing:
-        raise ReportsError(f"role {role!r} lists servers {MCP_SERVERS} does not define: {', '.join(missing)}")
+    try:
+        catalog = json.loads(MCP_SERVERS.read_text())
+        listed = json.loads(POLICY.read_text())["roles"]
+        names = [*listed[role], *catalog.get("roles", {}).get(role, [])]
+        servers = {n: catalog["mcpServers"][n] for n in names}
+    except (OSError, ValueError, KeyError) as err:
+        raise ReportsError(f"cannot start role {role!r} from {POLICY} and {MCP_SERVERS}: {type(err).__name__}: {err}") from err
     folder.mkdir(parents=True, exist_ok=True)
     config = folder / "mcp.json"
-    write_atomic(config, json.dumps({"mcpServers": {n: catalog["mcpServers"][n] for n in names}}))
+    write_atomic(config, json.dumps({"mcpServers": servers}))
     return ["--strict-mcp-config", "--mcp-config", str(config)]
 
 

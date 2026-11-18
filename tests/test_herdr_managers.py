@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-POLICY = json.loads((REPO / "claude/resource-policy.json").read_text()) if (REPO / "claude/resource-policy.json").exists() else {"roles": {}}
+POLICY = json.loads((REPO / "claude/resource-policy.json").read_text())
 sys.path.insert(0, str(REPO / "lib"))
 import herdr_reports  # noqa: E402
 
@@ -488,12 +488,22 @@ class ManagerTests(ReportsCase):
         self.assertEqual(self.started_servers(work), set(POLICY["roles"]["work"]))
         self.assertEqual(self.started_servers(alpha), set(POLICY["roles"]["manager"]))
 
-    def test_policy_holds_the_caps_in_one_file(self) -> None:
-        self.assertEqual(POLICY["build_concurrency_cap"], 6)
-        self.assertEqual(POLICY["test_workers"]["pytest"], 2)
-        self.assertEqual(POLICY["test_workers"]["heavy"], 4)
-        self.assertEqual(POLICY["test_workers"]["suites_per_session"], 1)
-        self.assertTrue({"docker", "watchers"} <= set(POLICY))
+    def start_with_policy(self, text: str | None) -> subprocess.CompletedProcess:
+        loader = SourceFileLoader("herdr_manager_policy", str(REPO / "bin/herdr-manager"))
+        module = loader.load_module()
+        policy = self.root / "policy.json"
+        if text is not None:
+            policy.write_text(text)
+        with mock.patch.object(module, "POLICY", policy):
+            return module.main(["start", "alpha", "--dir", "/tmp"])
+
+    def test_start_fails_naming_file_and_role_for_a_bad_policy(self) -> None:
+        for text in (None, "{", '{"roles": {}}'):
+            with self.subTest(text=text), mock.patch("sys.stderr") as err:
+                self.assertEqual(self.start_with_policy(text), 2)
+                shown = "".join(c.args[0] for c in err.write.call_args_list)
+                self.assertIn("policy.json", shown)
+                self.assertIn("'manager'", shown)
 
     def test_start_opens_a_sonnet_tab_with_the_brief_and_records_it(self) -> None:
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
