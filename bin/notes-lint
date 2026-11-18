@@ -290,7 +290,7 @@ def check_frontmatter(vault: Vault, note: Note, today: date) -> None:
     for key in required:
         if key not in present:
             add(Issue(rel, 1, "fm-key-missing", f"missing frontmatter key `{key}`"))
-    allowed = set(BASE_KEYS if index else keys)
+    allowed = {*(BASE_KEYS if index else keys), "legacy"}
     for f in note.fields:
         if f.key not in allowed:
             add(Issue(rel, f.line, "fm-key-unknown", f"`{f.key}` is not a key of a {kind} note"))
