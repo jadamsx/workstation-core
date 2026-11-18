@@ -1,6 +1,7 @@
 # Agent core
 
 Every spawned agent loads this file.
+
 ## Git and worktrees
 - Work only in the worktree you were given, at `<repo>/.claude/worktrees/<key>`. Never check out or switch branches in the owner's own tree.
 - Never `git checkout --`, `restore` or `stash` with uncommitted changes. Back out a rebase with `git rebase --abort`.
