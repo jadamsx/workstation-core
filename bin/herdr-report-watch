@@ -135,7 +135,7 @@ class Watcher:
                 info = read_manager(folder)
                 if info.get("closed"):
                     raise ReportsError("manager is closed")
-            except (OSError, ValueError, KeyError, ReportsError) as err:
+            except (OSError, ValueError, KeyError, TypeError, ReportsError) as err:
                 self.log(f"dropped parked job {path.name}: {err}")
                 path.unlink(missing_ok=True)
                 continue

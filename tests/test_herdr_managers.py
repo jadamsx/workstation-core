@@ -228,6 +228,12 @@ class ParkedResumeTests(ReportsCase):
         self.assertEqual(self.left(), [])
         self.assertIn("agent prompt w1:p9 [coordinator] /plan-task a", self.prompts())
 
+    def test_a_malformed_parked_file_is_dropped(self) -> None:
+        (self.root / ".parked").mkdir(parents=True)
+        (self.root / ".parked" / "000.json").write_text("[1]")
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(list((self.root / ".parked").glob("*.json")), [])
+
     def test_a_busy_standing_manager_keeps_its_job_parked(self) -> None:
         folder = self.manager()
         (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
