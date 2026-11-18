@@ -10,6 +10,7 @@ When the plan picks this: new behaviour with a clear input and output (a functio
 - Run it and read the failure. It must fail at an assertion on the new behaviour, not in setup, an import or an `AttributeError`.
 - A bug: trace the symptom to the mechanism, then change the narrowest layer that owns the wrong behaviour, once, where every caller routes through it.
 - A bugfix test fails at base, at an assertion, and passes with the fix. A test that passes without the source change proves nothing.
+- Preserve unrelated behaviour, and add no cleanup, renaming or abstraction outside the change.
 - Delete any test that would pass against a do-nothing implementation.
 - Write the least code that turns it green. Do not add a branch no test demands.
 - Refactor only on green, with the same tests as the bracket.
