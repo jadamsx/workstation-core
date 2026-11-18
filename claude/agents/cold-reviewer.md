@@ -16,4 +16,4 @@ Flag two more things. Bolt-ons: additions that are not in the brief or the node'
 ## Output
 Conventional Comments, worst first (correctness, then security, then contracts, then style), each `<label>: file:line - what breaks - fix in one line`, or `no findings`. Label map: Blocker = `issue (blocking)`, Should-fix = `suggestion (blocking)`, Nit = `nitpick`. No praise label. Caps: `~/.claude/engines/review.md`. The claims ledger beside them, every line marked verified, false or unverified. State which findings you ran and which you only read, and name changed files you did not read.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

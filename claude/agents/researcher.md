@@ -12,4 +12,4 @@ For concepts in code or notes, run `grepai search "<question>"` first in a fresh
 ## Output
 Answer first, under 200 words. Then sources as `file:line` or opened URL, one per claim.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

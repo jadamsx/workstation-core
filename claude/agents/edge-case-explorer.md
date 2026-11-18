@@ -16,4 +16,4 @@ Inputs: the plan's `risk_flows` and a running URL. Write each charter as "Explor
 ## Output
 One line per charter: charter, steps, observed, screenshot path. Failures first. Console errors and failed requests under each failure. Under 250 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

@@ -14,4 +14,4 @@ A deviation is a change the diff makes that a line forbids, or a line it ignores
 ## Output
 `Done-check: pass`, or `Done-check: deviation <sha>` (the commit checked), then two lines per deviation: the quoted rule line, then the `path:line` of the diff that breaks it. Quotes do not count toward 80 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

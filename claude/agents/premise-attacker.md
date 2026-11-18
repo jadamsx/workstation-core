@@ -23,4 +23,4 @@ Read the ticket whole: description, acceptance criteria, comments as a separate 
 ## Output
 No summary, no strengths, no opinion on implementation. Numbered attacks, each `file:line - which of the five - what the code shows`, or `no findings`. Say what you could not check and why.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

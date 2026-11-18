@@ -15,4 +15,4 @@ Optional. One line per mode the caller can name.
 ## Output
 Exact shape and word cap. Example: `path:line - symbol - note`, up to 15 rows, then a total line. Zero hits: `No match.`
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

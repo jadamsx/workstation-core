@@ -15,4 +15,4 @@ Default: as above. `frame`: compare the build to each linked frame and report on
 ## Output
 Under 150 words plus file paths: a matrix table (size or zoom, result), console status with any messages listed, the screenshot and frame paths side by side, and a list of differences. No verdict.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

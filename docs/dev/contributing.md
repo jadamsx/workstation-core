@@ -4,7 +4,7 @@
 
 Every rule, sentence and table lives in one file. Other files point to it by path and never restate it.
 
-- Git safety, gates, delegation, the model rule and the report shape: `claude/engines/common.md`.
+- Gates, delegation and handoff: `claude/engines/common.md`. Git safety, refusals, the model rule and the report shape: `claude/engines/agent-core.md`.
 - Source control and tracker names: `claude/engines/ship.md` only.
 - A model: the `model:` line of the agent, nowhere else.
 - Checklist items: one checklist. Discipline rules: one discipline.

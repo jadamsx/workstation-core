@@ -12,4 +12,4 @@ Inputs: the plan's `migrations` field (reversible, row scale), the repo's DB too
 ## Output
 Verifies only; never writes the migration. Row counts before and after each step, constraint or lock errors with the first error line, downgrade result, timing per step, and the throwaway database name and its removal. Under 150 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

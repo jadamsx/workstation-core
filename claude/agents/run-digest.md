@@ -19,4 +19,4 @@ Run exactly the command you were given, with output redirected to `$TMPDIR`. Rep
 Under 120 words. Command: command, exit code, counts (passed, failed, skipped, errors), then per failing test `name - first error line`. Skips or deselected tests are stated with the count. If the command could not start, say so.
 Log: job and step, the decisive line quoted, `file:line` if the log names one, and one of `test`, `lint`, `types`, `build`, `infra`, `flaky-suspect` with the evidence. Say what you could not see (truncated trace, missing job).
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

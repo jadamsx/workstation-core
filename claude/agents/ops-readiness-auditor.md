@@ -12,4 +12,4 @@ Inputs: the diff or merged range, the plan's `signals` and `flags`. Work through
 ## Output
 Style, tests and security are not yours. A checklist: item, yes or no, `file:line`, and what is missing. No-items first. Under 200 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

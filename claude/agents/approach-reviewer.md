@@ -17,4 +17,4 @@ When the caller says `gap`, you get a set of tickets or designs. Question: what 
 ## Output
 No summary, no strengths. Per finding `file:line - checklist section - verdict`, using Wrong premise, Blocks approval, Should change or Note on a design, and Blocker, Refuse, Should-fix or Nit on a change. Or `no findings`. Say what you ran versus read.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

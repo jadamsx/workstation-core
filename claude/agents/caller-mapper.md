@@ -12,4 +12,4 @@ For a concept-level question run `grepai search "<phrase>"` first in a fresh-mai
 ## Output
 `path:line - caller - note of 6 words or fewer`, up to 20 rows, grouped `Callers:` `Importers:` `Tests:`. Last line: totals and `unresolved: N`. Zero hits: `No match.`
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.
