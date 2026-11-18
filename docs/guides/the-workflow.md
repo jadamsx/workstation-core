@@ -20,7 +20,7 @@ A plan is a node table: for each node the agent, discipline, files it owns, wave
 
 ## Build
 
-`build` takes an approved plan and runs its nodes in worktrees, wave by wave. `builder` edits, a cold reviewer checks each node at its boundary, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing.
+`build` takes an approved plan and runs its nodes in worktrees, ready node by ready node. `builder` edits, a cold reviewer checks each node at its boundary, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing.
 
 ## Review
 
