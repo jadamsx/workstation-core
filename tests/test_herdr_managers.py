@@ -244,6 +244,15 @@ class ParkedResumeTests(ReportsCase):
         watch.Watcher(self.root).scan(0)
         self.assertEqual((self.left(), self.prompts()), (["alpha"], []))
 
+    def test_a_busy_manager_does_not_block_the_jobs_after_it(self) -> None:
+        self.park(("alpha", "/plan-task a", 0), ("beta", "/plan-task b", 0))
+        folder = self.space / "alpha"
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p9", "tab_id": "w1:t9", "standing": True}))
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1"},{"pane_id":"w1:p9","agent_status":"working"},{"pane_id":"w1:p8"}'
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.left(), ["alpha"])
+        self.assertIn("agent prompt w1:p8 [coordinator] /plan-task b", self.prompts())
+
 
 class DoneReportTests(ReportsCase):
     def test_done_report_is_delivered_then_closes_the_tab_and_silences_the_exited_line(self) -> None:

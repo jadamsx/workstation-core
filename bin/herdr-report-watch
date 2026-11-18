@@ -64,7 +64,7 @@ class Watcher:
     def log(self, message: str) -> None:
         print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}", flush=True)
 
-    def deliver(self, key: str, coordinator: str | None, text: str, record: str, now: float) -> bool:
+    def deliver(self, key: str, coordinator: str | None, text: str, record: str | None, now: float) -> bool:
         if now < self.retry_at.get(key, 0):
             return False
         if coordinator is None:
@@ -72,8 +72,9 @@ class Watcher:
         else:
             done = subprocess.run(["herdr", "agent", "prompt", coordinator, text], capture_output=True, text=True)
             if done.returncode == 0:
-                self.state[record].append(key)
-                write_atomic(self.state_file, json.dumps(self.state))
+                if record:
+                    self.state[record].append(key)
+                    write_atomic(self.state_file, json.dumps(self.state))
                 self.retry_at.pop(key, None)
                 self.log(f"sent {text}")
                 return True
@@ -143,7 +144,7 @@ class Watcher:
                 manager_send.send(folder, info, job["text"], time.monotonic(), 0)
             except ReportsError as err:
                 self.log(f"could not resume {folder.name}: {err}")
-                break
+                continue
             path.unlink(missing_ok=True)
             resumed.setdefault(str(folder.parent / "coordinator"), []).append(folder.name)
             self.log(f"resumed {folder.name}")
@@ -151,7 +152,7 @@ class Watcher:
         for coordinator_file, names in resumed.items():
             path = Path(coordinator_file)
             coordinator = path.read_text().strip() if path.exists() else None
-            self.deliver(f"resumed:{wall}:{coordinator_file}", coordinator, f"[worker-report] resumed parked jobs: {', '.join(names)}", "sent", wall)
+            self.deliver(f"resumed:{wall}:{coordinator_file}", coordinator, f"[worker-report] resumed parked jobs: {', '.join(names)}", None, wall)
 
     def scan(self, now: float) -> None:
         if self.state_file.exists():
