@@ -1,6 +1,6 @@
 # Common rules
 
-Engines and main threads load this file. Agents load `agent-core.md`. The findings file and the report skeleton are defined there and apply to engines too.
+Engines and main threads load this file. Agents load `agent-core.md`. The shell rules, the findings file and the report skeleton are defined there and apply to engines too.
 
 ## Gates
 - Nothing is posted, pushed, moved, approved or merged without the owner's OK. Merge or approve only when the owner explicitly asks, each time; the permission prompt still applies. "Approve" means only the changes your verdict marked Approve, one at a time; ask again if facts changed since the verdict.

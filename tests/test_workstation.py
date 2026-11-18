@@ -231,6 +231,22 @@ class SettingsApplyTest(ScratchCase):
         )
 
 
+class BaseSettingsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.base = json.loads((REPO / "claude" / "settings.base.json").read_text())
+
+    def test_forge_and_launchctl_skip_the_sandbox_and_are_allowed(self) -> None:
+        for cmd in ("gh", "git", "launchctl"):
+            self.assertIn(f"{cmd} *", self.base["sandbox"]["excludedCommands"])
+            self.assertIn(f"Bash({cmd} *)", self.base["permissions"]["allow"])
+
+    def test_destructive_git_stays_denied(self) -> None:
+        deny = self.base["permissions"]["deny"]
+        for rule in ("Bash(git stash*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
+            self.assertIn(rule, deny)
+        self.assertIn("Read(~/.ssh/**)", deny)
+
+
 class McpAndPluginsTest(ScratchCase):
     def test_install_writes_core_mcp_servers_to_claude_json(self) -> None:
         run_quiet(self.ws.cmd_install, False)
