@@ -600,11 +600,15 @@ class OwnsGuardTest(unittest.TestCase):
     def owns(self, text: str) -> None:
         (self.repo / ".owns").write_text(text)
 
-    def run_command(self, command: str) -> subprocess.CompletedProcess:
+    def run_command(self, command: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
         return run_hook(
             "pre-commit-guard.py",
-            {"tool_name": "Bash", "cwd": str(self.repo), "tool_input": {"command": command}},
+            {"tool_name": "Bash", "cwd": str(cwd or self.repo), "tool_input": {"command": command}},
         )
+
+    def assert_blocked(self, *commands: str) -> None:
+        for command in commands:
+            self.assertEqual(self.run_command(command).returncode, 2, command)
 
     def test_staged_path_outside_owns_blocked(self) -> None:
         (self.repo / "b.py").write_text("b = 2\n")
@@ -650,9 +654,71 @@ class OwnsGuardTest(unittest.TestCase):
 
     def test_scope_grew_override_logged_in_owns(self) -> None:
         (self.repo / "b.py").write_text("b = 2\n")
-        result = self.run_command('git commit -am "x" # scope-grew')
+        result = self.run_command(': scope-grew; git commit -am "x"')
         self.assertEqual(result.returncode, 0)
         self.assertIn("scope-grew: b.py", (self.repo / ".owns").read_text())
+
+    def test_scope_grew_in_message_comment_or_path_does_not_override(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assert_blocked(
+            'git commit -am "scope-grew"',
+            'git commit -am x # scope-grew',
+            "git commit -am x scope-grew",
+        )
+
+    def test_commit_pathspecs_outside_owns_blocked(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assert_blocked(
+            "git commit b.py -m x",
+            "git commit -m x -- b.py",
+            "git commit --only b.py -m x",
+            "git commit --include b.py -m x",
+            "git commit --amend --no-edit b.py",
+            "git commit -m x b.py",
+        )
+
+    def test_other_staging_commands_blocked(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        (self.repo / "p.diff").write_text("")
+        self.assert_blocked(
+            "git rm b.py && git commit -m x",
+            "git mv b.py c.py && git commit -m x",
+            "git stage b.py && git commit -m x",
+            "git update-index --add b.py && git commit -m x",
+            "git apply --cached p.diff && git commit -m x",
+            "git checkout HEAD -- b.py && git commit -m x",
+        )
+
+    def test_index_staged_by_an_earlier_call_blocked(self) -> None:
+        subprocess.run(["git", "rm", "-q", "b.py"], cwd=self.repo, check=True)
+        self.assert_blocked("git commit -m x", "git commit --amend --no-edit")
+
+    def test_unparseable_commit_command_fails_closed(self) -> None:
+        self.assert_blocked('git commit -m "oops', "git commit -m it's", "git commit -m x \\")
+
+    def test_heredoc_commit_inside_owns_passes(self) -> None:
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        command = "git add src && git commit -m \"$(cat <<'EOF'\nit's done\n\nbody\nEOF\n)\""
+        self.assertEqual(self.run_command(command).returncode, 0)
+
+    def test_subshell_and_bash_c_are_followed(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assert_blocked(
+            "(git add b.py && git commit -m x)",
+            "{ git add b.py; git commit -m x; }",
+            'bash -c "git add b.py && git commit -m x"',
+        )
+
+    def test_git_dash_c_and_subdirectory_cwd(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        self.assertEqual(
+            self.run_command(f"git -C {self.repo} add b.py && git commit -m x", self.repo / "src").returncode, 2
+        )
+        self.assertEqual(self.run_command("git add ../b.py && git commit -m x", self.repo / "src").returncode, 2)
+
+    def test_redirects_are_ignored_and_owns_file_is_exempt(self) -> None:
+        (self.repo / "src/a.py").write_text("a = 2\n")
+        self.assertEqual(self.run_command("git add -A >/dev/null 2>&1 && git commit -m x").returncode, 0)
 
 
 class ReportDoneCheckTest(unittest.TestCase):
@@ -680,6 +746,11 @@ class ReportDoneCheckTest(unittest.TestCase):
 
     def test_decision_report_needs_no_done_check(self) -> None:
         self.assertEqual(self.write("Status: decision\nbluf\n").returncode, 0)
+
+    def test_round_cap_forms_and_short_sha_refused(self) -> None:
+        for line in ("Round: 4 of 4", "round 5", "Round:4 of 3"):
+            self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 2, line)
+        self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation abc123\n").returncode, 2)
 
     def test_fourth_round_refused(self) -> None:
         result = self.write("Status: decision\nbluf\nRound: 4 of 3\n")
@@ -711,6 +782,7 @@ class ManagerSendOwnsTest(unittest.TestCase):
         note.write_text(plan)
         tree = self.root / "tree"
         tree.mkdir(exist_ok=True)
+        subprocess.run(["git", "init", "-q"], cwd=tree, check=True)
         self.module.write_owns(f"/build {note} node {node} worktree {tree}")
         return tree / ".owns"
 
@@ -740,6 +812,14 @@ class ManagerSendOwnsTest(unittest.TestCase):
         with self.assertRaises(self.module.ReportsError):
             self.send(self.plan(), node="N9")
         self.assertFalse((self.root / "tree/.owns").exists())
+
+    def test_build_word_and_git_worktree_are_required(self) -> None:
+        self.module.write_owns(f"/buildx {self.root / 'plan.md'} node N1 worktree {self.root}")
+        (self.root / "plan.md").write_text(self.plan())
+        (self.root / "plain").mkdir()
+        with self.assertRaises(self.module.ReportsError):
+            self.module.write_owns(f"/build {self.root / 'plan.md'} node N1 worktree {self.root / 'plain'}")
+        self.assertFalse((self.root / "plain/.owns").exists())
 
     def test_non_build_text_writes_nothing(self) -> None:
         self.module.write_owns("check in please")

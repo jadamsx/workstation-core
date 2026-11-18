@@ -55,7 +55,7 @@ def settle_standing(folder: Path, pane: str, deadline: float, interval: float) -
 
 def write_owns(text: str) -> None:
     """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided, Standing and Not-building lines."""
-    if not text.startswith("/build"):
+    if not re.match(r"/build(\s|$)", text):
         return
     fields = {
         "plan": re.search(r"\S+\.md\b", text),
@@ -68,8 +68,11 @@ def write_owns(text: str) -> None:
     plan = Path(fields["plan"].group(0)).expanduser()
     tree = Path(fields["worktree"].group(1)).expanduser()
     node = fields["node"].group(1)
-    if not plan.is_file() or not tree.is_dir():
-        raise ReportsError(f"plan {plan} or worktree {tree} does not exist")
+    if not plan.is_file():
+        raise ReportsError(f"plan {plan} does not exist")
+    top = subprocess.run(["git", "-C", str(tree), "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    if not top or Path(top).resolve() != tree.resolve():
+        raise ReportsError(f"{tree} is not the top level of a git worktree")
     note = plan.read_text()
     row = re.search(rf"^\|\s*{re.escape(node)}\b[^\n]*", note, re.M)
     if not row:

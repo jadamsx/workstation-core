@@ -3,7 +3,8 @@
 
 Blocks AI-style comments in the staged diff, a missing pre-commit git hook, a commit that stages paths outside
 the Owns of the worktree's `.owns` (lockfiles and generated files pass, `legacy: true` lets all through, and
-`scope-grew` in the command overrides and is logged in `.owns`), and change titles or
+the word `scope-grew` as its own command, `: scope-grew;`, overrides and is logged in `.owns`; it stops mistakes,
+not a builder that edits `.owns`), and change titles or
 descriptions that break the rules in the ``change`` object of hooks.d (see hook_config.py):
 require_gitmoji, title_requires_ticket, commit_forbids_ticket, ticket_key, commit_ticket_key,
 ticket_exempt_projects and description_cut_markers. Every rule is off until a layer turns it on.
@@ -49,7 +50,13 @@ REPO_FLAG = re.compile(r"(?<!\S)(?:--repo|-R)[=\s]+([^\s\"']+)")
 TEMPLATE_DIRS = (".github/PULL_REQUEST_TEMPLATE", ".gitlab/merge_request_templates")
 CHANGE_CREATE = re.compile(r"\b(gh\s+pr\s+(create|edit)|glab\s+mr\s+(create|update))\b")
 LOCKFILE = re.compile(r"(^|/)([^/]*\.lock|package-lock\.json|pnpm-lock\.yaml|go\.sum|[^/]*\.generated\.[^/]*)$|(^|/)generated/")
-COMMIT_ALL = re.compile(r"^(--all|-[a-zA-Z]*a[a-zA-Z]*)$")
+COMMIT_VALUE_FLAGS = {
+    "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date",
+    "--cleanup", "--trailer", "--fixup", "--squash",
+}
+HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n[ \t]*\2\b", re.S)
+REDIRECT = re.compile(r"(?<!\w)\d*(?:&>>?|>>?|<)&?[ \t]*[^\s;&|()<>\"']+")
+HOOK_CWD = ["."]
 SMELL_PATTERNS = re.compile(
     r"^\+\s*(#|//|--|/\*)\s*("
     r"This (function|method|class|file|code|line)\b"
@@ -90,52 +97,150 @@ def git_out(args: list[str], cwd: str) -> list[str]:
     return done.stdout.splitlines()
 
 
-def would_stage(command: str, cwd: str, top: str) -> set[str]:
+def flatten(text: str) -> str:
+    """Turn unquoted newlines into `;` and drop unquoted comments; an unbalanced quote or trailing backslash raises."""
+    text = HEREDOC.sub("", text.replace("\\\n", " "))
+    text = REDIRECT.sub("", text)
+    out: list[str] = []
+    quote = ""
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and quote != "'":
+            if i + 1 == len(text):
+                raise ValueError("trailing backslash")
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif char == "\n":
+            char = " ; "
+        elif char == "#" and (not out or out[-1][-1] in " \t;&|(){}"):
+            i = text.find("\n", i) if "\n" in text[i:] else len(text)
+            continue
+        out.append(char)
+        i += 1
+    if quote:
+        raise ValueError("unbalanced quote")
+    return "".join(out)
+
+
+def shell_commands(text: str) -> list[list[str]]:
+    lexer = shlex.shlex(flatten(text), posix=True, punctuation_chars=";&|()<>")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    commands: list[list[str]] = [[]]
+    for token in lexer:
+        if set(token) <= set(";&|()<>") or token in ("{", "}"):
+            commands.append([])
+        else:
+            commands[-1].append(token)
+    return [c for c in commands if c]
+
+
+def commit_pathspecs(args: list[str]) -> tuple[bool, list[str]]:
+    all_tracked, specs, i = False, [], 0
+    while i < len(args):
+        token = args[i]
+        i += 1
+        if token == "--":
+            specs += args[i:]
+            break
+        if token.startswith("--"):
+            all_tracked |= token == "--all"
+            i += "=" not in token and token in COMMIT_VALUE_FLAGS
+        elif token.startswith("-") and len(token) > 1:
+            for n, char in enumerate(token[1:], 1):
+                all_tracked |= char == "a"
+                if char in "mFCct":
+                    i += n == len(token) - 1
+                    break
+        else:
+            specs.append(token)
+    return all_tracked, specs
+
+
+def would_stage(command: str, cwd: str, top: str) -> tuple[set[str], bool]:
     paths = set(git_out(["diff", "--cached", "--name-only"], top))
-    for segment in re.split(r"&&|;|\|\||\n", command):
-        tokens = shlex.split(segment, comments=True)
-        if "git" in tokens and "add" in tokens:
-            args = tokens[tokens.index("add") + 1 :]
-            for line in git_out(["add", "-n", *args], cwd):
-                found = re.match(r"(?:add|remove) '(.*)'$", line)
-                if found:
-                    paths.add(os.path.relpath(os.path.join(cwd, found.group(1)), top))
-        elif COMMIT.search(segment) and any(COMMIT_ALL.match(t) for t in tokens):
-            paths.update(git_out(["ls-files", "-m", "-d"], top))
-    return paths
+    override = False
+    for argv in shell_commands(command):
+        while argv and re.fullmatch(r"\w+=.*", argv[0]):
+            argv = argv[1:]
+        if argv[:2] == [":", "scope-grew"]:
+            override = True
+        elif argv[:1] and argv[0] in ("sh", "bash", "zsh") and "-c" in argv[1:-1]:
+            inner, grew = would_stage(argv[argv.index("-c") + 1], cwd, top)
+            paths |= inner
+            override |= grew
+        elif argv[:1] == ["git"]:
+            where, args = cwd, argv[1:]
+            while args and args[0].startswith("-"):
+                if args[0] == "-C" and len(args) > 1:
+                    where = os.path.realpath(os.path.join(where, os.path.expanduser(args[1])))
+                args = args[2:] if args[0] in ("-C", "-c") else args[1:]
+            if args:
+                paths |= staged_by(args[0], args[1:], where, top)
+    return paths, override
 
 
-def owns_errors(command: str, cwd: str) -> list[str]:
+def staged_by(sub: str, rest: list[str], where: str, top: str) -> set[str]:
+    def rel(path: str) -> str:
+        return os.path.relpath(os.path.join(where, path), top)
+
+    named = [rel(t) for t in rest if not t.startswith("-")]
+    if sub in ("add", "stage"):
+        found = (re.match(r"(?:add|remove) '(.*)'$", line) for line in git_out(["add", "-n", *rest], where))
+        return {m.group(1) for m in found if m}
+    if sub in ("rm", "mv", "update-index"):
+        return set(named)
+    if sub == "checkout" and "--" in rest:
+        return {rel(t) for t in rest[rest.index("--") + 1 :]}
+    if sub == "apply" and ("--cached" in rest or "--index" in rest):
+        raise RuntimeError("git apply --cached cannot be checked; run it in its own call before the commit")
+    if sub == "commit":
+        all_tracked, specs = commit_pathspecs(rest)
+        return {rel(s) for s in specs} | (set(git_out(["ls-files", "-m", "-d"], top)) if all_tracked else set())
+    return set()
+
+
+def owns_file(cwd: str) -> pathlib.Path | None:
     try:
         top = git_out(["rev-parse", "--show-toplevel"], cwd)[0]
     except (RuntimeError, IndexError):
+        return None
+    found = pathlib.Path(top) / ".owns"
+    return found if found.is_file() else None
+
+
+def owns_errors(command: str, cwd: str) -> list[str]:
+    cwd = os.path.realpath(cwd)
+    owns = owns_file(cwd)
+    if not owns:
         return []
-    owns_file = pathlib.Path(top) / ".owns"
-    if not owns_file.is_file():
-        return []
-    fields = dict(
-        line.split(": ", 1) for line in owns_file.read_text().splitlines() if ": " in line
-    )
+    fields = dict(line.split(": ", 1) for line in owns.read_text().splitlines() if ": " in line)
     if fields.get("legacy") == "true":
         return []
     owned = [p.strip().rstrip("/") for p in fields.get("owns", "").split(",") if p.strip()]
     try:
-        staged = would_stage(command, cwd, top)
-    except RuntimeError as err:
-        return [f"Cannot compute the staged paths against .owns ({err}). Fix the git command and retry."]
+        staged, override = would_stage(command, cwd, str(owns.parent))
+    except (RuntimeError, ValueError) as err:
+        return [f"Cannot verify the staged paths against .owns ({err}). Simplify the command and retry."]
     outside = sorted(
         p for p in staged
-        if not LOCKFILE.search(p) and not any(p == o or p.startswith(o + "/") for o in owned)
+        if p != ".owns" and not LOCKFILE.search(p) and not any(p == o or p.startswith(o + "/") for o in owned)
     )
     if not outside:
         return []
-    if "scope-grew" in command:
-        with owns_file.open("a") as handle:
+    if override:
+        with owns.open("a") as handle:
             handle.write(f"scope-grew: {', '.join(outside)}\n")
         return []
     return [
         "Commit stages paths outside this node's Owns (.owns): " + ", ".join(outside)
-        + ". Unstage them, or report `scope-grew` and add `scope-grew` to the command to override."
+        + ". Unstage them, or report `scope-grew` and add the word as `: scope-grew;` before the commit to override."
     ]
 
 
@@ -261,7 +366,6 @@ def check_commit(command: str, cwd: str) -> list[str]:
             )
         if COMMIT_FORBIDS_TICKET and COMMIT_TICKET_RE.search(msg):
             errors.append(f"Commit messages carry no ticket key. Got: {msg[:80]!r}.")
-    errors.extend(owns_errors(command, cwd))
     if not precommit_installed(cwd):
         errors.append(
             "This repo has .pre-commit-config.yaml but the pre-commit git hook is not installed, so "
@@ -284,6 +388,7 @@ def main() -> None:
         sys.exit(0)
     tool_input = data.get("tool_input") or {}
     cwd = data.get("cwd", ".")
+    HOOK_CWD[0] = cwd
     command = tool_input.get("command", "")
 
     if data.get("tool_name") != "Bash":
@@ -306,8 +411,11 @@ def main() -> None:
             command_cwd(command, cwd, CHANGE_CREATE),
             repo.group(1) if repo else "",
         )
-    elif COMMIT.search(command) and not ("--amend" in command and "-m" not in command):
-        errors = check_commit(command, command_cwd(command, cwd, COMMIT))
+    elif COMMIT.search(command):
+        commit_cwd = command_cwd(command, cwd, COMMIT)
+        errors = owns_errors(command, commit_cwd)
+        if not ("--amend" in command and "-m" not in command):
+            errors += check_commit(command, commit_cwd)
     else:
         sys.exit(0)
 
@@ -318,4 +426,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        if owns_file(HOOK_CWD[0]):
+            print(f"pre-commit-guard failed under .owns ({err}); blocking.", file=sys.stderr)
+            sys.exit(2)
+        raise
