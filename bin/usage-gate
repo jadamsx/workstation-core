@@ -43,6 +43,8 @@ def parked_until(now: float | None = None) -> float | None:
         if now - path.stat().st_mtime > STALE_SECONDS:
             return None
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            return None
         limits = {"five_hour": float(os.environ.get("USAGE_GATE_5H", 80)), "seven_day": float(os.environ.get("USAGE_GATE_7D", 90))}
         resets = [
             float(data[window]["resets_at"])
