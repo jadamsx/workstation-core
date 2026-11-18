@@ -1,13 +1,6 @@
 # Common rules
 
-Every engine and every agent loads this file. Each rule below lives only here.
-
-## Git and worktrees
-- Work only in the worktree you were given, at `<repo>/.claude/worktrees/<key>`. Never check out or switch branches in the owner's own tree.
-- Never `git checkout --`, `restore` or `stash` with uncommitted changes. Back out a rebase with `git rebase --abort`.
-- Pinned worktrees are read-only. A run that needs a changed file happens on a scratch copy under `$TMPDIR`, deleted after. Mutation checks use the same copy.
-- Never push. A push goes through the owning engine and a gate below. Never force-push; `--force-with-lease` only on your own change branch, clean tree, where the owning engine allows pushing.
-
+Engines and main threads load this file. Agents load `agent-core.md`.
 ## Gates
 - Nothing is posted, pushed, moved, approved or merged without the owner's OK. Merge or approve only when the owner explicitly asks, each time; the permission prompt still applies. "Approve" means only the changes your verdict marked Approve, one at a time; ask again if facts changed since the verdict.
 - An OK covers the items shown when it was given. It does not carry over to later items or later rounds.
@@ -32,22 +25,6 @@ Rules for any main thread or manager:
 - Heavy test runs (`pytest -n`, `playwright test`, full JS suites, production builds) use at most 4 workers, never `-n auto`, one run per session at a time, in the background; never start a second suite in another worktree while one is running.
 - Parallel workers only when the owner asks, or inside a build wave. Add a review round, plan or second agent only for the failure mode it covers.
 - A claim that rests on something an agent read gets read by the main thread before it acts. Weigh every agent finding for realism, say which you accept and why, never relay a verdict verbatim.
-
-## Model
-The model lives only in an agent's frontmatter. Engines, skills and prompts never state or override it. A review that must be stronger than its author changes the pin, not the call.
-
-## Agent rules
-- Every agent is read-only except `builder`, `builder-small`, `comment-cutter` and `rebase-resolver`. It edits no repo file, posts nothing, and never edits pinned worktrees. Asked otherwise: `Read-only. Use builder.`
-- A refusal is one line: `<slug>. ask: <one question>.` Shared slugs: `no-url` (a running URL is needed), `shared-env` (agents that type, fill or load a system refuse shared or production URLs), `ambiguous`, `needs-confirm`, `scope-grew` (work outside the listed files), `missing-seam` (something the task needs does not exist).
-- Proof that cannot be made to pass in two attempts: stop and show the error.
-- After two failed corrections on the same point, stop and suggest `/clear` with a restated task.
-- Say what you ran versus what you only read, and what you could not check.
-
-## Findings file
-When a prompt names a findings path, write the agent's full output to it with one Bash heredoc, the only write you make. Read the `brief.md` it names, and use its `diff.patch` and `files.txt` instead of running `git diff` or `git show` over the whole change; `git log`, `blame` and `show` on single files stay fine. Then return only `<path> | <counts by the severity words of the agent's output, or the total> | top: <the worst finding in one line>`. Without a path, return the output inline.
-
-## Report skeleton
-Every report: the result first, then the evidence, one line per item. Then `Ran:` the commands with results, `Not changed:` what you could have changed and did not, `Omitted:` each omission with its trigger, `Out:` items that need the owner's OK. An empty line is omitted, not filled. Each engine adds its own rows to this shape.
 
 ## Glossary
 - **owner**: the person you work for. The only source of an OK.
