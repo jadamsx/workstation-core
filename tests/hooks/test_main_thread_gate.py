@@ -163,6 +163,30 @@ class PayloadTest(unittest.TestCase):
         payload = self.pre("Write", {"file_path": "/home/u/drafts/ABC-1/app.py"})
         self.assertEqual(self.run_hook(payload).returncode, 2)
 
+    def test_vault_notes_resolved_before_matching(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        (root / "real").mkdir()
+        (root / "repo").mkdir()
+        (root / "link").symlink_to(root / "real")
+        (root / "real" / "escape").symlink_to(root / "repo")
+        self.env["NOTES_DIR"] = str(root / "link")
+        for path, code in (
+            (root / "real" / "n.md", 0),
+            (root / "link" / "n.md", 0),
+            (root / "real" / "bin.py", 2),
+            (root / "link" / ".." / "repo" / "a.md", 2),
+            (root / "real" / ".." / "repo" / "a.md", 2),
+            (root / "link" / "escape" / "a.md", 2),
+            (root / "repo" / ".claude" / "plans" / ".." / ".." / "src" / "evil.py", 2),
+            (root / "repo" / ".claude" / "projects" / "x.py", 2),
+            (root / "repo" / ".claude" / "plans" / "p.md", 0),
+        ):
+            for tool in ("Write", "Edit"):
+                result = self.run_hook(self.pre(tool, {"file_path": str(path)}))
+                self.assertEqual(result.returncode, code, f"{tool} {path}")
+
     def test_settings_hook_commands_point_at_existing_files(self) -> None:
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())
         for groups in settings["hooks"].values():
@@ -302,6 +326,92 @@ class PayloadTest(unittest.TestCase):
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
 
+    def test_ask_role_refuses_quote_tricks_substitution_and_chains(self) -> None:
+        for command in (
+            "h''erdr agent prompt w1:p1 hi",
+            'h""erdr pane send-text w1:p1 hi',
+            '"h"erdr agent prompt w1:p1 hi',
+            "h\\erdr agent prompt w1:p1 hi",
+            "manager''-send work go",
+            "manager-''send work go",
+            "`herdr agent prompt w1:p1 hi`",
+            "echo `id`",
+            "echo $(id)",
+            'echo "$(id)"',
+            'echo "`id`"',
+            "echo ${HOME}",
+            "<(ls)",
+            "cat <(ls)",
+            "cat < f",
+            "ls; herdr agent prompt w1:p1 hi",
+            "ls | python3 -c pass",
+            "ls || rm a",
+            "ls & rm a",
+            "ls\nrm a",
+            "ls && (rm a)",
+            "$H agent prompt w1:p1 hi",
+            "A=1 ls",
+            "env herdr agent prompt w1:p1 hi",
+            "/bin/rm a",
+            "./ls",
+            "xargs rm",
+            "bash -c ls",
+            "echo x >f",
+            "echo x>f",
+            "echo x >| f",
+            "ls &> f",
+            "ls >&2 > f",
+            "git diff --output=f",
+            "git log --output f",
+            "git branch -D x",
+            "git branch new",
+            "git -c alias.x=!rm x",
+            "rg --pre sh x",
+            "gh api -XPATCH repos/o/r",
+            "gh api repos/o/r -f a=b",
+            "gh api --method POST repos/o/r",
+            "glab api --method PUT projects/1",
+            "curl -sXPOST http://h",
+            "curl -o f http://h",
+            "curl -d x http://h",
+            "find . -fprint f",
+            "echo 'unterminated",
+            "find . \\\n-delete",
+            "gh api -\\\nX POST repos/o/r",
+            'find . -ex"$X"ec echo {} \\;',
+            "ls $WORKSTATION_REPORTS_ROOT",
+            "echo hi >&2x",
+            "echo hi >&2/tmp/y",
+            "gh auth status -t",
+            "gh config get oauth_token",
+            "glab auth status",
+            "curl -s http://h",
+            "git -c core.fsmonitor=x status",
+            "file -C -m x",
+            "gh api -iX POST repos/o/r",
+            "gh api -if query=x graphql",
+            "glab api -pX PUT projects/1",
+            "gh api -iFa=b graphql",
+            "gh api -fa=b graphql",
+            "git diff --textconv",
+            "git log -p --ext-diff",
+            "git show --ext-diff HEAD",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
+
+    def test_ask_role_allows_quoted_args_variables_and_read_chains(self) -> None:
+        for command in (
+            "git log --format='%h %s' -3",
+            'git log --format="%h > %s"',
+            "cd repo && git status",
+            "git status; git diff --stat | head -5",
+            "gh api repos/o/r/pulls",
+            "gh pr list || glab mr list",
+            "h''erdr pane read w1:p1",
+            "ls 2>&1 | wc -l",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
+
     def test_ask_role_blocks_non_readonly_agents_and_edits(self) -> None:
         for agent in ("builder", "builder-small", "rebase-resolver", "general-purpose", "explorer"):
             self.assertEqual(self.ask_code("Agent", {"subagent_type": agent}), 2, agent)
@@ -338,7 +448,6 @@ class PayloadTest(unittest.TestCase):
             "find . -name x",
             "gh pr view 1",
             "glab mr list",
-            "curl -s http://h",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
         for agent in ("code-locator", "researcher", "run-digest", "web-fetch", "Explore"):
@@ -358,6 +467,12 @@ class PayloadTest(unittest.TestCase):
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())
         matchers = [g["matcher"] for g in settings["hooks"]["PreToolUse"] if "main-thread-gate.py" in g["hooks"][0]["command"]]
         self.assertTrue(any("Agent" in m.split("|") for m in matchers))
+
+    def test_malformed_payload_fails_closed_for_ask_only(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "ask"
+        for raw in ("nope", "[1]"):
+            result = subprocess.run([sys.executable, str(HOOK)], input=raw, text=True, capture_output=True, env=self.env)
+            self.assertEqual(result.returncode, 2, raw)
 
     def test_malformed_payload_fails_open(self) -> None:
         result = subprocess.run(
