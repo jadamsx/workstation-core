@@ -33,13 +33,27 @@ from herdr_reports import (  # noqa: E402
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
 ASK_BRIEF = BRIEF.with_name("ask-brief.md")
-ASK_MCP_CONFIG = BRIEF.with_name("ask-mcp.json")
+POLICY = BRIEF.parent.parent / "resource-policy.json"
+MCP_SERVERS = BRIEF.parent.parent / "mcp.json"
 SHELL_TIMEOUT = 20
 STARTUP_TIMEOUT = 20
 START_RETRIES = 3
 IMPORTS_DIALOG = "Allow external CLAUDE.md file imports?"
 STARTUP_DIALOGS = (TRUST_DIALOG, IMPORTS_DIALOG)
 SESSION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def mcp_args(role: str, folder: Path) -> list[str]:
+    """Claude args that start only the MCP servers the resource policy (plus the mcp.json overlay) lists for the role."""
+    catalog = json.loads(MCP_SERVERS.read_text())
+    names = [*json.loads(POLICY.read_text())["roles"][role], *catalog.get("roles", {}).get(role, [])]
+    missing = [n for n in names if n not in catalog["mcpServers"]]
+    if missing:
+        raise ReportsError(f"role {role!r} lists servers {MCP_SERVERS} does not define: {', '.join(missing)}")
+    folder.mkdir(parents=True, exist_ok=True)
+    config = folder / "mcp.json"
+    write_atomic(config, json.dumps({"mcpServers": {n: catalog["mcpServers"][n] for n in names}}))
+    return ["--strict-mcp-config", "--mcp-config", str(config)]
 
 
 def register() -> int:
@@ -134,7 +148,8 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
             raise ReportsError(f"manager {name!r} is already running in pane {previous['pane_id']}")
     reports.mkdir(parents=True, exist_ok=True)
     directory = Path(directory).resolve()
-    claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]
+    role = name if name == "work" else "manager"
+    claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), *mcp_args(role, reports), "--append-system-prompt-file", str(BRIEF)]
     pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}"], directory, claude_args)
     carried = {k: True for k in ("standing", "keep") if previous.get(k)}
     info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **carried, **({"standing": True} if standing else {})}
@@ -157,7 +172,7 @@ def setup(work: bool | None) -> int:
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
     if not any(tab.get("label") == ASK_TAB for tab in tabs):
         pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory,
-                      ["--model", "haiku", "--strict-mcp-config", "--mcp-config", str(ASK_MCP_CONFIG), "--append-system-prompt-file", str(ASK_BRIEF)])
+                      ["--model", "haiku", *mcp_args("ask", space / "ask"), "--append-system-prompt-file", str(ASK_BRIEF)])
         print(f"ask: pane {pane}")
     return 0
 

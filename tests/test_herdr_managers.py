@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
+POLICY = json.loads((REPO / "claude/resource-policy.json").read_text()) if (REPO / "claude/resource-policy.json").exists() else {"roles": {}}
 sys.path.insert(0, str(REPO / "lib"))
 import herdr_reports  # noqa: E402
 
@@ -420,10 +421,10 @@ class ManagerTests(ReportsCase):
         self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
         self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true --env DISABLE_UPDATE_PROMPT=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
-        self.assertIn("-- --model sonnet --append-system-prompt-file", starts[0])
+        self.assertIn("-- --model sonnet --strict-mcp-config --mcp-config", starts[0])
         self.assertIn("-- --model haiku --strict-mcp-config --mcp-config", starts[1])
         self.assertIn("--append-system-prompt-file", starts[1])
-        self.assertEqual(json.loads(Path(starts[1].split("--mcp-config ")[1].split()[0]).read_text()), {"mcpServers": {}})
+        self.assertEqual(self.started_servers(starts[1]), set(POLICY["roles"]["ask"]))
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
 
@@ -476,6 +477,23 @@ class ManagerTests(ReportsCase):
         self.space.mkdir(parents=True, exist_ok=True)
         (self.space / "setup.json").write_text("{")
         self.assertEqual(self.setup_run().returncode, 2)
+
+    def started_servers(self, start: str) -> set[str]:
+        return set(json.loads(Path(start.split("--mcp-config ")[1].split()[0]).read_text())["mcpServers"])
+
+    def test_work_and_named_managers_start_only_their_policy_servers(self) -> None:
+        self.setup_run()
+        self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        work, _, alpha = [c for c in self.calls() if c.startswith("agent start")]
+        self.assertEqual(self.started_servers(work), set(POLICY["roles"]["work"]))
+        self.assertEqual(self.started_servers(alpha), set(POLICY["roles"]["manager"]))
+
+    def test_policy_holds_the_caps_in_one_file(self) -> None:
+        self.assertEqual(POLICY["build_concurrency_cap"], 6)
+        self.assertEqual(POLICY["test_workers"]["pytest"], 2)
+        self.assertEqual(POLICY["test_workers"]["heavy"], 4)
+        self.assertEqual(POLICY["test_workers"]["suites_per_session"], 1)
+        self.assertTrue({"docker", "watchers"} <= set(POLICY))
 
     def test_start_opens_a_sonnet_tab_with_the_brief_and_records_it(self) -> None:
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
