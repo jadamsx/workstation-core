@@ -75,7 +75,7 @@ Runs until: checks green, every valid automated comment fixed, every correct sca
 6. Before reporting: re-check the description against its template; trim it if a fix round made it stale. Post nothing to the change.
 7. Merged: move the ticket per "Tracker".
 
-Cap: 10 fix rounds. Still failing: stop and report what is stuck.
+Cap: 10 fix rounds, or the babysit timeout, whichever comes first. Still failing: stop and report what is stuck.
 
 A job in the pipeline counts as running tests only when something extends or calls it: a hidden template job (GitLab `.test:`, a reusable workflow) runs nothing by itself. Check the CI config before trusting "green".
 
