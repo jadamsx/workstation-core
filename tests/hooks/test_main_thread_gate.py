@@ -224,28 +224,55 @@ class PayloadTest(unittest.TestCase):
         other["session_id"] = "s2"
         self.assertEqual(self.run_hook(other).returncode, 2)
 
-    def test_ask_role_blocks_prompting_other_tabs_and_editing_agents(self) -> None:
+    def ask_code(self, tool: str, tool_input: dict, **extra: str) -> int:
         self.env["WORKSTATION_ROLE"] = "ask"
+        return self.run_hook(self.pre(tool, tool_input, **extra)).returncode
+
+    def test_ask_role_blocks_herdr_and_manager_bypasses(self) -> None:
         for command in (
             "herdr agent prompt w1:p1 hello",
             "herdr agent send-keys w1:p1 Enter",
+            "herdr pane send-text w1:p1 hi",
+            'bash -c "herdr agent prompt w1:p1 hi"',
+            "echo $(herdr agent prompt w1:p1 hi)",
+            '"herdr" agent prompt w1:p1 hi',
+            "herdr tab close w1:t1",
+            "herdr pane read w1:p1 && herdr pane send-text w1:p1 x",
             'manager-send work "go"',
+            "manager-close work",
             "manager-start x --prompt go",
+            "herdr-manager close",
             "git status && herdr agent prompt w1:p1 hi",
+            "python3 -c \"import subprocess; subprocess.run(['herdr','pane','send-text','p','x'])\"",
         ):
-            self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 2, command)
-        for agent in ("builder", "builder-small", "rebase-resolver", "comment-cutter"):
-            self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": agent})).returncode, 2, agent)
-        sub = self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"}, agent_id="a1")
-        self.assertEqual(self.run_hook(sub).returncode, 2)
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
+
+    def test_ask_role_blocks_non_readonly_agents_and_edits(self) -> None:
+        for agent in ("builder", "builder-small", "rebase-resolver", "general-purpose", "explorer"):
+            self.assertEqual(self.ask_code("Agent", {"subagent_type": agent}), 2, agent)
+        for tool in ("Edit", "Write", "NotebookEdit", "MultiEdit"):
+            self.assertEqual(self.ask_code(tool, {"file_path": "/home/u/notes/a.md"}), 2, tool)
+            self.assertEqual(self.ask_code(tool, {"file_path": "/repo/a.py"}, agent_id="a1"), 2, tool)
+        sub = {"command": "herdr agent prompt w1:p1 hi"}
+        self.assertEqual(self.ask_code("Bash", sub, agent_id="a1"), 2)
 
     def test_ask_role_keeps_reads_and_cannot_be_escaped(self) -> None:
-        self.env["WORKSTATION_ROLE"] = "ask"
-        for command in ("herdr pane read w1:p1", "herdr tab list", "git log -3", "gh pr list"):
-            self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 0, command)
-        self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "explorer"})).returncode, 0)
+        for command in (
+            "herdr pane read w1:p1",
+            "herdr pane list",
+            "herdr tab list",
+            "herdr workspace list",
+            "herdr workspace get w1",
+            "herdr agent list",
+            "git log -3",
+            "gh pr list",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
+        for agent in ("code-locator", "researcher", "run-digest", "web-fetch", "Explore"):
+            self.assertEqual(self.ask_code("Agent", {"subagent_type": agent}), 0, agent)
         self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "main-thread-ok"})
-        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 2)
+        self.assertEqual(self.ask_code("Bash", {"command": "herdr agent prompt w1:p1 hi"}), 2)
+        self.assertEqual(self.ask_code("Edit", {"file_path": "/repo/a.py"}), 2)
 
     def test_other_roles_may_prompt_and_spawn_builders(self) -> None:
         for env in ({}, {"WORKSTATION_ROLE": "lead"}):
