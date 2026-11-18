@@ -1,7 +1,7 @@
 ---
 name: premise-attacker
 description: Attack a ticket before it is built, or, in after-build mode, check shipped behaviour against epic and designs.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 

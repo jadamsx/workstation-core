@@ -59,6 +59,8 @@ Discovered work that is not this ticket becomes a ticket draft under the note's 
 
 Each prompt gives the node spec (acceptance, `owns`, discipline, checklists) and the worktree path, and names the repo so the builder applies `checklists/build.md` before reporting done (`checklists/review-core.md` stays the reviewer's list). Each also carries:
 
+- **Size routing**: a node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other node to `builder`. Node reviews of small diffs go to `cold-reviewer-small`. If a small agent fails, or its work fails review, rerun the node on `builder` (or the review on `cold-reviewer`) without asking.
+- **Open findings**: before a change opens, the coordinator decides each open Blocker and Should-fix; a manager reports them rather than closing its own review.
 - **Worktree safety**: never `git checkout --`, `restore` or `stash` in a worktree with uncommitted changes; mutation checks ("does the test fail if I break X") run on a scratch copy; a file an agent says it rebuilt is re-reviewed and re-proven.
 - **For a v2 plan**, the FR ids the node delivers (its `covers` cell) with each FR's text, so the builder proves those lines and nothing else. A node that would add, drop or change an FR is a decision node, edited into Requirements with a dated Decision.
 - **What already ran**: the real suite and numbers from the nodes that just finished. An agent told nothing re-runs all of it.

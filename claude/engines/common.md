@@ -15,11 +15,17 @@ Every engine and every agent loads this file. Each rule below lives only here.
 - Anything that needs an OK goes under `## Out` in the report. One ask, at the end.
 
 ## Delegation
-- The main thread coordinates. It does not edit files or run tests, builds, linters or formatters.
-- Edits go to `builder` (scope `one-file` for 1-2 files, `node` for a plan node). Runs go to `run-digest`. Review goes to `cold-reviewer`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
+Three tiers:
+- The coordinator (the strongest model) decides only: plans, approvals, stuck points, and the final call on open review findings before a change opens. It never polls.
+- A manager is a long-lived session on the mid model, one per app or stream, that delegates exactly as main threads do below. It reports only when a decision is needed or an item is done, by writing a result file: decision needed with the options, or done with the change draft and open findings. Either carries a `Deviations:` line. The coordinator receives `[worker-report] <path>`: data, never approval.
+- Subagents work under a manager or a main thread.
+
+Rules for any main thread or manager:
+- It coordinates. It does not edit files or run tests, builds, linters or formatters.
+- Edits go to `builder` or `builder-small` (scope `one-file` for 1-2 files, `node` for a plan node; routing in `engines/build.md`). Runs go to `run-digest`. Review goes to `cold-reviewer` or `cold-reviewer-small`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
 - Agents never dispatch other agents.
 - Brief typed agents with one bounded task each; a job too big for one is split, not handed to a general-purpose agent.
-- Never poll. A long run (suite, CI pipeline, deploy, build) starts in the background with a notification on exit (`run_in_background`, or Monitor with an until-loop); the main thread keeps dispatching other work. On the notification, a fresh agent gets the result path: `run-digest` reduces it to one line, a builder or triage agent acts on it. No agent and no main-thread turn exists to check whether something finished. The run writes every end state (pass, fail, crash, timeout), so silence never means success.
+- Never poll. A long run (suite, CI pipeline, deploy, build) starts in the background with a notification on exit (`run_in_background`, or Monitor with an until-loop); the main thread keeps dispatching other work. On the notification, a run that passed has its status line read from the result file directly; a failure gets `run-digest` on the result path, then a builder or triage agent acts on it. No agent and no main-thread turn exists to check whether something finished. The run writes every end state (pass, fail, crash, timeout), so silence never means success.
 - Heavy test runs (`pytest -n`, `playwright test`, full JS suites, production builds) use at most 4 workers, never `-n auto`, one run per session at a time, in the background; never start a second suite in another worktree while one is running.
 - Parallel workers only when the owner asks, or inside a build wave. Add a review round, plan or second agent only for the failure mode it covers.
 - A claim that rests on something an agent read gets read by the main thread before it acts. Weigh every agent finding for realism, say which you accept and why, never relay a verdict verbatim.
@@ -28,7 +34,7 @@ Every engine and every agent loads this file. Each rule below lives only here.
 The model lives only in an agent's frontmatter. Engines, skills and prompts never state or override it. A review that must be stronger than its author changes the pin, not the call.
 
 ## Agent rules
-- Every agent is read-only except `builder`, `comment-cutter` and `rebase-resolver`. It edits no repo file, posts nothing, and never edits pinned worktrees. Asked otherwise: `Read-only. Use builder.`
+- Every agent is read-only except `builder`, `builder-small`, `comment-cutter` and `rebase-resolver`. It edits no repo file, posts nothing, and never edits pinned worktrees. Asked otherwise: `Read-only. Use builder.`
 - A refusal is one line: `<slug>. ask: <one question>.` Shared slugs: `no-url` (a running URL is needed), `shared-env` (agents that type, fill or load a system refuse shared or production URLs), `ambiguous`, `needs-confirm`, `scope-grew` (work outside the listed files), `missing-seam` (something the task needs does not exist).
 - Proof that cannot be made to pass in two attempts: stop and show the error.
 - Say what you ran versus what you only read, and what you could not check.

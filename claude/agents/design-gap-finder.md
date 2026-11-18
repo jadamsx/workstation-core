@@ -1,7 +1,7 @@
 ---
 name: design-gap-finder
 description: Given a set of tickets or designs, find what the whole set misses: ordering, ownership, unvalidated outputs.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: migration-verifier
 description: Run a migration up, down and up again on a throwaway database with realistic rows. Reports counts, constraints and timing.
-model: sonnet
+model: haiku
 tools: Read, Grep, Glob, Bash
 ---
 

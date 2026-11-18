@@ -157,9 +157,9 @@ JSON
 
 A branch that fans out gets one node that exists only to check the branch landed together: a `claim-prover` node depending on every node in the branch, proving acceptance without touching product code. Per-node review catches a node; nothing else catches three correct nodes that disagree at the seam. One fan-out, one verification node; a straight line gets none.
 
-### Teams instead of subagents
+### Manager sessions
 
-Escalate from subagents to agent teams (separate sessions, own context, direct messaging, a shared task list) only for competing hypotheses to test in parallel, separate modules with no shared files, or cross-layer ownership. The order is one agent, then subagents, then teams, and each step needs the failure the previous one had. Teams cost more tokens, `/resume` does not restore them and teammates source control hostt to mark tasks complete. Stay on subagents for sequential work and same-file edits.
+Use a manager session (`engines/common.md` "Delegation") for a stream with several nodes or for a whole app. It plans, builds and reviews its stream with subagents and reports only when a decision is needed or an item is done. Subagents stay inside it for independence, unbiased review and parallel work. A single node or a short plan needs no manager.
 
 ## Epic mode
 

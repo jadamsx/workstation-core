@@ -87,7 +87,7 @@ How it runs. A single ticket runs steps 1, 2 and 5; an epic or a set runs every 
 
 Lenses, each owned by a checklist section: engineering §2, 4, 13, 14 (name the simpler alternative concretely, or say it is sound); measurement §16 for any score, metric, benchmark or gate; product §1 and 17; consequence §9. A Mermaid graph only when the work touches more than two repos, alters a schema or changes an external contract (`engines/write.md` "Diagram decision"). Shipped to consumers (a lint rule, shared config): name them, say pinned or unpinned; unpinned gets a count per consumer measured off the base branch on the remote.
 
-Reviewers and rounds per "Intensity" (finders by mode: `plan` row), until `CONVERGED`. Every round uses fresh agents given the ticket and the plan note plus every `Decided:` item, with the instruction "attack how, never whether", and the statement that "no code exists yet" is not a finding. Plan size (`kind`) does not change them; domain checklists the team adds join at `intense`.
+Reviewers and rounds per "Intensity" (finders by mode: `plan` row), up to 3 rounds, stopping early on `CONVERGED`. Every round uses fresh agents given the ticket and the plan note plus every `Decided:` item, with the instruction "attack how, never whether", and the statement that "no code exists yet" is not a finding. Plan size (`kind`) does not change them; domain checklists the team adds join at `intense`.
 
 - A round that returns no findings ends the loop. At the cap, the open findings go to the owner with a position on each.
 - Lanes in an `intense` plan round (an epic plan is not `intense` unless set), one message, different territory: `design-gap-finder` (product coverage, decision records, platform fit), `premise-attacker` (the mechanism every planned change relies on, returned as change, mechanism, exists, false or unverified), `approach-reviewer` (authority, spoofing, races, duplicates, partial-failure exposure), `clean-code` (cut what is not `Decided:`, so the loop never grows the design). `engines/plan.md` "Converge" says what each must cover.
@@ -301,7 +301,7 @@ The one set of numbers. Skills pass intensity; nobody restates these.
 | `change` recheck | 1 hunt on the delta | fix-check on open threads |
 | `epic` | each change once as `change` at the epic's level, then 1 seam pass, 1 post-completion | 1 over all changes |
 | `comments` | 1 | per "Intensity" |
-| `plan`, reviewing a plan | per "Intensity", until `CONVERGED` | main thread verifies |
+| `plan`, reviewing a plan | up to 3 | main thread verifies |
 | `plan`, judging someone else's ticket or epic | 1, finders per "Intensity" | main thread verifies |
 | node review | per "Intensity"; fix rounds 2 by default | fix-check agent |
 | CI fix rounds | 10, `engines/ship.md` | n/a |

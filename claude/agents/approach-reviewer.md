@@ -1,7 +1,7 @@
 ---
 name: approach-reviewer
 description: Review a design, plan or change's approach: alternatives, fit with recorded decisions, contracts, failure modes, rollout, tests, sequencing. Reports only.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 

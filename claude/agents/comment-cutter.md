@@ -1,7 +1,7 @@
 ---
 name: comment-cutter
 description: Strip AI comment slop from a branch before push: restated-what comments, ticket references, tutorial docstrings. Edits comments only.
-model: sonnet
+model: haiku
 tools: Read, Edit, Grep, Glob, Bash
 ---
 

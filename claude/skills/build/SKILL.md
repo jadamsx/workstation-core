@@ -13,6 +13,7 @@ A plan note, a ticket key with an approved design note, an epic piece, or a plan
 ## Differs
 - Next unbuilt wave unless a node or piece is named; say which.
 - Notes are written with `notes-write`.
+- Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts".
 
 ## Output
 The engine's node report, then `/verify-self`.
