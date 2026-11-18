@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_pane, wait_for_shell, write_atomic,
+    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -124,6 +124,10 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
     if resume and not SESSION_ID.fullmatch(resume):
         raise ReportsError(f"--resume needs a session id, got {resume!r}")
     reports = space_dir() / name
+    if (reports / "manager.json").exists():
+        existing = read_manager(reports)
+        if not existing.get("closed") and existing.get("pane_id") in (live_panes() or set()):
+            raise ReportsError(f"manager {name!r} is already running in pane {existing['pane_id']}")
     reports.mkdir(parents=True, exist_ok=True)
     directory = Path(directory).resolve()
     claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), "--append-system-prompt-file", str(BRIEF)]

@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}")
@@ -12,6 +11,7 @@ LEAD_TAB = "◆ lead"
 MANAGER_TAB = "▸ "
 ASK_TAB = "? ask"
 TRUST_DIALOG = "Is this a project you created or one you trust?"
+IDLE_STATES = {"idle", "done"}
 INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*> ", re.M)
 
 
@@ -34,18 +34,6 @@ def herdr(*args: str) -> dict:
 
 def pane_text(pane: str) -> str:
     return subprocess.run(["herdr", "pane", "read", pane, "--source", "visible"], check=True, capture_output=True, text=True).stdout
-
-
-def wait_for_pane(pane: str, accept: Callable[[str], object], timeout: float, interval: float = 0.2) -> str | None:
-    """The first pane text `accept` approves, or None after `timeout` seconds."""
-    deadline = time.monotonic() + timeout
-    while True:
-        text = pane_text(pane)
-        if accept(text):
-            return text
-        if time.monotonic() >= deadline:
-            return None
-        time.sleep(interval)
 
 
 def shell_only(pane: str) -> bool:
@@ -109,10 +97,18 @@ def close_manager(folder: Path) -> None:
     try:
         herdr("tab", "close", info["tab_id"])
     except subprocess.CalledProcessError:
-        if info["pane_id"] in (live_panes() or set()):
+        live = live_panes()
+        if live is None:
+            raise ReportsError(f"herdr is unreachable, {info['pane_id']} not marked closed")
+        if info["pane_id"] in live:
             raise
     write_atomic(folder / "manager.json", json.dumps({**info, "closed": True}))
 
 
 def read_manager(folder: Path) -> dict:
     return json.loads((folder / "manager.json").read_text())
+
+
+def is_done(result: Path) -> bool:
+    """True when the report's first non-blank line is `Status: done`, as the report-format guard reads it."""
+    return result.read_text().lstrip("\n").split("\n", 1)[0].strip() == "Status: done"

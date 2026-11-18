@@ -40,7 +40,7 @@ case "$1 $2" in
     n=$(cat "$FAKE_PROCS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_PROCS"
     if [ "$n" -lt "${FAKE_BUSY_POLLS:-0}" ]; then fg='[{"argv0":"zsh"},{"argv0":"tail"}]'; else fg='[{"argv0":"zsh"}]'; fi
     echo "{\\"result\\":{\\"process_info\\":{\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
-  "pane list") echo "{\\"result\\":{\\"panes\\":[$FAKE_PANES]}}" ;;
+  "pane list") panes="$FAKE_PANES"; [ -e "$FAKE_PANES_NOW" ] && panes=$(cat "$FAKE_PANES_NOW"); echo "{\\"result\\":{\\"panes\\":[$panes]}}" ;;
   "agent prompt") if [ -e "$FAKE_BLOCKED" ]; then echo "agent_blocked" >&2; exit 1; fi ;;
 esac
 """
@@ -77,6 +77,7 @@ class ReportsCase(unittest.TestCase):
             "AGENT_START_RETRY_SECONDS": "0.05",
             "FAKE_WAIT_FAIL": str(base / "wait-fail"),
             "FAKE_NOT_READY": str(base / "not-ready"),
+            "FAKE_PANES_NOW": str(base / "panes-now"),
             "FAKE_PANES": '{"pane_id":"w1:p1","tab_id":"w1:t1"},{"pane_id":"w1:p4","tab_id":"w1:t4","agent":"claude"}',
             "FAKE_TABS": "",
             "FAKE_CMDLINE": "claude --model sonnet --append-system-prompt-file brief.md",
@@ -302,6 +303,69 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertGreater(len(self.prompts()), 1)
         self.assertEqual(self.prompts()[-1], "agent prompt w1:p4 [coordinator] OK to push")
+
+    def standing_send(self, status: str, keep: bool = False, standing: bool = True) -> Path:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": standing, **({"keep": True} if keep else {})}))
+        os.environ["FAKE_PANES"] = f'{{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"{status}"}}'
+        os.environ["MANAGER_SEND_RETRY_SECONDS"] = "0.1"
+        return folder
+
+    def test_send_to_a_working_standing_manager_waits_until_idle(self) -> None:
+        self.standing_send("working")
+        idle = '{"pane_id":"w1:p4","tab_id":"w1:t4","agent_status":"idle"}'
+        threading.Timer(0.5, Path(os.environ["FAKE_PANES_NOW"]).write_text, [idle]).start()
+        r = self.bin("manager-send", "alpha", "go")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] go"])
+        self.assertGreater(len([c for c in self.calls() if c == "pane list"]), 1)
+
+    def test_send_to_a_done_uncleared_standing_manager_clears_first_and_records_it(self) -> None:
+        folder = self.standing_send("idle")
+        (folder / "result-1.md").write_text("\nStatus: done\nx\n")
+        r = self.bin("manager-send", "alpha", "go")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 /clear", "agent prompt w1:p4 [coordinator] go"])
+        self.assertEqual(json.loads((self.root / ".watch-state.json").read_text())["cleared"], [str(folder / "result-1.md")])
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.prompts().count("agent prompt w1:p4 /clear"), 1)
+
+    def test_send_to_a_kept_or_non_standing_manager_does_not_wait_or_clear(self) -> None:
+        for keep, standing in ((True, True), (False, False)):
+            folder = self.standing_send("working", keep=keep, standing=standing)
+            (folder / "result-1.md").write_text("Status: done\nx\n")
+            self.log.unlink(missing_ok=True)
+            self.assertEqual(self.bin("manager-send", "alpha", "go").returncode, 0)
+            self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] go"])
+
+    def test_send_to_a_standing_manager_with_a_dead_pane_fails(self) -> None:
+        self.standing_send("idle")
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p9","tab_id":"w1:t9"}'
+        r = self.bin("manager-send", "alpha", "go")
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.prompts(), [])
+
+    def test_start_refuses_a_live_unclosed_manager(self) -> None:
+        self.manager()
+        r = self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("tab create", " ".join(self.calls()))
+
+    def test_done_report_close_is_retried_after_a_failed_close(self) -> None:
+        folder = self.manager()
+        (folder / "result-1.md").write_text("\n\nStatus: done\nx\n")
+        with mock.patch.object(watch, "close_manager", side_effect=watch.ReportsError("down")):
+            watch.Watcher(self.root).scan(0)
+        watch.Watcher(self.root).scan(1)
+        self.assertTrue(json.loads((folder / "manager.json").read_text())["closed"])
+
+    def test_close_manager_with_herdr_unreachable_does_not_mark_closed(self) -> None:
+        folder = self.manager()
+        with mock.patch.object(herdr_reports, "herdr", side_effect=subprocess.CalledProcessError(1, "herdr")), \
+                mock.patch.object(herdr_reports, "live_panes", return_value=None):
+            with self.assertRaises(herdr_reports.ReportsError):
+                herdr_reports.close_manager(folder)
+        self.assertNotIn("closed", json.loads((folder / "manager.json").read_text()))
 
     def test_manager_close_closes_the_tab_and_marks_it_closed(self) -> None:
         folder = self.manager()

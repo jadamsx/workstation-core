@@ -26,18 +26,12 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import ReportsError, close_manager, pane_states, pane_text, read_manager, reports_root, write_atomic  # noqa: E402
+from herdr_reports import IDLE_STATES, ReportsError, close_manager, is_done, pane_states, pane_text, read_manager, reports_root, write_atomic  # noqa: E402
 
 RETRY_SECONDS = 15
 IDLE_SECONDS = 900
-IDLE_STATES = {"idle", "done"}
 TAIL_LINES = 15
 WAITING = "WAITING:"
-
-
-def is_done(result: Path) -> bool:
-    lines = result.read_text().splitlines()
-    return bool(lines) and lines[0].strip() == "Status: done"
 
 
 def last_message(text: str) -> str:
@@ -122,6 +116,9 @@ class Watcher:
         self.deliver(pane, coordinator, f"[worker-report] {manager.name} idle, no report\n{tail}", "idle", now)
 
     def scan(self, now: float) -> None:
+        if self.state_file.exists():
+            on_disk = json.loads(self.state_file.read_text()).get("cleared", [])
+            self.state["cleared"] = [*self.state["cleared"], *(k for k in on_disk if k not in self.state["cleared"])]
         panes: dict[str, str] | None = None
         for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
             coordinator_file = space / "coordinator"
@@ -132,11 +129,11 @@ class Watcher:
                 for result in pending:
                     if not self.deliver(str(result), coordinator, f"[worker-report] {result}", "sent", now):
                         break
-                    flags = read_manager(manager)
-                    if result == results[-1] and is_done(result) and not (flags.get("standing") or flags.get("keep")):
-                        self.close(manager)
                 else:
                     info = read_manager(manager)
+                    if results and is_done(results[-1]) and not (info.get("standing") or info.get("keep") or info.get("closed")):
+                        self.close(manager)
+                        continue
                     pane = info["pane_id"]
                     if pane in self.state["exited"] or info.get("closed"):
                         continue

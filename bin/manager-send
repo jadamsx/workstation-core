@@ -3,8 +3,10 @@
 
 The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
 `herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
-manager is blocked.
+manager is blocked. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
+`Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state.
 """
+import json
 import os
 import subprocess
 import sys
@@ -12,9 +14,42 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import ReportsError, manager_folder, read_manager  # noqa: E402
+from herdr_reports import IDLE_STATES, ReportsError, is_done, manager_folder, pane_states, read_manager, reports_root, write_atomic  # noqa: E402
 
 GIVE_UP_SECONDS = 600
+
+
+def wait_idle(pane: str, deadline: float, interval: float) -> None:
+    while True:
+        states = pane_states()
+        if states is None:
+            raise ReportsError("herdr is unreachable")
+        if pane not in states:
+            raise ReportsError(f"pane {pane} is gone")
+        if states[pane] in IDLE_STATES:
+            return
+        if time.monotonic() + interval > deadline:
+            raise ReportsError(f"pane {pane} never went idle")
+        time.sleep(interval)
+
+
+def prompt(pane: str, text: str) -> None:
+    done = subprocess.run(["herdr", "agent", "prompt", pane, text], capture_output=True, text=True)
+    if done.returncode:
+        raise ReportsError((done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0])
+
+
+def settle_standing(folder: Path, pane: str, deadline: float, interval: float) -> None:
+    """Wait for the standing pane to be idle, clearing it first when its done report has not been cleared yet."""
+    wait_idle(pane, deadline, interval)
+    results = sorted(folder.glob("*.md"))
+    state_file = reports_root() / ".watch-state.json"
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    if results and is_done(results[-1]) and str(results[-1]) not in state.get("cleared", []):
+        prompt(pane, "/clear")
+        state["cleared"] = [*state.get("cleared", []), str(results[-1])]
+        write_atomic(state_file, json.dumps(state))
+        wait_idle(pane, deadline, interval)
 
 
 def main(argv: list[str]) -> int:
@@ -24,13 +59,20 @@ def main(argv: list[str]) -> int:
     name, text = argv
     interval = float(os.environ.get("MANAGER_SEND_RETRY_SECONDS", "15"))
     try:
-        info = read_manager(manager_folder(name))
+        folder = manager_folder(name)
+        info = read_manager(folder)
         if info.get("closed"):
             raise ReportsError(f"manager {name!r} is closed")
     except ReportsError as err:
         print(f"manager-send: {err}", file=sys.stderr)
         return 2
     deadline = time.monotonic() + GIVE_UP_SECONDS
+    if info.get("standing") and not info.get("keep"):
+        try:
+            settle_standing(folder, info["pane_id"], deadline, interval)
+        except ReportsError as err:
+            print(f"manager-send: {name}: {err}", file=sys.stderr)
+            return 1
     while True:
         done = subprocess.run(["herdr", "agent", "prompt", info["pane_id"], f"[coordinator] {text}"], capture_output=True, text=True)
         if done.returncode == 0:
