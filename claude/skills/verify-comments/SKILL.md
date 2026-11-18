@@ -13,7 +13,7 @@ The comments, or the change URL (its unresolved threads are fetched).
 ## Differs
 - Changes nothing and replies to nothing; resolving threads is the owner's call, and only fixed ones.
 - Load `house-style` before writing the report.
-- Next step once the owner says fix: `/plan-fix <change>`; fixes route through `/build` or `/verify-self`.
+- Only if the owner asks to fix: `/plan-fix <change>`; fixes route through `/build` or `/verify-self`.
 
 ## Output
 Engine report for `comments`: per comment verdict, severity, status, outcome and drafted reply; then must-change, follow-up, leave.

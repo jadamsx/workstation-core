@@ -5,7 +5,7 @@ engine: plan
 params: {kind: fix, intensity: medium}
 ---
 ## When
-Human reviewer comments on your change, after `/verify-comments` has judged them. Automated reviewer comments and pipeline failures are `babysit`.
+Only when the owner asks; no skill or engine starts it. Human reviewer comments on your change, after `/verify-comments` has judged them. Automated reviewer comments and pipeline failures are `babysit`.
 
 ## Inputs
 A change URL or `<project> #<number>`. Verdicts are read from `${DRAFTS_DIR:-~/drafts}/reviews/<repo>-<number>/`; with none, run `/verify-comments` first.
