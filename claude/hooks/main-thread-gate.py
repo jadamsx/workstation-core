@@ -9,7 +9,7 @@ PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
 With WORKSTATION_ROLE=ask the gate is an allowlist: no file edits, only read-only agent types, and Bash
-may not name herdr or manager- beyond a few read forms. It applies to subagents too and whatever the prompt says.
+runs only listed read-only commands, tokenised and normalised before matching. It applies to subagents too and whatever the prompt says.
 
 Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 """
@@ -29,10 +29,10 @@ EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
-def coordination_dirs() -> tuple[str, ...]:
+def coordination_dirs() -> tuple[str, str]:
     notes = os.path.expanduser(os.environ.get("NOTES_DIR") or "~/notes")
     drafts = os.path.expanduser(os.environ.get("DRAFTS_DIR") or "~/drafts")
-    return (drafts.rstrip("/") + "/", notes.rstrip("/") + "/")
+    return (drafts, notes)
 
 
 TOOL_HEADS = {
@@ -94,20 +94,24 @@ QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
-ASK_HERDR = re.compile(
-    r"herdr\s+(?:pane\s+(?:read|list)|tab\s+list|workspace\s+(?:list|get)|agent\s+list)\b"
-)
-ASK_REDIRECT = re.compile(r"(?<![<>=-])>>?(?!&)\s*(?!/dev/null(?![\w/.]))\S")
-ASK_WRITE_HEADS = {"tee", "rm", "mv", "cp", "mkdir", "touch", "chmod", "ln", "rmdir"}
-ASK_WRITE_SUBS = {
-    "git": {
-        "commit", "add", "push", "checkout", "switch", "reset", "rm", "mv", "clean",
-        "stash", "apply", "merge", "rebase", "cherry-pick", "restore", "pull", "fetch",
-    },
-    "gh": {"create", "merge", "comment", "edit", "close", "delete", "reopen", "review"},
-    "glab": {"create", "merge", "note", "update", "close", "delete", "reopen"},
+ASK_REDIRECT = re.compile(r">{1,2}(?:&\d+|\s*/dev/null(?![\w/.]))")
+ASK_READ_HEADS = {
+    "ls", "cat", "head", "tail", "wc", "rg", "grep", "find", "cut", "tr", "basename",
+    "dirname", "pwd", "echo", "printf", "date", "stat", "file", "du", "jq", "diff", "cd",
 }
-ASK_FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir"}
+ASK_FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
+ASK_GIT_READS = {"status", "log", "diff", "show", "branch", "blame", "ls-files", "rev-parse", "describe"}
+ASK_GIT_BRANCH_FLAGS = {"-a", "-r", "-v", "-vv", "--list", "--show-current", "--all", "--remotes"}
+ASK_HOST_READS = {"view", "list", "status", "diff", "checks"}
+ASK_API_WRITES = ("-X", "-f", "-F", "--method", "--request", "--field", "--raw-field", "--input")
+ASK_HERDR_READS = {
+    ("pane", "read"), ("pane", "list"), ("tab", "list"),
+    ("workspace", "list"), ("workspace", "get"), ("agent", "list"),
+}
+ASK_CURL_FLAGS = {
+    "-s", "-S", "-sS", "-L", "-sL", "-sSL", "-I", "-i", "-f", "-H", "-m",
+    "--silent", "--show-error", "--location", "--head", "--include", "--fail", "--header", "--max-time",
+}
 ASK_AGENTS = {
     "code-locator",
     "researcher",
@@ -119,9 +123,10 @@ ASK_AGENTS = {
 }
 ASK_ALLOWED = (
     "Allowed in the ask tab: read-only agents (" + ", ".join(sorted(ASK_AGENTS)) + "), "
-    "Bash that writes no files (no redirects to files, sed -i, tee, rm, mv, cp, git or gh writes) "
-    "and does not name herdr or manager- except `herdr pane read|list`, `herdr tab list`, "
-    "`herdr workspace list|get`, `herdr agent list`. No file edits, no SendMessage. Point the human to the lead tab."
+    "and Bash that runs only listed read-only commands (ls, cat, head, tail, wc, rg, grep, find, jq, diff, "
+    "git, gh and glab reads, curl GET, `herdr pane read|list`, `herdr tab list`, `herdr workspace list|get`, "
+    "`herdr agent list`), joined by && || ; |, with no command substitution and no redirect except to /dev/null. "
+    "No file edits, no SendMessage. Point the human to the lead tab."
 )
 
 
@@ -212,46 +217,85 @@ def blocked_command(command: str) -> bool:
     )
 
 
-def names_blocked_herdr(command: str) -> bool:
-    lowered = command.lower()
-    if "manager-" in lowered:
-        return True
-    return any(
-        not ASK_HERDR.match(lowered, m.start()) for m in re.finditer("herdr", lowered)
-    )
+def ask_segments(command: str) -> list[list[str]] | None:
+    """Split into commands of unquoted-word lists, or None for syntax the allowlist cannot judge."""
+    segments: list[list[str]] = [[]]
+    word, quote, live, i = "", "", False, 0
+    while i < len(command):
+        ch = command[i]
+        if quote:
+            if ch == quote:
+                quote = ""
+            elif quote == '"' and (ch == "`" or ch == "$" and not re.match(r"[A-Za-z_]", command[i + 1 : i + 2])):
+                return None
+            elif quote == '"' and ch == "\\":
+                i += 1
+                word += command[i : i + 1]
+            else:
+                word += ch
+        elif ch in "'\"":
+            quote, live = ch, True
+        elif ch == "\\":
+            i += 1
+            word += command[i : i + 1]
+            live = True
+        elif ch == "`" or ch in "<(" or ch == "$" and not re.match(r"[A-Za-z_]", command[i + 1 : i + 2]):
+            return None
+        elif ch == ">":
+            if live and word.isdigit():
+                word, live = "", False
+            m = ASK_REDIRECT.match(command, i)
+            if not m:
+                return None
+            i = m.end() - 1
+        elif ch in ";|&\n" or ch.isspace():
+            if live:
+                segments[-1].append(word)
+                word, live = "", False
+            if not ch.isspace() or ch == "\n":
+                segments.append([])
+        else:
+            word += ch
+            live = True
+        i += 1
+    if quote:
+        return None
+    if live:
+        segments[-1].append(word)
+    return [seg for seg in segments if seg]
 
 
-def writes_files(tokens: list[str]) -> bool:
-    if not tokens:
-        return False
-    head, rest = Path(tokens[0]).name, tokens[1:]
-    if head in ASK_WRITE_HEADS:
-        return True
-    if head == "sed":
-        return any(t.startswith("--in-place") or re.match(r"-[a-zA-Z]*i", t) for t in rest)
-    if head == "find":
-        return any(t in ASK_FIND_WRITES for t in rest)
-    if head in ("curl", "gh", "glab") and any(
-        t in ("-X", "--request") and nxt.upper() not in ("GET", "HEAD")
-        for t, nxt in zip(rest, rest[1:])
-    ):
+def ask_allows(tokens: list[str]) -> bool:
+    head, rest = tokens[0], tokens[1:]
+    if head in ASK_READ_HEADS:
+        if head == "find":
+            return not ASK_FIND_WRITES & set(rest)
+        if head == "rg":
+            return not any(t.startswith(("--pre", "--hostname-bin")) for t in rest)
         return True
     if head == "git":
-        args = iter(rest)
-        for arg in args:
-            if arg in ("-C", "-c"):
-                next(args, None)
-            elif not arg.startswith("-"):
-                return arg in ASK_WRITE_SUBS["git"]
-        return False
-    return bool(ASK_WRITE_SUBS.get(head, set()) & set(rest[:3]))
+        while rest[:1] == ["-C"]:
+            rest = rest[2:]
+        sub, args = (rest[:1] or [""])[0], rest[1:]
+        if any(a.startswith("--output") for a in args):
+            return False
+        if sub == "branch":
+            return set(args) <= ASK_GIT_BRANCH_FLAGS
+        return sub in ASK_GIT_READS
+    if head in ("gh", "glab"):
+        if rest[:1] == ["api"]:
+            return not any(t.startswith(ASK_API_WRITES) for t in rest)
+        return len(rest) > 1 and rest[1] in ASK_HOST_READS and not rest[0].startswith("-")
+    if head == "herdr":
+        return tuple(rest[:2]) in ASK_HERDR_READS
+    if head == "curl":
+        return all(t in ASK_CURL_FLAGS for t in rest if t.startswith("-"))
+    return False
 
 
-def ask_writes_files(command: str) -> bool:
-    bare = QUOTED.sub('""', command)
-    return bool(ASK_REDIRECT.search(bare)) or any(
-        writes_files(command_head(seg.strip())) for seg in SEGMENT_SPLIT.split(bare)
-    )
+def ask_allows_command(command: str) -> bool:
+    segments = ask_segments(command)
+    return segments is not None and all(ask_allows(seg) for seg in segments)
 
 
 def ask_block_reason(payload: dict) -> str | None:
@@ -262,18 +306,17 @@ def ask_block_reason(payload: dict) -> str | None:
         return f"The ask tab never messages other sessions. {ASK_ALLOWED}"
     if tool == "Agent" and (tool_input.get("subagent_type") or "") not in ASK_AGENTS:
         return f"The ask tab only spawns read-only agents. {ASK_ALLOWED}"
-    if tool == "Bash" and names_blocked_herdr(tool_input.get("command") or ""):
-        return f"The ask tab never prompts, types into or manages other tabs. {ASK_ALLOWED}"
-    if tool == "Bash" and ask_writes_files(tool_input.get("command") or ""):
-        return f"The ask tab is read-only and runs no file-writing commands. {ASK_ALLOWED}"
+    if tool == "Bash" and not ask_allows_command(tool_input.get("command") or ""):
+        return f"The ask tab runs only allowlisted read-only commands. {ASK_ALLOWED}"
     return None
 
 
 def is_coordination_file(path: str) -> bool:
     if any(part in path for part in EDIT_EXEMPT_DIRS):
         return True
-    return any(path.startswith(root) for root in coordination_dirs()) and path.endswith(
-        ".md"
+    resolved = Path(os.path.realpath(path))
+    return resolved.suffix == ".md" and any(
+        resolved.is_relative_to(os.path.realpath(root)) for root in coordination_dirs()
     )
 
 

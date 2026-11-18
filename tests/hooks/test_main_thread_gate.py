@@ -163,6 +163,27 @@ class PayloadTest(unittest.TestCase):
         payload = self.pre("Write", {"file_path": "/home/u/drafts/ABC-1/app.py"})
         self.assertEqual(self.run_hook(payload).returncode, 2)
 
+    def test_vault_notes_resolved_before_matching(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        (root / "real").mkdir()
+        (root / "repo").mkdir()
+        (root / "link").symlink_to(root / "real")
+        (root / "real" / "escape").symlink_to(root / "repo")
+        self.env["NOTES_DIR"] = str(root / "link")
+        for path, code in (
+            (root / "real" / "n.md", 0),
+            (root / "link" / "n.md", 0),
+            (root / "real" / "bin.py", 2),
+            (root / "link" / ".." / "repo" / "a.md", 2),
+            (root / "real" / ".." / "repo" / "a.md", 2),
+            (root / "link" / "escape" / "a.md", 2),
+        ):
+            for tool in ("Write", "Edit"):
+                result = self.run_hook(self.pre(tool, {"file_path": str(path)}))
+                self.assertEqual(result.returncode, code, f"{tool} {path}")
+
     def test_settings_hook_commands_point_at_existing_files(self) -> None:
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())
         for groups in settings["hooks"].values():
@@ -301,6 +322,74 @@ class PayloadTest(unittest.TestCase):
             "gh issue close 1",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
+
+    def test_ask_role_refuses_quote_tricks_substitution_and_chains(self) -> None:
+        for command in (
+            "h''erdr agent prompt w1:p1 hi",
+            'h""erdr pane send-text w1:p1 hi',
+            '"h"erdr agent prompt w1:p1 hi',
+            "h\\erdr agent prompt w1:p1 hi",
+            "manager''-send work go",
+            "manager-''send work go",
+            "`herdr agent prompt w1:p1 hi`",
+            "echo `id`",
+            "echo $(id)",
+            'echo "$(id)"',
+            'echo "`id`"',
+            "echo ${HOME}",
+            "<(ls)",
+            "cat <(ls)",
+            "cat < f",
+            "ls; herdr agent prompt w1:p1 hi",
+            "ls | python3 -c pass",
+            "ls || rm a",
+            "ls & rm a",
+            "ls\nrm a",
+            "ls && (rm a)",
+            "$H agent prompt w1:p1 hi",
+            "A=1 ls",
+            "env herdr agent prompt w1:p1 hi",
+            "/bin/rm a",
+            "./ls",
+            "xargs rm",
+            "bash -c ls",
+            "echo x >f",
+            "echo x>f",
+            "echo x >| f",
+            "ls &> f",
+            "ls >&2 > f",
+            "git diff --output=f",
+            "git log --output f",
+            "git branch -D x",
+            "git branch new",
+            "git -c alias.x=!rm x",
+            "rg --pre sh x",
+            "gh api -XPATCH repos/o/r",
+            "gh api repos/o/r -f a=b",
+            "gh api --method POST repos/o/r",
+            "glab api --method PUT projects/1",
+            "curl -sXPOST http://h",
+            "curl -o f http://h",
+            "curl -d x http://h",
+            "find . -fprint f",
+            "echo 'unterminated",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
+
+    def test_ask_role_allows_quoted_args_variables_and_read_chains(self) -> None:
+        for command in (
+            "git log --format='%h %s' -3",
+            'git log --format="%h > %s"',
+            "ls $WORKSTATION_REPORTS_ROOT",
+            "cd repo && git status",
+            "git status; git diff --stat | head -5",
+            "gh api repos/o/r/pulls",
+            "gh pr list || glab mr list",
+            "curl -sSL -H 'Accept: x' http://h",
+            "h''erdr pane read w1:p1",
+            "ls 2>&1 | wc -l",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
 
     def test_ask_role_blocks_non_readonly_agents_and_edits(self) -> None:
         for agent in ("builder", "builder-small", "rebase-resolver", "general-purpose", "explorer"):
