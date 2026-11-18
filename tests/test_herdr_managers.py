@@ -418,7 +418,7 @@ class ManagerTests(ReportsCase):
         self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
         work, ask = self.creates()
         self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
-        self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true", ask)
+        self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true --env DISABLE_UPDATE_PROMPT=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
         self.assertIn("-- --model sonnet --append-system-prompt-file", starts[0])
         self.assertIn("-- --model haiku --strict-mcp-config --mcp-config", starts[1])
@@ -583,6 +583,11 @@ class ManagerTests(ReportsCase):
         self.assertNotIn("agent send-keys", " ".join(self.calls()))
         self.assertIn("tab close w1:t4", self.calls())
         self.assertFalse((self.space / "beta/manager.json").exists())
+
+    def test_input_box_matches_both_prompt_glyphs(self) -> None:
+        for text in ("> \n", "│ > \n", "❯ \n", "  ? for shortcuts"):
+            self.assertTrue(herdr_reports.INPUT_BOX.search(text), text)
+        self.assertFalse(herdr_reports.INPUT_BOX.search("loading\n"))
 
     def test_trust_accepted_but_no_input_box_raises(self) -> None:
         self.trust_dialog()

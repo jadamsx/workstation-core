@@ -106,7 +106,7 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     """Open a tab running claude and answer its startup prompts; the tab is closed again if that fails."""
     tab = herdr(
         "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory), "--label", label,
-        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--no-focus",
+        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--env", "DISABLE_UPDATE_PROMPT=true", "--no-focus",
     )
     pane = tab["root_pane"]["pane_id"]
     try:
