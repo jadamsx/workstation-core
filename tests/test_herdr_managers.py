@@ -421,7 +421,9 @@ class ManagerTests(ReportsCase):
         self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
         self.assertIn("-- --model sonnet --append-system-prompt-file", starts[0])
-        self.assertIn("-- --model haiku --append-system-prompt-file", starts[1])
+        self.assertIn("-- --model haiku --strict-mcp-config --mcp-config", starts[1])
+        self.assertIn("--disable-slash-commands --append-system-prompt-file", starts[1])
+        self.assertEqual(json.loads(Path(starts[1].split("--mcp-config ")[1].split()[0]).read_text()), {"mcpServers": {}})
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
 

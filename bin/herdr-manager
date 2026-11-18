@@ -33,6 +33,7 @@ from herdr_reports import (  # noqa: E402
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
 ASK_BRIEF = BRIEF.with_name("ask-brief.md")
+ASK_MCP_CONFIG = BRIEF.with_name("ask-mcp.json")
 SHELL_TIMEOUT = 20
 STARTUP_TIMEOUT = 20
 START_RETRIES = 3
@@ -155,7 +156,8 @@ def setup(work: bool | None) -> int:
         start("work", None, str(directory), standing=True)
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
     if not any(tab.get("label") == ASK_TAB for tab in tabs):
-        pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory, ["--model", "haiku", "--append-system-prompt-file", str(ASK_BRIEF)])
+        pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory,
+                      ["--model", "haiku", "--strict-mcp-config", "--mcp-config", str(ASK_MCP_CONFIG), "--disable-slash-commands", "--append-system-prompt-file", str(ASK_BRIEF)])
         print(f"ask: pane {pane}")
     return 0
 
