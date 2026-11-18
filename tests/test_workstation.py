@@ -112,6 +112,78 @@ class UninstallTest(ScratchCase):
             self.assertEqual(dest.read_text(), text, dest)
 
 
+class AgentTest(ScratchCase):
+    def setUp(self) -> None:
+        super().setUp()
+        bindir = self.tmp / "fakebin"
+        bindir.mkdir()
+        self.calls = self.tmp / "calls"
+        loaded = self.tmp / "loaded"
+        launchctl = bindir / "launchctl"
+        launchctl.write_text(
+            f'#!/bin/sh\necho "$@" >> {self.calls}\n'
+            f"case $1 in print) [ -e {loaded} ];; bootstrap) touch {loaded};; "
+            f"bootout) rm -f {loaded};; esac\n"
+        )
+        (bindir / "herdr").write_text("#!/bin/sh\n")
+        for f in bindir.iterdir():
+            f.chmod(0o755)
+        patcher = mock.patch.dict(
+            os.environ, {"PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.ws.LIVE = True
+        self.plist = (
+            self.home / "Library/LaunchAgents/dev.workstation.herdr-report-watch.plist"
+        )
+
+    def launchctl_calls(self) -> list[str]:
+        return self.calls.read_text().splitlines() if self.calls.exists() else []
+
+    def test_install_renders_and_loads_the_watcher(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        text = self.plist.read_text()
+        self.assertIn(f"{self.ws.ROOT}/bin/herdr-report-watch", text)
+        self.assertIn(str(self.home), text)
+        self.assertNotIn("__ROOT__", text)
+        self.assertNotIn("__HOME__", text)
+        bootstraps = [c for c in self.launchctl_calls() if c.startswith("bootstrap")]
+        self.assertEqual(bootstraps, [f"bootstrap gui/{os.getuid()} {self.plist}"])
+
+    def test_second_install_does_not_reload(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        before = self.launchctl_calls()
+        run_quiet(self.ws.cmd_install, False)
+        new = self.launchctl_calls()[len(before) :]
+        self.assertFalse([c for c in new if c.split()[0] in ("bootstrap", "bootout")])
+
+    def test_changed_plist_is_booted_out_then_bootstrapped(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.plist.write_text("stale")
+        run_quiet(self.ws.cmd_install, False)
+        verbs = [
+            c.split()[0] for c in self.launchctl_calls() if c.split()[0] != "print"
+        ]
+        self.assertEqual(verbs, ["bootstrap", "bootout", "bootstrap"])
+
+    def test_uninstall_boots_out_and_removes_the_plist(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        run_quiet(self.ws.cmd_uninstall, False)
+        self.assertFalse(self.plist.exists())
+        self.assertIn(
+            f"bootout gui/{os.getuid()}/dev.workstation.herdr-report-watch",
+            self.launchctl_calls(),
+        )
+
+    def test_skipped_when_herdr_is_missing(self) -> None:
+        (self.tmp / "fakebin" / "herdr").unlink()
+        with mock.patch.object(self.ws.shutil, "which", return_value=None):
+            out = run_quiet(self.ws.cmd_install, False)
+        self.assertIn("herdr not on PATH", out)
+        self.assertFalse(self.plist.exists())
+
+
 class SettingsApplyTest(ScratchCase):
     def make(self):
         base = self.tmp / "base.json"

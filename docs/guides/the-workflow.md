@@ -2,6 +2,8 @@
 
 Work goes plan, build, review, ship. Each stage has one engine, and each skill is a thin entry point to one of them. [Engines](../reference/engines.md) has the parameters.
 
+In a [herdr space](herdr-spaces.md) the lead plans, answers decisions and approves, and the work tab builds, reviews and babysits. The lead sends it `/build`, change reviews and `babysit` with `manager-send work`, and reads one report back. Without herdr, one session does every step.
+
 ## Plan
 
 A plan is a node table: for each node the agent, discipline, files it owns, wave, intensity, reviewer and one acceptance sentence. The plan engine writes it, a plan review attacks it, and you approve it. Review intensity (`light`, `medium`, `intense`, default `medium`) sets how hard the plan and each node are reviewed. Name a level to override it.

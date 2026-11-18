@@ -30,9 +30,13 @@ claude                   # in any git repo, then:
 
 [The quickstart](docs/guides/quickstart.md) explains each step and what to expect.
 
+## Run it in herdr (recommended)
+
+[herdr](https://herdr.dev) is installed separately. In each workspace, open Claude in a tab and run `herdr-manager setup` there. That tab becomes the lead (`◆ lead`) and gets a `▸ work` tab for builds and reviews and a `? ask` tab for quick lookups. The lead plans and decides, work does the work, and reports come back as one `[worker-report]` line. [Herdr spaces](docs/guides/herdr-spaces.md) has the setup and daily use.
+
 ## Docs
 
-Guides: [quickstart](docs/guides/quickstart.md), [make it yours](docs/guides/make-it-yours.md), [the workflow](docs/guides/the-workflow.md), [automated reviewers](docs/guides/automated-reviewers.md).
+Guides: [quickstart](docs/guides/quickstart.md), [make it yours](docs/guides/make-it-yours.md), [the workflow](docs/guides/the-workflow.md), [herdr spaces](docs/guides/herdr-spaces.md), [automated reviewers](docs/guides/automated-reviewers.md).
 
 Reference: [engines](docs/reference/engines.md), [skills](docs/reference/skills.md), [agents](docs/reference/agents.md), [hooks](docs/reference/hooks.md), [managers](docs/reference/managers.md), [checklists and disciplines](docs/reference/checklists-and-disciplines.md), [configuration](docs/reference/configuration.md).
 

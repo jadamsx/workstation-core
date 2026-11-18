@@ -15,7 +15,7 @@ Each one is used when present; the setup works without it.
 - Playwright for Python: `shot` and `browser-login`, the two helpers that drive a browser.
 - Node.js (`npx`): starts the MCP servers in `claude/mcp.json`.
 - `gh` or `glab`: the source control CLI the `ship` engine and the push guard call, one per host.
-- `herdr`: `current-project` reads the pane's workspace name from it.
+- `herdr` (recommended): splits work between a lead, a work tab and an ask tab, see [herdr spaces](herdr-spaces.md). `current-project` also reads the pane's workspace name from it.
 
 ## Install
 

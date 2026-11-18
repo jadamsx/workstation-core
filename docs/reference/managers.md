@@ -35,4 +35,4 @@ Active only where `WORKSTATION_REPORTS` is set, so only in manager sessions. [Ho
 
 ## The watcher agent
 
-`launchd/dev.workstation.herdr-report-watch.plist` runs `herdr-report-watch` with `KeepAlive` and logs to `~/Library/Logs/herdr-report-watch.log`. It has `__ROOT__` and `__HOME__` placeholders for an installer that renders and loads launchd agents; the core installer does not, so without one run `herdr-report-watch` yourself.
+`launchd/dev.workstation.herdr-report-watch.plist` runs `herdr-report-watch` with `KeepAlive` and logs to `~/Library/Logs/herdr-report-watch.log`. `install.sh` renders it into `~/Library/LaunchAgents/` (`__ROOT__` is the install root, `__HOME__` your home) and loads it with `launchctl bootstrap`, on macOS when `herdr` is on `PATH`. Re-running replaces a changed plist and leaves an unchanged, loaded one alone. `install.sh uninstall` boots it out and removes the file. On other systems, run `herdr-report-watch` yourself.

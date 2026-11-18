@@ -307,6 +307,79 @@ class PluginCommand(Item):
         subprocess.run(self.cmd, check=True)
 
 
+class Agent(Item):
+    """A launchd agent: the plist rendered from ``src`` plus its loaded state."""
+
+    kind, verb = "agent", "install agent"
+
+    def __init__(self, dest: Path, src: Path) -> None:
+        super().__init__(dest)
+        self.src = src
+        self.label = dest.stem
+        self.target = f"gui/{os.getuid()}/{self.label}"
+
+    def body(self) -> str:
+        return (
+            self.src.read_text()
+            .replace("__HOME__", str(HOME))
+            .replace("__ROOT__", str(ROOT))
+        )
+
+    def loaded(self) -> bool:
+        return (
+            subprocess.run(
+                ["launchctl", "print", self.target], capture_output=True
+            ).returncode
+            == 0
+        )
+
+    def written(self) -> bool:
+        return self.dest.is_file() and self.dest.read_text() == self.body()
+
+    def state(self) -> str:
+        if not self.written():
+            return MISSING if not self.dest.exists() else DIFFERS
+        if not LIVE:
+            return OK
+        return OK if self.loaded() else MISSING
+
+    def apply(self, backup: Backup) -> None:
+        changed = not self.written()
+        if changed:
+            self.dest.parent.mkdir(parents=True, exist_ok=True)
+            self.dest.write_text(self.body())
+        if not LIVE:
+            return
+        (HOME / "Library/Logs").mkdir(parents=True, exist_ok=True)
+        if changed and self.loaded():
+            subprocess.run(["launchctl", "bootout", self.target], check=True)
+        if not self.loaded():
+            subprocess.run(
+                ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(self.dest)],
+                check=True,
+            )
+
+    def uninstall(self, restorable: set[str]) -> None:
+        if LIVE and self.loaded():
+            subprocess.run(["launchctl", "bootout", self.target], check=True)
+        self.dest.unlink(missing_ok=True)
+
+
+def agent_items() -> list[Item]:
+    if sys.platform != "darwin":
+        return []
+    if not shutil.which("herdr"):
+        print("herdr not on PATH: skipping the report watcher agent")
+        return []
+    return [
+        Agent(
+            HOME / "Library/LaunchAgents" / p.name,
+            p,
+        )
+        for p in sorted((ROOT / "launchd").glob("*.plist"))
+    ]
+
+
 def claude_links() -> list[Item]:
     items: list[Item] = []
     for kind in ("skills", "agents", "hooks"):
@@ -392,6 +465,7 @@ def plan() -> list[Item]:
         *([settings] if settings.base.exists() else []),
         *mcp,
         *bin_links(),
+        *agent_items(),
         *plugin_items(),
     ]
 
@@ -483,7 +557,9 @@ def cmd_uninstall(dry_run: bool) -> int:
     entries = restore_plan()
     restorable = {str(dest) for dest, _, _ in entries}
     for item in plan():
-        if item.state() == OK and (item.kind == "link" or str(item.dest) in restorable):
+        if item.state() == OK and (
+            item.kind in ("link", "agent") or str(item.dest) in restorable
+        ):
             print(f"{'would remove' if dry_run else 'remove':<20}{item.dest}")
             if not dry_run:
                 item.uninstall(restorable)
