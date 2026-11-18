@@ -731,6 +731,10 @@ class ManagerSendOwnsTest(unittest.TestCase):
     def test_legacy_plan_marks_owns(self) -> None:
         self.assertIn("legacy: true", self.send(self.plan(legacy=True)).read_text().splitlines())
 
+    def test_frontmatter_legacy_plan_without_decided_lines_marks_owns(self) -> None:
+        plan = "---\nstatus: approved\nlegacy: true\n---\n| N1 Old | builder |\n"
+        self.assertEqual(self.send(plan).read_text(), "node: N1\nlegacy: true\n")
+
     def test_missing_lines_write_nothing(self) -> None:
         with self.assertRaises(self.module.ReportsError):
             self.send(self.plan(notbuilding=False))

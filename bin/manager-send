@@ -76,6 +76,9 @@ def write_owns(text: str) -> None:
     if not plan.is_file() or not tree.is_dir():
         raise ReportsError(f"plan {plan} or worktree {tree} does not exist")
     note = plan.read_text()
+    if re.search(r"^legacy: true\s*$|^- size:.*\blegacy: true", note, re.M):
+        write_atomic(tree / ".owns", f"node: {node}\nlegacy: true\n")
+        return
     row = re.search(rf"^\|\s*{re.escape(node)}\b[^\n]*", note, re.M)
     if not row:
         raise ReportsError(f"node {node} is not in {plan}")
@@ -88,8 +91,7 @@ def write_owns(text: str) -> None:
         raise ReportsError(f"{plan} lists no Owns for {node}")
     if absent:
         raise ReportsError(f"{plan} has no {', '.join(sorted(absent))} line")
-    legacy = ["legacy: true"] if re.search(r"^- size:.*\blegacy: true", note, re.M) else []
-    write_atomic(tree / ".owns", "\n".join([f"node: {node}", f"owns: {', '.join(owns)}", *lines, *legacy]) + "\n")
+    write_atomic(tree / ".owns", "\n".join([f"node: {node}", f"owns: {', '.join(owns)}", *lines]) + "\n")
 
 
 def park(folder: Path, text: str, until: float) -> None:
