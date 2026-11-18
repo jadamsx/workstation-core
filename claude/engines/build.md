@@ -56,7 +56,7 @@ Discovered work that is not this ticket becomes a ticket draft under the note's 
 Each prompt gives the node spec (acceptance, `owns`, discipline, checklists), the worktree path and the repo, and says to apply `checklists/build.md` before reporting done. Each also carries:
 
 - **`.owns`**: `<worktree>/.owns` is read by every builder brief, and its lines are carried verbatim. Format, one line each: `node: <id>`, `owns: <path>, <path>`, then the plan's `Decided:`, `Standing:` and `Not-building:` lines. `manager-send` writes it.
-- **Size routing**: a node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other node to `builder`. Reviews of small diffs go to `cold-reviewer-small`. If a small agent fails, or its work fails review, rerun on the larger agent without asking.
+- **Size routing**: a node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other node to `builder`. If a small agent fails, or its work fails review, rerun on the larger agent without asking.
 - **Open findings**: a manager reports its open Blocker and Should-fix findings; the coordinator decides them before a change opens.
 - **Worktree safety**: never `git checkout --`, `restore` or `stash` with uncommitted changes; mutation checks run on a scratch copy; a file an agent says it rebuilt is re-reviewed and re-proven.
 - **For a v2 plan**, the FR ids the node delivers (its `covers` cell) with each FR's text. A node that would add, drop or change an FR is a decision node.

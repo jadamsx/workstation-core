@@ -11,6 +11,9 @@ Run the repo's own suite, a throwaway database or service, or the real endpoint,
 
 If a result differs from what you expected, treat it as a sign of a code bug and investigate before concluding the test is wrong. If the expectation was wrong, say so explicitly. Disclose a bug you found in code believed to work; an uncomfortable finding left out defeats the purpose.
 
+## No-browser mode
+When the caller says `no-browser`, rerun a finding's claim with the suite, a script or a request only; use no browser tool. Say `cannot rerun without a browser` when the claim needs one.
+
 ## Bug-list mode
 When the caller hands a list of bugs reported during the build, replay each repro on the merged result, not the branch it was found on. Run each one; do not reason about it.
 
@@ -18,4 +21,4 @@ When the caller hands a list of bugs reported during the build, replay each repr
 Bug-list mode: one line per bug, `fixed`, `still reproduces` or `cannot repro`, with the output tail. Otherwise:
 `PASS` or `FAIL`, the command, and the last 20 lines of output. One line on what the run does not cover.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.
