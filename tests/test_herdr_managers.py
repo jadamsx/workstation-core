@@ -28,7 +28,9 @@ case "$1 $2" in
     if [ -e "$FAKE_NOT_READY" ]; then echo '{"error":{"code":"agent_not_ready","message":"agent is blocked during startup and is not ready for prompts"}}' >&2; exit 1; fi
     echo '{"result":{}}' ;;
   "tab rename"|"tab close") echo '{"result":{}}' ;;
-  "agent send-keys") cp "$FAKE_READY" "$FAKE_PANE"; echo '{"result":{}}' ;;
+  "agent send-keys")
+    if [ -e "$FAKE_NEXT" ]; then cp "$FAKE_NEXT" "$FAKE_PANE"; rm "$FAKE_NEXT"; else cp "$FAKE_READY" "$FAKE_PANE"; fi
+    echo '{"result":{}}' ;;
   "pane read")
     n=$(cat "$FAKE_READS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_READS"
     if [ "$n" -ge "${FAKE_EMPTY_READS:-0}" ]; then cat "$FAKE_PANE"; fi ;;
@@ -70,6 +72,7 @@ class ReportsCase(unittest.TestCase):
             "FAKE_READS": str(base / "reads"),
             "FAKE_STARTS": str(base / "starts"),
             "FAKE_PROCS": str(base / "procs"),
+            "FAKE_NEXT": str(base / "next-pane"),
             "SHELL": "/bin/zsh",
             "AGENT_START_RETRY_SECONDS": "0.05",
             "FAKE_WAIT_FAIL": str(base / "wait-fail"),
@@ -314,6 +317,19 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(len([c for c in self.calls() if c.startswith("agent start")]), 1)
         self.assertIn("agent send-keys w1:p4 Down Enter", self.calls())
+        self.assertTrue((self.space / "beta/manager.json").exists())
+
+    def test_trust_then_imports_dialog_are_both_answered_and_records_the_manager(self) -> None:
+        self.trust_dialog()
+        (self.root.parent / "next-pane").write_text(
+            "Allow external CLAUDE.md file imports?\n ❯ No, disable external imports\n   Yes, allow external imports\n Enter to confirm · Esc to cancel\n"
+        )
+        inside = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(inside.rmdir)
+        r = self.start_in(inside, self.root.parent)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        sent = [c for c in self.calls() if c.startswith("agent send-keys")]
+        self.assertEqual(sent, ["agent send-keys w1:p4 Enter", "agent send-keys w1:p4 Down Enter"])
         self.assertTrue((self.space / "beta/manager.json").exists())
 
     def test_blocked_start_without_a_trust_dialog_fails_with_the_pane_tail_and_closes_the_tab(self) -> None:

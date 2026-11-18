@@ -29,6 +29,8 @@ BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief
 SHELL_TIMEOUT = 20
 STARTUP_TIMEOUT = 20
 START_RETRIES = 3
+IMPORTS_DIALOG = "Allow external CLAUDE.md file imports?"
+STARTUP_DIALOGS = (TRUST_DIALOG, IMPORTS_DIALOG)
 SESSION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -47,23 +49,33 @@ def register() -> int:
 
 
 def accept_trust_dialog(pane: str, directory: Path, blocked: bool = False) -> None:
-    """Answer Claude Code's folder-trust prompt, but only for folders under the coordinator's own directory."""
+    """Answer Claude Code's startup prompts, but only for folders under the coordinator's own directory."""
     if blocked:
         text = pane_text(pane)
-        if TRUST_DIALOG not in text:
+        if not any(dialog in text for dialog in STARTUP_DIALOGS):
             tail = "\n".join(text.splitlines()[-5:])
-            raise ReportsError(f"the agent in pane {pane} is blocked during startup and no trust dialog is visible:\n{tail}")
-    else:
-        text = wait_for_pane(pane, lambda t: TRUST_DIALOG in t or INPUT_BOX.search(t), STARTUP_TIMEOUT)
-        if text is None or TRUST_DIALOG not in text:
-            return
+            raise ReportsError(f"the agent in pane {pane} is blocked during startup and no startup dialog is visible:\n{tail}")
     cwd = Path.cwd().resolve()
-    if directory != cwd and cwd not in directory.parents:
-        raise ReportsError(f"Claude Code does not trust {directory} and it is outside {cwd}; run claude there once to trust it")
-    keys = ["Enter"] if re.search(r"❯\s*(1\.\s*)?Yes", text) else ["Down", "Enter"]
-    herdr("agent", "send-keys", pane, *keys)
-    if wait_for_pane(pane, INPUT_BOX.search, STARTUP_TIMEOUT) is None:
-        raise ReportsError(f"the input box in pane {pane} never appeared after trusting {directory}")
+    answered: set[str] = set()
+    deadline = time.monotonic() + STARTUP_TIMEOUT
+    while True:
+        text = pane_text(pane)
+        dialog = next((d for d in STARTUP_DIALOGS if d in text and d not in answered), None)
+        if dialog is not None:
+            if directory != cwd and cwd not in directory.parents:
+                raise ReportsError(f"Claude Code does not trust {directory} and it is outside {cwd}; run claude there once to trust it")
+            shown = text[text.index(dialog):]
+            keys = ["Enter"] if re.search(r"❯\s*(1\.\s*)?Yes", shown) else ["Down", "Enter"]
+            herdr("agent", "send-keys", pane, *keys)
+            answered.add(dialog)
+        elif INPUT_BOX.search(text):
+            return
+        elif time.monotonic() >= deadline:
+            break
+        time.sleep(0.2)
+    if not answered:
+        return
+    raise ReportsError(f"the input box in pane {pane} never appeared after answering startup prompts for {directory}")
 
 
 def agent_start(name: str, pane: str, claude_args: list[str]) -> bool:
