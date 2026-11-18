@@ -7,6 +7,8 @@ cat > "$WORKSTATION_REPORTS/.draft"
 mv "$WORKSTATION_REPORTS/.draft" "$WORKSTATION_REPORTS/result-$(date +%Y%m%d-%H%M%S).md"
 ```
 
+Write a report only when the job is done or you need a decision, never progress updates. While your subagents run, just stop and wait; their completion wakes you.
+
 A watcher notices the file and tells the coordinator; you do nothing else to deliver it.
 
 The first line of the file must be the Status line, exactly as below, then the body:

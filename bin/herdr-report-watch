@@ -9,7 +9,8 @@ that has nothing unsent produces `[worker-report] <name> exited without a report
 line is `Status: done` also closes that manager's tab (as `manager-close` does) and silences the exited line; a
 `Status: decision` report leaves the tab open. A standing manager (`"standing": true` in manager.json, the `work`
 tab) is never closed: once a `Status: done` report is delivered and its pane is idle, the watcher sends it `/clear`
-with `herdr agent prompt`, once per report. A manager idle for 15 minutes without writing a report, whose last
+with `herdr agent prompt`, once per report. A standing manager is idle-checked only after its pane was seen working
+since its newest report or the last `/clear`. A manager idle for 15 minutes without writing a report, whose last
 message does not start with `WAITING:`, produces `[worker-report] <name> idle, no report` plus the last lines of its
 pane, once per idle spell.
 
@@ -53,6 +54,8 @@ class Watcher:
             self.state.update(json.loads(self.state_file.read_text()))
         self.retry_at: dict[str, float] = {}
         self.spells: dict[str, dict] = {}
+        self.worked: dict[str, int] = {}
+        self.clearing: set[str] = set()
 
     def log(self, message: str) -> None:
         print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}", flush=True)
@@ -81,6 +84,14 @@ class Watcher:
             self.log(f"closed {manager.name}")
         except (ReportsError, subprocess.CalledProcessError) as err:
             self.log(f"could not close {manager.name}: {err}")
+
+    def note_work(self, pane: str, status: str, results: int) -> None:
+        """Remember that a standing pane worked after its newest report, ignoring the work of a /clear we sent."""
+        if pane in self.clearing:
+            if status in IDLE_STATES:
+                self.clearing.discard(pane)
+        elif status not in IDLE_STATES:
+            self.worked[pane] = results
 
     def track_idle(self, pane: str, status: str, results: int, now: float) -> dict:
         """Per-pane idle bookkeeping: when the current idle spell began and whether a report came with it."""
@@ -131,9 +142,15 @@ class Watcher:
                     if panes is None:
                         continue
                     done = bool(results) and is_done(results[-1])
-                    if info.get("standing") and done and str(results[-1]) not in self.state["cleared"] and panes.get(pane) in IDLE_STATES:
-                        self.deliver(str(results[-1]), pane, "/clear", "cleared", now)
-                    if done or (info.get("standing") and not results):
+                    standing = bool(info.get("standing"))
+                    if standing and pane in panes:
+                        self.note_work(pane, panes[pane], len(results))
+                    if standing and done and str(results[-1]) not in self.state["cleared"] and panes.get(pane) in IDLE_STATES:
+                        if self.deliver(str(results[-1]), pane, "/clear", "cleared", now):
+                            self.worked.pop(pane, None)
+                            self.clearing.add(pane)
+                    resumed = standing and self.worked.get(pane) == len(results)
+                    if (done or (standing and not results)) and not resumed:
                         continue
                     if pane not in panes:
                         self.deliver(pane, coordinator, f"[worker-report] {manager.name} exited without a report", "exited", now)

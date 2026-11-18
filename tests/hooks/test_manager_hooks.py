@@ -3,9 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parents[2] / "claude/hooks"
@@ -108,51 +106,6 @@ class ReportFormatGuardTest(ReportsCase):
             None,
         )
         self.assertEqual(result.returncode, 0)
-
-
-class ReportStopGuardTest(ReportsCase):
-    def transcript(self, prompt_at: datetime, assistant: str = "All done.") -> Path:
-        entries = [
-            {"type": "user", "timestamp": (prompt_at - timedelta(hours=1)).isoformat(), "message": {"content": "old"}},
-            {"type": "user", "timestamp": prompt_at.isoformat(), "message": {"content": "do it"}},
-            {
-                "type": "user",
-                "timestamp": prompt_at.isoformat(),
-                "message": {"content": [{"type": "tool_result", "content": "ok"}]},
-            },
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": assistant}]}},
-        ]
-        path = self.base / "transcript.jsonl"
-        path.write_text("\n".join(json.dumps(e) for e in entries))
-        return path
-
-    def stop(self, transcript: Path, **extra: object) -> subprocess.CompletedProcess:
-        return run_hook("report-stop-guard.py", {"transcript_path": str(transcript), **extra}, self.reports)
-
-    def test_silent_stop_is_blocked_once_with_the_instruction(self) -> None:
-        path = self.transcript(datetime.now(timezone.utc) - timedelta(minutes=5))
-        result = self.stop(path)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Write your report (Status: decision or done) or reply WAITING: <what will wake you>.", result.stderr)
-        self.assertEqual(self.stop(path, stop_hook_active=True).returncode, 0)
-
-    def test_report_written_this_turn_or_waiting_message_passes(self) -> None:
-        prompt_at = datetime.now(timezone.utc) - timedelta(minutes=5)
-        old = self.reports / "result-0.md"
-        old.write_text("Status: done\n")
-        os.utime(old, (time.time() - 3600, time.time() - 3600))
-        self.assertEqual(self.stop(self.transcript(prompt_at)).returncode, 2)
-        (self.reports / "result-1.md").write_text("Status: decision\nq\n")
-        self.assertEqual(self.stop(self.transcript(prompt_at)).returncode, 0)
-        (self.reports / "result-1.md").unlink()
-        self.assertEqual(self.stop(self.transcript(prompt_at, "WAITING: the review round")).returncode, 0)
-        self.assertEqual(self.stop(self.transcript(prompt_at), last_assistant_message="WAITING: a reply").returncode, 0)
-
-    def test_unreadable_transcript_and_non_manager_sessions_pass(self) -> None:
-        self.assertEqual(self.stop(self.base / "missing.jsonl").returncode, 0)
-        path = self.transcript(datetime.now(timezone.utc) - timedelta(minutes=5))
-        plain = run_hook("report-stop-guard.py", {"transcript_path": str(path)}, None)
-        self.assertEqual(plain.returncode, 0)
 
 
 class ManagerBriefInjectTest(ReportsCase):

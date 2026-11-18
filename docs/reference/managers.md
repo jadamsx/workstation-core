@@ -22,7 +22,7 @@ Delegated work runs inside [herdr](https://herdr.dev). The coordinator is the ma
 A manager reports by writing `result-<timestamp>.md` into `$WORKSTATION_REPORTS`. The first line is `Status: decision` (the tab stays open) or `Status: done` (the watcher delivers it, then closes the tab, or sends `/clear` to a standing manager once its pane is idle). The watcher sends the coordinator `[worker-report] <path>` once per file, retrying every 15 seconds while the coordinator is blocked. It also sends:
 
 - `[worker-report] <name> exited without a report`, once per pane, when a manager's pane is gone.
-- `[worker-report] <name> idle, no report` with the last lines of the pane, once per idle spell, when a manager has been idle for 15 minutes without writing a report and its last message does not start with `WAITING:`. A manager whose newest report is `Status: done`, and a standing manager with no report yet, are never reported idle.
+- `[worker-report] <name> idle, no report` with the last lines of the pane, once per idle spell, when a manager has been idle for 15 minutes without writing a report and its last message does not start with `WAITING:`. A manager whose newest report is `Status: done` is never reported idle. A standing manager is reported only if its pane was seen working after its newest report (or after the last `/clear` the watcher sent).
 
 State is kept in `<root>/.watch-state.json`. The root is `WORKSTATION_REPORTS_ROOT`, default `~/.local/state/workstation/reports`.
 
@@ -31,7 +31,6 @@ State is kept in `<root>/.watch-state.json`. The root is `WORKSTATION_REPORTS_RO
 Active only where `WORKSTATION_REPORTS` is set, so only in manager sessions. [Hooks](hooks.md) lists their events.
 
 - `report-format-guard.py` blocks a file in the reports folder that is not named `result-*.md` (or the `.draft` that is moved to such a name) or whose first line is not a Status line, and prints the correct command.
-- `report-stop-guard.py` blocks one stop when the turn wrote no report and the last message does not start with `WAITING:`.
 - `manager-brief-inject.py` returns `claude/templates/manager-brief.md` after a compact or clear.
 
 ## The watcher agent

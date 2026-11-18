@@ -558,6 +558,38 @@ class IdleTests(ReportsCase):
         w.scan(20000)
         self.assertEqual(self.idle_lines(), [])
 
+    def standing(self) -> Path:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
+        return folder
+
+    def test_standing_tab_that_works_after_a_done_report_then_idles_is_reported_once(self) -> None:
+        folder = self.standing()
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        w = watch.Watcher(self.root)
+        w.scan(0)
+        w.scan(10)
+        self.status("working")
+        w.scan(100)
+        self.status("idle")
+        w.scan(200)
+        w.scan(1100)
+        w.scan(5000)
+        self.assertEqual(len(self.idle_lines()), 1)
+
+    def test_standing_tab_cleared_and_never_working_is_not_reported(self) -> None:
+        folder = self.standing()
+        (folder / "result-1.md").write_text("Status: done\nx\n")
+        w = watch.Watcher(self.root)
+        self.status("working")
+        w.scan(0)
+        self.status("idle")
+        w.scan(10)
+        self.assertEqual([p for p in self.prompts() if p.endswith("/clear")], ["agent prompt w1:p4 /clear"])
+        w.scan(20)
+        w.scan(5000)
+        self.assertEqual(self.idle_lines(), [])
+
     def test_working_manager_is_never_reported(self) -> None:
         self.manager()
         self.status("working")
