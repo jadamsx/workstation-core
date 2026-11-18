@@ -68,6 +68,17 @@ def write_atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def work_enabled(space: Path) -> bool:
+    """False only when the space's setup.json says `"work": false`; a missing file means the work tab is on."""
+    path = space / "setup.json"
+    if not path.exists():
+        return True
+    try:
+        return bool(json.loads(path.read_text()).get("work", True))
+    except (ValueError, AttributeError) as err:
+        raise ReportsError(f"corrupt {path}: {err}") from err
+
+
 def pane_states() -> dict[str, str] | None:
     """Agent status by pane id as herdr reports it now, or None when herdr cannot be asked."""
     try:

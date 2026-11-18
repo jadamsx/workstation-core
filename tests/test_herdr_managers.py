@@ -381,6 +381,9 @@ class ManagerTests(ReportsCase):
         self.assertNotIn("keep", json.loads((folder / "manager.json").read_text()))
         self.assertEqual(self.bin("herdr-manager", "keep", "nope").returncode, 2)
 
+    def bin_setup(self, *flags: str) -> subprocess.CompletedProcess:
+        return subprocess.run([str(REPO / "bin/herdr-manager"), "setup", *flags], capture_output=True, text=True, cwd=self.root.parent)
+
     def setup_run(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
         return subprocess.run([str(REPO / "bin/herdr-manager"), "setup"], capture_output=True, text=True, cwd=cwd or self.root.parent)
 
@@ -429,6 +432,27 @@ class ManagerTests(ReportsCase):
         self.setup_run()
         self.assertEqual(len(self.creates()), 4)
         self.assertIn("--label ? ask", self.creates()[-1])
+
+    def test_setup_no_work_skips_work_keeps_ask_and_is_remembered_until_work_flag(self) -> None:
+        r = self.bin_setup("--no-work")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads((self.space / "setup.json").read_text()), {"work": False})
+        self.assertEqual(len(self.creates()), 1)
+        self.assertIn("--label ? ask", self.creates()[0])
+        self.assertFalse((self.space / "work").exists())
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
+        self.setup_run()
+        self.assertEqual(len(self.creates()), 1)
+        r = self.bin_setup("--work")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads((self.space / "setup.json").read_text()), {"work": True})
+        self.assertEqual(len(self.creates()), 2)
+        self.assertIn("--label ▸ work", self.creates()[-1])
+
+    def test_setup_with_corrupt_setup_json_fails(self) -> None:
+        self.space.mkdir(parents=True, exist_ok=True)
+        (self.space / "setup.json").write_text("{")
+        self.assertEqual(self.setup_run().returncode, 2)
 
     def test_start_opens_a_sonnet_tab_with_the_brief_and_records_it(self) -> None:
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")

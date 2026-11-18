@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Usage: herdr-manager register | setup | start <name> [--resume <session-id>] [--dir <path>] | list | keep <name> [--off]
+"""Usage: herdr-manager register | setup [--no-work | --work] | start <name> [--resume <session-id>] [--dir <path>] | list | keep <name> [--off]
 
 Three-tier work: the coordinator session registers its pane, each manager runs in its own tab of the same
 herdr space, and herdr-report-watch carries the manager's result files to the coordinator.
@@ -8,6 +8,8 @@ register  run in the coordinator's pane and renames its tab `◆ lead`; re-run a
           the new pane.
 setup     run in the coordinator's pane: registers it, then opens a standing `▸ work` manager and a `? ask` tab
           (Haiku, read-only helper) unless they are already live. Re-run it to repair a missing tab.
+          `--no-work` stores {"work": false} in the space's setup.json so setup never starts work (the space
+          uses named managers or runs in place); `--work` stores true again. Plain setup keeps the stored choice.
 start     opens a tab named `▸ <name>` running `claude --model sonnet` with the manager brief, and
           WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into.
 keep      sets `"keep": true` in the manager's manager.json (`--off` removes it): the watcher then never closes
@@ -26,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, write_atomic,
+    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, work_enabled, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -138,13 +140,16 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
     return 0
 
 
-def setup() -> int:
-    """Register this pane as the lead, then open the standing work and ask tabs that are not already there."""
+def setup(work: bool | None) -> int:
+    """Register this pane as the lead, then open the standing work (unless the space opted out) and ask tabs that are not already there."""
     register()
     directory = Path.cwd()
-    manifest = space_dir() / "work" / "manager.json"
+    space = space_dir()
+    if work is not None:
+        write_atomic(space / "setup.json", json.dumps({"work": work}))
+    manifest = space / "work" / "manager.json"
     info = json.loads(manifest.read_text()) if manifest.exists() else {}
-    if info.get("closed") or info.get("pane_id") not in (live_panes() or set()):
+    if work_enabled(space) and (info.get("closed") or info.get("pane_id") not in (live_panes() or set())):
         start("work", None, str(directory), standing=True)
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
     if not any(tab.get("label") == ASK_TAB for tab in tabs):
@@ -184,7 +189,10 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="herdr-manager")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("register")
-    sub.add_parser("setup")
+    setup_parser = sub.add_parser("setup")
+    choice = setup_parser.add_mutually_exclusive_group()
+    choice.add_argument("--no-work", dest="work", action="store_false", default=None)
+    choice.add_argument("--work", dest="work", action="store_true")
     sub.add_parser("list")
     starter = sub.add_parser("start")
     starter.add_argument("name")
@@ -198,7 +206,7 @@ def main(argv: list[str]) -> int:
         if args.command == "register":
             return register()
         if args.command == "setup":
-            return setup()
+            return setup(args.work)
         if args.command == "start":
             return start(args.name, args.resume, args.dir)
         if args.command == "keep":

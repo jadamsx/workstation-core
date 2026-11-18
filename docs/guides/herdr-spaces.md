@@ -20,7 +20,7 @@ Once per space, open Claude in the tab you want as lead and run:
 herdr-manager setup
 ```
 
-It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and leaves your own tabs after those. Run it again to repair a missing tab.
+It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and leaves your own tabs after those. Run it again to repair a missing tab. `herdr-manager setup --no-work` skips `▸ work` in that space and remembers the choice (`--work` undoes it), which suits a space that uses kept, named per-project managers.
 
 ## Daily use
 

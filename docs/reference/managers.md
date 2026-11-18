@@ -6,7 +6,7 @@ Delegated work runs inside [herdr](https://herdr.dev). The coordinator is the ma
 
 | Command | What it does |
 | --- | --- |
-| `herdr-manager setup` | Run in the lead's pane: registers it, then opens the standing `▸ work` manager and the `? ask` tab if they are not live. Safe to re-run, so it also repairs a missing tab |
+| `herdr-manager setup [--no-work \| --work]` | Run in the lead's pane: registers it, then opens the standing `▸ work` manager and the `? ask` tab if they are not live. Safe to re-run, so it also repairs a missing tab. `--no-work` writes `{"work": false}` to the space's `setup.json` and setup then never starts work; `--work` turns it back on |
 | `herdr-manager register` | Run in the coordinator's pane. Saves it as the coordinator of its workspace and renames its tab `◆ lead`. Run again after a handoff and reports follow the new pane |
 | `herdr-manager start <name> [--resume <session-id>] [--dir <path>]` | Opens a `▸ <name>` manager tab running Sonnet with the manager brief. Refuses while a manager of that name is live and not closed |
 | `manager-start <name> --prompt "<text>" [--dir <path>]` | Opens an extra manager tab for a parallel stream and sends the prompt once the agent is ready |
