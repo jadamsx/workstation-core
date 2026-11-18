@@ -261,6 +261,47 @@ class PayloadTest(unittest.TestCase):
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
 
+    def test_ask_role_blocks_file_writing_bash(self) -> None:
+        for command in (
+            "sed -i s/a/b/ f.txt",
+            "sed -n -i p f.txt",
+            "echo x | tee f.txt",
+            "echo x > f.txt",
+            "echo x >> f.txt",
+            "echo x 2> err.txt",
+            "cat <<EOF > f.txt\nx\nEOF",
+            "git commit -m x",
+            "git add .",
+            "git push",
+            "git -C repo checkout main",
+            "git reset --hard",
+            "git rm a",
+            "git mv a b",
+            "git clean -fd",
+            "git stash",
+            "git apply p.diff",
+            "git merge x",
+            "git rebase x",
+            "git cherry-pick x",
+            "git status && rm a",
+            "mv a b",
+            "cp a b",
+            "mkdir d",
+            "touch a",
+            "chmod +x a",
+            "find . -name x -delete",
+            "find . -exec rm {} ;",
+            "curl -X POST http://h",
+            "curl -X DELETE http://h",
+            "gh api -X PATCH repos/o/r",
+            "gh pr create",
+            "gh pr merge 1",
+            "gh issue comment 1",
+            "gh pr edit 1",
+            "gh issue close 1",
+        ):
+            self.assertEqual(self.ask_code("Bash", {"command": command}), 2, command)
+
     def test_ask_role_blocks_non_readonly_agents_and_edits(self) -> None:
         for agent in ("builder", "builder-small", "rebase-resolver", "general-purpose", "explorer"):
             self.assertEqual(self.ask_code("Agent", {"subagent_type": agent}), 2, agent)
@@ -281,6 +322,23 @@ class PayloadTest(unittest.TestCase):
             "herdr agent list",
             "git log -3",
             "gh pr list",
+            "git status",
+            "git diff --stat",
+            "git show HEAD",
+            "git branch -a",
+            "git -C repo log --oneline",
+            "rg foo src",
+            "grep '>' file",
+            "grep -rn \"a > b\" .",
+            "cat a | head -5",
+            "tail -n 3 a",
+            "ls -la 2>/dev/null",
+            "ls > /dev/null 2>&1",
+            "wc -l a",
+            "find . -name x",
+            "gh pr view 1",
+            "glab mr list",
+            "curl -s http://h",
         ):
             self.assertEqual(self.ask_code("Bash", {"command": command}), 0, command)
         for agent in ("code-locator", "researcher", "run-digest", "web-fetch", "Explore"):

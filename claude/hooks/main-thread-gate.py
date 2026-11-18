@@ -97,6 +97,17 @@ ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 ASK_HERDR = re.compile(
     r"herdr\s+(?:pane\s+(?:read|list)|tab\s+list|workspace\s+(?:list|get)|agent\s+list)\b"
 )
+ASK_REDIRECT = re.compile(r"(?<![<>=-])>>?(?!&)\s*(?!/dev/null(?![\w/.]))\S")
+ASK_WRITE_HEADS = {"tee", "rm", "mv", "cp", "mkdir", "touch", "chmod", "ln", "rmdir"}
+ASK_WRITE_SUBS = {
+    "git": {
+        "commit", "add", "push", "checkout", "switch", "reset", "rm", "mv", "clean",
+        "stash", "apply", "merge", "rebase", "cherry-pick", "restore", "pull", "fetch",
+    },
+    "gh": {"create", "merge", "comment", "edit", "close", "delete", "reopen", "review"},
+    "glab": {"create", "merge", "note", "update", "close", "delete", "reopen"},
+}
+ASK_FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir"}
 ASK_AGENTS = {
     "code-locator",
     "researcher",
@@ -108,7 +119,8 @@ ASK_AGENTS = {
 }
 ASK_ALLOWED = (
     "Allowed in the ask tab: read-only agents (" + ", ".join(sorted(ASK_AGENTS)) + "), "
-    "Bash that does not name herdr or manager- except `herdr pane read|list`, `herdr tab list`, "
+    "Bash that writes no files (no redirects to files, sed -i, tee, rm, mv, cp, git or gh writes) "
+    "and does not name herdr or manager- except `herdr pane read|list`, `herdr tab list`, "
     "`herdr workspace list|get`, `herdr agent list`. No file edits, no SendMessage. Point the human to the lead tab."
 )
 
@@ -209,6 +221,39 @@ def names_blocked_herdr(command: str) -> bool:
     )
 
 
+def writes_files(tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    head, rest = Path(tokens[0]).name, tokens[1:]
+    if head in ASK_WRITE_HEADS:
+        return True
+    if head == "sed":
+        return any(t.startswith("--in-place") or re.match(r"-[a-zA-Z]*i", t) for t in rest)
+    if head == "find":
+        return any(t in ASK_FIND_WRITES for t in rest)
+    if head in ("curl", "gh", "glab") and any(
+        t in ("-X", "--request") and nxt.upper() not in ("GET", "HEAD")
+        for t, nxt in zip(rest, rest[1:])
+    ):
+        return True
+    if head == "git":
+        args = iter(rest)
+        for arg in args:
+            if arg in ("-C", "-c"):
+                next(args, None)
+            elif not arg.startswith("-"):
+                return arg in ASK_WRITE_SUBS["git"]
+        return False
+    return bool(ASK_WRITE_SUBS.get(head, set()) & set(rest[:3]))
+
+
+def ask_writes_files(command: str) -> bool:
+    bare = QUOTED.sub('""', command)
+    return bool(ASK_REDIRECT.search(bare)) or any(
+        writes_files(command_head(seg.strip())) for seg in SEGMENT_SPLIT.split(bare)
+    )
+
+
 def ask_block_reason(payload: dict) -> str | None:
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     if tool in EDIT_TOOLS:
@@ -219,6 +264,8 @@ def ask_block_reason(payload: dict) -> str | None:
         return f"The ask tab only spawns read-only agents. {ASK_ALLOWED}"
     if tool == "Bash" and names_blocked_herdr(tool_input.get("command") or ""):
         return f"The ask tab never prompts, types into or manages other tabs. {ASK_ALLOWED}"
+    if tool == "Bash" and ask_writes_files(tool_input.get("command") or ""):
+        return f"The ask tab is read-only and runs no file-writing commands. {ASK_ALLOWED}"
     return None
 
 
