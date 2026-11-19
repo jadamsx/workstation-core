@@ -196,7 +196,7 @@ class ParkedResumeTests(ReportsCase):
     def test_resumes_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
         now = time.time()
         self.park(("alpha", "/plan-task a", now + 3600), ("beta", "/plan-task b", now + 3600))
-        self.usage(95, now + 3600)
+        self.usage(99, now + 3600)
         watcher = watch.Watcher(self.root)
         watcher.scan(0)
         self.assertEqual(self.prompts(), [])
@@ -216,7 +216,7 @@ class ParkedResumeTests(ReportsCase):
     def test_an_override_releases_parked_jobs(self) -> None:
         now = time.time()
         self.park(("alpha", "/plan-task a", now + 3600))
-        self.usage(95, now + 3600)
+        self.usage(99, now + 3600)
         watcher = watch.Watcher(self.root)
         watcher.scan(0)
         self.assertEqual(self.left(), ["alpha"])
@@ -460,10 +460,10 @@ class ManagerTests(ReportsCase):
 
     def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
         folder = self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         r = self.bin("manager-send", "alpha", "/build plan.md node N1 worktree /tmp")
         self.assertEqual(r.returncode, 2, r.stderr)
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         r = self.bin("manager-send", "alpha", "/plan-task x")
         self.assertEqual((r.returncode, r.stdout.count("\n"), r.stdout.startswith("parked until ")), (0, 1, True))
         self.assertEqual(self.prompts(), [])
@@ -474,7 +474,7 @@ class ManagerTests(ReportsCase):
 
     def test_concurrent_parks_keep_every_job(self) -> None:
         self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         procs = [
             subprocess.Popen([str(REPO / "bin/manager-send"), "alpha", f"/plan-task {n}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             for n in range(12)
@@ -486,7 +486,7 @@ class ManagerTests(ReportsCase):
 
     def test_the_override_lifts_the_park(self) -> None:
         self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         os.environ["USAGE_GATE"] = "off"
         self.addCleanup(os.environ.pop, "USAGE_GATE", None)
         self.assertEqual(self.bin("manager-send", "alpha", "/plan-task x").returncode, 0)
