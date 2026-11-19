@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Block `git push` until the checks that would fail CI have passed locally.
 
-Runs pre-commit on the diff, then inspects the branch's open PR or MR (`gh` for GitHub, `glab` for
-GitLab): a missing ticket key when the hooks.d ``change`` rules ask for one, leftover template placeholder text,
+Runs pre-commit on the diff, then inspects the branch's open change (`gh` or `glab`): a missing ticket key
+when the hooks.d ``change`` rules ask for one, leftover template placeholder text,
 and a change that is already approved, because pushing resets approval and re-runs review and CI.
 """
 

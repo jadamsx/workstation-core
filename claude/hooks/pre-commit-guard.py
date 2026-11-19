@@ -329,7 +329,7 @@ def check_change(
         missing = [h for h in headings if h.lower() not in description.lower()]
         if missing:
             errors.append(
-                "Change description must follow the repo's PR/MR template. Missing sections: "
+                "Change description must follow the repo's change template. Missing sections: "
                 + ", ".join(missing)
             )
     return errors
