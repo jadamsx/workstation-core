@@ -28,7 +28,22 @@
       "Bash(git config*)",
       "Bash(git clone*)",
       "Bash(workstation-build *)",
-      "Bash(~/.local/share/workstation/build/install.sh *)"
+      "Bash(~/.local/share/workstation/build/install.sh *)",
+      "Bash(git -C * worktree*)",
+      "Bash(git -C * fetch*)",
+      "Bash(git -C * pull*)",
+      "Bash(git -C * push*)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * add*)",
+      "Bash(git -C * commit*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)"
     ],
     "deny": [
       "Bash(git commit --no-verify*)",
@@ -228,7 +243,15 @@
       "git config*",
       "git worktree*",
       "workstation-build *",
-      "~/.local/share/workstation/build/install.sh *"
+      "~/.local/share/workstation/build/install.sh *",
+      "git -C * worktree*",
+      "git -C * fetch*",
+      "git -C * pull*",
+      "git -C * push*",
+      "git -C * ls-remote*",
+      "git -C * clone*",
+      "git -C * init*",
+      "git -C * config*"
     ],
     "filesystem": {
       "allowWrite": [

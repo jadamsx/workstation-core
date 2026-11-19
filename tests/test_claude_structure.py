@@ -164,7 +164,7 @@ class Intensity(unittest.TestCase):
 
 
 TEXT_ONLY_AGENTS = {"comprehension-cutter", "change-reader", "done-check", "code-locator", "caller-mapper", "researcher"}
-UNSANDBOXED = ["git init*", "git config*", "git worktree*", "git clone*", "launchctl *", "workstation-build *", "~/.local/share/workstation/build/install.sh *"]
+UNSANDBOXED = ["git init*", "git config*", "git worktree*", "git clone*", "launchctl *", "workstation-build *", "~/.local/share/workstation/build/install.sh *", "git -C * worktree*", "git -C * fetch*"]
 
 
 class SandboxAndToolsTests(unittest.TestCase):
@@ -174,6 +174,8 @@ class SandboxAndToolsTests(unittest.TestCase):
         settings = json.loads((CLAUDE / "settings.base.json").read_text())
         for command in UNSANDBOXED:
             self.assertIn(command, settings["sandbox"]["excludedCommands"])
+            self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
+        for command in ("git add*", "git commit*", "git status*", "git diff*", "git log*"):
             self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
         self.assertIn("~/.local/share/workstation", settings["sandbox"]["filesystem"]["allowWrite"])
 
