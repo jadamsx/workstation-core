@@ -763,6 +763,10 @@ class ReportDoneCheckTest(unittest.TestCase):
         for line in ("Done-check: pass", "Done-check: deviation 65b0c2d"):
             self.assertEqual(self.write(f"Status: done\nbluf\n{line}\n").returncode, 0, line)
 
+    def test_done_check_n_a_passes_only_in_its_exact_form(self) -> None:
+        self.assertEqual(self.write("Status: done\nbluf\nDone-check: n/a (no diff)\n").returncode, 0)
+        self.assertEqual(self.write("Status: done\nbluf\nDone-check: n/a\n").returncode, 2)
+
     def test_done_check_deviation_needs_a_sha(self) -> None:
         self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation\n").returncode, 2)
 
