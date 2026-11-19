@@ -33,7 +33,7 @@ State is kept in `<root>/.watch-state.json`. The root is `WORKSTATION_REPORTS_RO
 Active only where `WORKSTATION_REPORTS` is set, so only in manager sessions. [Hooks](hooks.md) lists their events.
 
 - `report-format-guard.py` blocks a file in the reports folder that is not named `result-*.md` (or the `.draft` that is moved to such a name) or whose first line is not a Status line, and prints the correct command.
-- `manager-brief-inject.py` returns `claude/templates/manager-brief.md` after a compact or clear, and on every session start records `session_id` in manager.json.
+- `manager-brief-inject.py` returns `claude/templates/manager-brief.md` after a compact or clear, and on every session start records `session_id` in manager.json. A lead (`WORKSTATION_ROLE=lead`) gets `claude/templates/lead-brief.md` on every source. Manager and work tabs start with `WORKSTATION_ROLE=work`.
 
 ## The watcher agent
 

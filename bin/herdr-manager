@@ -170,7 +170,7 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
     directory = Path(directory).resolve()
     role = name if name == "work" else "manager"
     claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), *mcp_args(role, reports), "--append-system-prompt-file", str(BRIEF)]
-    pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}"], directory, claude_args)
+    pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}", "WORKSTATION_ROLE=work"], directory, claude_args)
     carried = {k: True for k in ("standing", "keep") if previous.get(k)}
     session = latest_session(reports)
     session = session if session not in (None, previous.get("session_id")) else resume

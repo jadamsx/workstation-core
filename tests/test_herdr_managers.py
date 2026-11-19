@@ -608,7 +608,7 @@ class ManagerTests(ReportsCase):
         self.assertEqual((self.space / "coordinator").read_text().strip(), "w1:p1")
         self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
         work, ask = self.creates()
-        self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
+        self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'} --env WORKSTATION_ROLE=work", work)
         self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true --env DISABLE_UPDATE_PROMPT=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
         self.assertIn("-- --model sonnet --strict-mcp-config --mcp-config", starts[0])
@@ -709,7 +709,7 @@ class ManagerTests(ReportsCase):
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
         self.assertEqual(r.returncode, 0, r.stderr)
         tab = next(c for c in self.calls() if c.startswith("tab create"))
-        self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
+        self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'} --env WORKSTATION_ROLE=work", tab)
         self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
         for item in herdr_reports.NO_STDIN_ENV:
             self.assertIn(f"--env {item}", tab)
