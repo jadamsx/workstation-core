@@ -353,6 +353,15 @@ class RmGuardTest(unittest.TestCase):
             self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 0, cmd)
         self.assertEqual(self.bash("npm install", env=env).returncode, 0)
 
+    def test_sandbox_escape_matches_tilde_and_absolute_paths(self) -> None:
+        self.settings.write_text(
+            json.dumps({"sandbox": {"excludedCommands": ["~/build/install.sh *"]}})
+        )
+        env = self.sandbox_env
+        for cmd in ["~/build/install.sh install", f"{self.home}/build/install.sh install"]:
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 0, cmd)
+        self.assertEqual(self.bash("~/other/install.sh x", escape=True, env=env).returncode, 2)
+
     def test_sandbox_escape_splits_on_unquoted_separators_only(self) -> None:
         env = self.sandbox_env
         for cmd in [

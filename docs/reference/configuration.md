@@ -13,7 +13,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `sandbox.excludedCommands` | `herdr *`, `gh *`, `launchctl *` and the git network commands (`fetch`, `push`, `pull`, `clone`, `ls-remote`), which need the keychain, `known_hosts` or their own sockets |
 | `sandbox.filesystem.allowWrite` | `~/notes`, `~/drafts`, `~/.cache`, `~/.npm`, `~/Library/Caches`, `~/.local/state`, `**/.git`, `~/.gitconfig`, `~/.config/git`, `~/.local/share/uv` |
 | `sandbox.filesystem.denyRead` | `~/.ssh`, `~/.aws` |
-| `sandbox.network.allowedDomains` | GitHub, GitLab, npm, PyPI, `ghcr.io`, Docker Hub |
+| `sandbox.network.allowedDomains` | GitHub, GitLab, npm, PyPI, `ghcr.io`, Docker Hub, `localhost` and `127.0.0.1` |
 | `permissions.deny`, `permissions.ask` | Listed in [hooks](hooks.md#permission-rules) |
 | `attribution` | Empty, so commits and changes carry no tool trailer |
 | `effortLevel` | `medium` |

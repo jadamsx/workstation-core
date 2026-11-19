@@ -115,6 +115,11 @@ def excluded_patterns() -> list[str] | None:
     return None
 
 
+def expand_home(text: str) -> str:
+    home = os.path.expanduser("~")
+    return re.sub(r"(?<!\S)~(?=/|\s|\Z)", lambda _: home, text)
+
+
 def excluded_reason(command: str) -> str | None:
     patterns = excluded_patterns()
     if patterns is None:
@@ -122,8 +127,8 @@ def excluded_reason(command: str) -> str | None:
     parts, unsafe = split_command(command)
     if unsafe:
         return SUBSTITUTION_MESSAGE
-    regexes = [re.compile(".*".join(map(re.escape, p.split("*"))) + r"\Z", re.S) for p in patterns]
-    parts = [p.strip() for p in parts if p.strip()]
+    regexes = [re.compile(".*".join(map(re.escape, expand_home(p).split("*"))) + r"\Z", re.S) for p in patterns]
+    parts = [expand_home(p.strip()) for p in parts if p.strip()]
     if parts and all(any(rx.match(part) for rx in regexes) for part in parts):
         return None
     return SANDBOX_MESSAGE
