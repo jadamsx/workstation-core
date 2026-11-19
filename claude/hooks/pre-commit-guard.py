@@ -142,6 +142,41 @@ def shell_commands(text: str) -> list[list[str]]:
     return [c for c in commands if c]
 
 
+def invoked(command: str) -> list[list[str]]:
+    """Argv of every command the shell would run, looking through `sh -c`; quoted words that only mention a command are not one."""
+    found = []
+    for argv in shell_commands(command):
+        while argv and re.fullmatch(r"\w+=.*", argv[0]):
+            argv = argv[1:]
+        if argv[:1] and argv[0] in ("sh", "bash", "zsh") and any(SHELL_C.match(t) for t in argv[1:-1]):
+            found += invoked(argv[next(i for i, t in enumerate(argv) if i and SHELL_C.match(t)) + 1])
+        elif argv:
+            found.append(argv)
+    return found
+
+
+def runs_commit(command: str) -> bool:
+    try:
+        calls = invoked(command)
+    except ValueError:
+        return bool(COMMIT.search(command))
+    for argv in calls:
+        args = argv[1:] if argv[0] == "git" else []
+        while args and args[0].startswith("-"):
+            args = args[2:] if args[0] in ("-C", "-c") else args[1:]
+        if args[:1] == ["commit"]:
+            return True
+    return False
+
+
+def runs_change_create(command: str) -> bool:
+    try:
+        calls = invoked(command)
+    except ValueError:
+        return bool(CHANGE_CREATE.search(command))
+    return any(CHANGE_CREATE.fullmatch(" ".join(argv[:3])) for argv in calls)
+
+
 def commit_pathspecs(args: list[str]) -> tuple[bool, list[str]]:
     all_tracked, specs, i = False, [], 0
     while i < len(args):
@@ -405,7 +440,7 @@ def main() -> None:
             cwd,
             str(tool_input.get("project_id", "")),
         )
-    elif CHANGE_CREATE.search(command):
+    elif runs_change_create(command):
         body_flags = (
             "--body|-b" if re.search(r"\bgh\s+pr\b", command) else "--description|-d"
         )
@@ -416,7 +451,7 @@ def main() -> None:
             command_cwd(command, cwd, CHANGE_CREATE),
             repo.group(1) if repo else "",
         )
-    elif COMMIT.search(command):
+    elif runs_commit(command):
         commit_cwd = command_cwd(command, cwd, COMMIT)
         errors = owns_errors(command, commit_cwd)
         if not ("--amend" in command and "-m" not in command):

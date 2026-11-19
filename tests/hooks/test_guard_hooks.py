@@ -617,6 +617,13 @@ class OwnsGuardTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("b.py", result.stderr)
 
+    def test_quoted_commit_text_is_not_a_commit(self) -> None:
+        (self.repo / "b.py").write_text("b = 2\n")
+        subprocess.run(["git", "add", "b.py"], cwd=self.repo, check=True)
+        for command in ('echo "run git commit -am x later"', "rg 'git commit' docs", 'gh issue create --body "then git commit"'):
+            self.assertEqual(self.run_command(command).returncode, 0, command)
+        self.assert_blocked('bash -c "git commit -m x"')
+
     def test_staged_path_inside_owns_allowed(self) -> None:
         (self.repo / "src/a.py").write_text("a = 2\n")
         subprocess.run(["git", "add", "src/a.py"], cwd=self.repo, check=True)
