@@ -935,7 +935,7 @@ class ReaperTests(ReportsCase):
         self.addCleanup(patcher.stop)
         return rows
 
-    def test_a_recent_waiting_message_spares_the_shell_and_an_old_one_does_not(self) -> None:
+    def test_a_recent_waiting_message_spares_the_shell(self) -> None:
         self.assertEqual(self.reaper(self.waiting_tab("WAITING: the pipeline", 60))[1], [])
 
     def test_a_waiting_message_older_than_two_hours_no_longer_spares_the_shell(self) -> None:
