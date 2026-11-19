@@ -38,8 +38,8 @@ class GateCase(unittest.TestCase):
 
 
 class GateTest(GateCase):
-    def test_parks_at_5h_80_or_7d_90_until_the_reset(self) -> None:
-        for five, seven in ((80, 10), (10, 90), (95, 95)):
+    def test_parks_at_5h_95_or_7d_90_until_the_reset(self) -> None:
+        for five, seven in ((95, 10), (10, 90), (99, 95)):
             reset = self.write(five, seven)
             r = self.cli()
             self.assertEqual(r.returncode, 1)
@@ -48,7 +48,7 @@ class GateTest(GateCase):
             self.assertEqual(gate.parked_until(), reset)
 
     def test_under_the_thresholds_is_open_and_silent(self) -> None:
-        self.write(79, 89)
+        self.write(94, 89)
         r = self.cli()
         self.assertEqual((r.returncode, r.stdout), (0, ""))
 
