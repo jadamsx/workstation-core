@@ -389,7 +389,8 @@ class RmGuardTest(unittest.TestCase):
             "gh pr create --body-file - <<EOF\nbody\nEOF",
             "gh api x > out",
             "gh pr view 1 < in",
-            "gh pr view 1 2>&1",
+            "gh pr view 1 2>&",
+            "gh pr view 1 >&out",
             "gh pr comment 1 --body 'unterminated",
         ]:
             result = self.bash(cmd, escape=True, env=env)
@@ -398,6 +399,28 @@ class RmGuardTest(unittest.TestCase):
         self.assertEqual(
             self.bash("gh pr comment 1 --body '$(not run) > x'", escape=True, env=env).returncode, 0
         )
+
+    def test_sandbox_escape_allows_read_only_filter_after_pipe(self) -> None:
+        env = self.sandbox_env
+        for cmd in [
+            "git fetch 2>&1 | tail -1",
+            "gh pr view 1 | grep title | head -n 2 | wc -l",
+            "gh pr list | sort -u | cut -f1",
+        ]:
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 0, cmd)
+        for cmd in [
+            "git fetch | npm test",
+            "git fetch && tail x",
+            "git fetch || tail x",
+            "git fetch; tail x",
+            "tail x | git fetch",
+            "tail x",
+            "gh pr list | sort -o out",
+            "gh pr list | sort --compress-program=sh",
+            "gh pr list | tail -1 > out",
+            "gh pr list | tail $(id)",
+        ]:
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 2, cmd)
 
     def test_sandbox_escape_flag_is_coerced(self) -> None:
         env = self.sandbox_env

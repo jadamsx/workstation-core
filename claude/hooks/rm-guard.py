@@ -3,8 +3,9 @@
 
 Denied everywhere: `rm -rf` in any form in the command text, and `dangerouslyDisableSandbox` for a
 command that is not on sandbox.excludedCommands (every part split on an unquoted `&&`, `||`, `;`, `|`, `&`,
-newline or parenthesis must match a pattern, and a redirect or command substitution outside single quotes
-makes the call not excluded).
+newline or parenthesis must match a pattern, except that a read-only filter after a single `|` is
+allowed, and a file redirect or command substitution outside single quotes makes the call not excluded;
+`2>&1` style fd duplication is fine).
 
 Allowed roots: $TMPDIR, the drafts dir (DRAFTS_DIR, default ~/drafts), ~/.cache, a repo's
 .claude/worktrees/*, and any path through node_modules, .venv, dist, build or __pycache__.
@@ -25,6 +26,9 @@ SAFE_DIR_NAMES = {"node_modules", ".venv", "dist", "build", "__pycache__"}
 RM_PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
 UNSAFE_EXPANSION = re.compile(r"\$\(|`|\$(?!\{?(TMPDIR|HOME)\}?(/|$))")
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+FD_DUP = re.compile(r">&\d+(?!\w)")
+PIPE_FILTERS = {"tail", "head", "grep", "wc", "cut", "sort"}
+SORT_WRITES = re.compile(r"-[^-]*o|--(output|compress-program)")
 RM_FLAGS = re.compile(r"\brm((?:[ \t]+-{1,2}[\w-]+)+)")
 BASE_SETTINGS = Path(__file__).resolve().parent.parent / "settings.base.json"
 RM_RF_MESSAGE = "Never write rm -rf, even quoted; move it to ~/.Trash instead."
@@ -51,9 +55,9 @@ def tokens(segment: str) -> list[str]:
         return segment.split()
 
 
-def split_command(command: str) -> tuple[list[str], bool]:
+def split_command(command: str) -> tuple[list[str], bool, list[bool]]:
     command = command.replace("\\\n", "")
-    parts, buf, quote, unsafe, i = [], "", "", False, 0
+    parts, piped, buf, quote, unsafe, i = [], [], "", "", False, 0
     while i < len(command):
         ch = command[i]
         if quote == "'":
@@ -68,15 +72,20 @@ def split_command(command: str) -> tuple[list[str], bool]:
             quote = "" if ch == quote else quote
         elif ch in "'\"":
             quote = ch
+        elif fd_dup := FD_DUP.match(command, i):
+            buf += fd_dup.group()
+            i = fd_dup.end()
+            continue
         elif ch in ";&|()\n<>":
             unsafe = unsafe or ch in "<>"
             parts.append(buf)
+            piped.append(ch == "|" and command[i - 1 : i] != "|" and command[i + 1 : i + 2] != "|")
             buf = ""
             i += 1
             continue
         buf += ch
         i += 1
-    return [*parts, buf], unsafe or bool(quote)
+    return [*parts, buf], unsafe or bool(quote), [False, *piped]
 
 
 def rm_flags_forbidden(flags: list[str]) -> bool:
@@ -120,16 +129,26 @@ def expand_home(text: str) -> str:
     return re.sub(r"(?<!\S)~(?=/|\s|\Z)", lambda _: home, text)
 
 
+def is_pipe_filter(part: str) -> bool:
+    words = tokens(part)
+    if not words or words[0] not in PIPE_FILTERS:
+        return False
+    return words[0] != "sort" or not any(SORT_WRITES.match(w) for w in words[1:])
+
+
 def excluded_reason(command: str) -> str | None:
     patterns = excluded_patterns()
     if patterns is None:
         return UNREADABLE_MESSAGE
-    parts, unsafe = split_command(command)
+    parts, unsafe, piped = split_command(command)
     if unsafe:
         return SUBSTITUTION_MESSAGE
     regexes = [re.compile(".*".join(map(re.escape, expand_home(p).split("*"))) + r"\Z", re.S) for p in patterns]
-    parts = [expand_home(p.strip()) for p in parts if p.strip()]
-    if parts and all(any(rx.match(part) for rx in regexes) for part in parts):
+    parts = [(expand_home(p.strip()), after_pipe) for p, after_pipe in zip(parts, piped) if p.strip()]
+    if parts and all(
+        any(rx.match(part) for rx in regexes) or (after_pipe and is_pipe_filter(part))
+        for part, after_pipe in parts
+    ):
         return None
     return SANDBOX_MESSAGE
 
