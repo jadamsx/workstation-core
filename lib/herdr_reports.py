@@ -96,6 +96,13 @@ def live_panes() -> set[str] | None:
     return None if states is None else set(states)
 
 
+def managed_shell_pids() -> set[int]:
+    """Pids of the login shells in lead and manager tabs (the work tab included), the only panes whose claude may be reaped."""
+    tabs = {t["tab_id"] for t in herdr("tab", "list").get("tabs", []) if t.get("label", "") == LEAD_TAB or t.get("label", "").startswith(MANAGER_TAB)}
+    panes = [p["pane_id"] for p in herdr("pane", "list").get("panes", []) if p.get("tab_id") in tabs]
+    return {pid for pane in panes if (pid := herdr("pane", "process-info", "--pane", pane).get("process_info", {}).get("shell_pid"))}
+
+
 def manager_folder(name: str) -> Path:
     folder = space_dir() / name
     if not (folder / "manager.json").exists():

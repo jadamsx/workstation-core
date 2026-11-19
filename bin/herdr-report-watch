@@ -20,7 +20,7 @@ the limit, past the reset, overridden or failing open) the watcher sends them in
 path, drops a job whose manager is gone, and each coordinator gets one
 `[worker-report] resumed parked jobs: <names>` line.
 
-A shell started by a Bash tool call (its command starts `<shell> -c source …shell-snapshots/`) under a `claude` process is reaped when
+A shell started by a Bash tool call (its command starts `<shell> -c source …shell-snapshots/`) under a `claude` process that runs in a herdr pane of a lead, work or manager tab (a `◆ lead` or `▸ …` tab; any other pane is never touched) is reaped when
 it and its child processes together have used no CPU for 10 minutes and it is older than 10 minutes: SIGTERM, then
 SIGKILL 5 seconds later if it is still there. Output cannot be watched cheaply, so CPU is the only signal. Jobs
 whose command line contains a `reaper_keep` substring from `claude/resource-policy.json` are left alone. A shell under
@@ -47,7 +47,7 @@ from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import IDLE_STATES, BASH_TOOL_SHELL, KILL_GRACE_SECONDS, SHELLS, Proc, ReportsError, argv0, clock_seconds, close_manager, is_done, pane_states, pane_text, read_manager, read_procs, reports_root, same_process, stop_shell, write_atomic  # noqa: E402
+from herdr_reports import IDLE_STATES, BASH_TOOL_SHELL, KILL_GRACE_SECONDS, SHELLS, Proc, ReportsError, argv0, clock_seconds, close_manager, is_done, managed_shell_pids, pane_states, pane_text, read_manager, read_procs, reports_root, same_process, stop_shell, write_atomic  # noqa: E402
 
 usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent / "usage-gate")).load_module()
 manager_send = SourceFileLoader("manager_send", str(Path(__file__).resolve().parent / "manager-send")).load_module()
@@ -246,6 +246,21 @@ class Watcher:
             return None
 
         owners = {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_SHELL.match(p.command) and (c := claude_above(p))}
+        if owners:
+            try:
+                managed = managed_shell_pids()
+            except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as err:
+                self.log(f"reaper skipped: {err}")
+                return
+
+            def in_managed_pane(proc: Proc) -> bool:
+                seen = {proc.pid}
+                while proc.ppid not in managed and proc.ppid in by_pid and proc.ppid not in seen:
+                    proc = by_pid[proc.ppid]
+                    seen.add(proc.pid)
+                return proc.ppid in managed
+
+            owners = {pid: c for pid, c in owners.items() if in_managed_pane(c)}
         seen_cpu: dict[int, tuple[float, float]] = {}
         for pid, claude in owners.items():
             tree, queue = [], [by_pid[pid]]

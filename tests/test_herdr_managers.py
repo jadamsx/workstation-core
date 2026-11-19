@@ -42,7 +42,7 @@ case "$1 $2" in
   "pane process-info")
     n=$(cat "$FAKE_PROCS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_PROCS"
     if [ "$n" -lt "${FAKE_BUSY_POLLS:-0}" ]; then fg='[{"argv0":"zsh"},{"argv0":"tail"}]'; else fg='[{"argv0":"zsh"}]'; fi
-    echo "{\\"result\\":{\\"process_info\\":{\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
+    echo "{\\"result\\":{\\"process_info\\":{\\"shell_pid\\":${FAKE_SHELL_PID:-0},\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
   "pane list") panes="$FAKE_PANES"; [ -e "$FAKE_PANES_NOW" ] && panes=$(cat "$FAKE_PANES_NOW"); echo "{\\"result\\":{\\"panes\\":[$panes]}}" ;;
   "agent prompt") if [ -e "$FAKE_BLOCKED" ]; then echo "agent_blocked" >&2; exit 1; fi ;;
 esac
@@ -972,11 +972,16 @@ class ReaperTests(ReportsCase):
     CLAUDE = "claude --model sonnet --mcp-config {mcp}"
     SHELL = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval '{cmd}' < /dev/null"
 
-    def table(self, cmd: str = "make serve", cpu: float = 0.0, age: float = 900, parent: int = 10, child_cpu: float = 0.0) -> list:
+    def setUp(self) -> None:
+        super().setUp()
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
+        os.environ["FAKE_SHELL_PID"] = "5"
+
+    def table(self, cmd: str = "make serve", cpu: float = 0.0, age: float = 900, parent: int = 10, child_cpu: float = 0.0, pane_shell: int = 5) -> list:
         mcp = self.manager() / "mcp.json"
         P = watch.Proc
         return [
-            P(10, 1, 5000, 50.0, self.CLAUDE.format(mcp=mcp)),
+            P(10, pane_shell, 5000, 50.0, self.CLAUDE.format(mcp=mcp)),
             P(20, parent, age, cpu, self.SHELL.format(cmd=cmd)),
             P(21, 20, age, child_cpu, cmd),
         ]
@@ -1020,6 +1025,20 @@ class ReaperTests(ReportsCase):
         watcher.procs = lambda: rows[1]
         watcher.scan(601)
         self.assertEqual(kills, [])
+
+    def test_shell_under_a_claude_outside_a_managed_pane_survives(self) -> None:
+        self.assertEqual(self.reaper(self.table(pane_shell=77))[1], [])
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
+        self.assertEqual(self.reaper(self.table())[1], [])
+
+    def test_shells_under_lead_and_work_tabs_are_reaped_without_a_manager_report(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"◆ lead"}'
+        rows = [r._replace(command="claude --resume x") if r.pid == 10 else r for r in self.table()]
+        self.assertEqual(self.reaper(rows)[1], [(21, signal.SIGTERM), (20, signal.SIGTERM)])
+
+    def test_reaper_does_nothing_when_herdr_cannot_be_asked(self) -> None:
+        os.environ["PATH"] = "/usr/bin:/bin"
+        self.assertEqual(self.reaper(self.table())[1], [])
 
     def test_stop_shell_accepts_only_a_shell_under_claude(self) -> None:
         rows = self.table() + [watch.Proc(30, 1, 900, 0.0, "/bin/zsh -c orphan"), watch.Proc(40, 20, 900, 0.0, "python3 x")]
@@ -1125,7 +1144,8 @@ class PlanAlertTests(ReportsCase):
 
     def test_node_waiting_on_a_shell_prompts_once_after_ten_minutes(self) -> None:
         folder, tree = self.setup_plan("- [x] N1 first\n- [~] N2 second", owns="N2")
-        claude = watch.Proc(10, 1, 5000, 50.0, f"claude --mcp-config {folder}/mcp.json")
+        os.environ.update(FAKE_TABS='{"tab_id":"w1:t4","label":"▸ alpha"}', FAKE_SHELL_PID="5")
+        claude = watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {folder}/mcp.json")
         shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make serve' < /dev/null"
         for age, expected in ((599, 0), (700, 1)):
             watcher = self.watcher([1000.0], [claude, watch.Proc(20, 10, age, 5.0, shell)])
