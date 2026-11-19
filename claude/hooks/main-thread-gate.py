@@ -71,7 +71,7 @@ PROTECTED_FILES = {
     ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".zshrc", ".zprofile", ".zshenv", ".profile",
     ".envrc", ".npmrc", ".yarnrc", ".mcp.json", ".claude.json", ".pre-commit-config.yaml", ".ripgreprc",
 }
-CLAUDE_EXEMPT = ("worktrees/*", "plans/*", "projects/*/memory/*.md", "agent-memory/*.md")
+CLAUDE_EXEMPT = (("plans", "*"), ("projects", "*", "memory", "*.md"), ("agent-memory", "*.md"))
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
@@ -410,19 +410,35 @@ def is_coordination_file(path: str) -> bool:
     )
 
 
-def protected_path(path: str) -> bool:
-    parts = Path(os.path.normpath(os.path.expanduser(path))).parts
-    if parts and parts[-1] in PROTECTED_FILES:
+def claude_exempt(rest: tuple[str, ...]) -> bool:
+    if rest[:1] == ("worktrees",):
+        return len(rest) > 1
+    return any(
+        len(rest) == len(shape) and all(fnmatch.fnmatchcase(seg, pat) for seg, pat in zip(rest, shape))
+        for shape in CLAUDE_EXEMPT
+    )
+
+
+def protected_shape(path: str, homes: set[str]) -> bool:
+    parts = tuple(part.casefold() for part in Path(path).parts)
+    if not parts:
+        return False
+    if parts[-1] == ".git" or (parts[-1] in PROTECTED_FILES and os.path.dirname(path).casefold() in homes):
         return True
     dirs = parts[:-1]
     for i, part in enumerate(dirs):
         hit = part in PROTECTED_DIRS or "/".join(dirs[i : i + 2]) in PROTECTED_DIRS
-        if not hit:
-            continue
-        rest = "/".join(parts[i + 1 :])
-        if part != ".claude" or not any(fnmatch.fnmatchcase(rest, g) for g in CLAUDE_EXEMPT):
+        if hit and (part != ".claude" or not claude_exempt(parts[i + 1 :])):
             return True
     return False
+
+
+def protected_path(path: str, cwd: str = "") -> bool:
+    expanded = os.path.expanduser(path)
+    given = os.path.normpath(os.path.join(cwd, expanded) if cwd else expanded)
+    home = os.path.expanduser("~")
+    homes = {os.path.normpath(home).casefold(), os.path.realpath(home).casefold()}
+    return any(protected_shape(p, homes) for p in (given, os.path.realpath(given)))
 
 
 def protected_reason(payload: dict) -> str | None:
@@ -430,7 +446,14 @@ def protected_reason(payload: dict) -> str | None:
         return None
     tool_input = payload.get("tool_input") or {}
     path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
-    if path and protected_path(path):
+    try:
+        hit = bool(path) and protected_path(path, payload.get("cwd") or "")
+    except Exception as exc:
+        return (
+            f"Could not check {path!r} against the protected config paths ({type(exc).__name__}); "
+            "the call is denied until the hook is fixed."
+        )
+    if hit:
         return (
             f"{path} is a protected config path and Claude Code would prompt on it. "
             "Write a decision report for the coordinator asking the owner to make the change."

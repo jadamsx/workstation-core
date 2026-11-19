@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HOOKS = Path(__file__).resolve().parents[2] / "claude/hooks"
 RM_RF = "rm " + "-rf"
@@ -227,17 +228,37 @@ class SharedEnvGuardTest(unittest.TestCase):
         self.assertEqual(self.call("fill_form").returncode, 0)
 
 
+def load_rm_guard():
+    spec = importlib.util.spec_from_file_location("rm_guard", HOOKS / "rm-guard.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class RmGuardTest(unittest.TestCase):
+    EXCLUDED = ["git push*", "git fetch*", "git pull*", "herdr *", "ps *", "gh *"]
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name)
+        (self.home / ".claude").mkdir()
+        self.settings = self.home / ".claude/settings.json"
+        self.settings.write_text(
+            json.dumps({"sandbox": {"excludedCommands": self.EXCLUDED}})
+        )
+        self.sandbox_env = {"HOME": str(self.home)}
+
     def bash(
         self,
         command: str,
         cwd: str = "/work",
-        escape: bool = False,
+        escape: object = False,
         env: dict | None = None,
     ) -> subprocess.CompletedProcess:
         tool_input: dict = {"command": command}
         if escape:
-            tool_input["dangerouslyDisableSandbox"] = True
+            tool_input["dangerouslyDisableSandbox"] = escape
         return run_hook(
             "rm-guard.py",
             {"tool_name": "Bash", "tool_input": tool_input, "cwd": cwd},
@@ -300,19 +321,102 @@ class RmGuardTest(unittest.TestCase):
             "rm " + "--recursive --force dist",
             f"cat <<EOF\n{RM_RF} x\nEOF",
             f"ls # {RM_RF}",
+            "rm x " + "-rf",
+            "rm " + "-R x -f",
+            "rm " + "'-rf' x",
+            "/bin/rm " + "-rf x",
+            '"rm" ' + "-rf x",
+            "rm x " + "--recursive --force",
+            "rm \\\n" + "-rf x",
+            "ls && rm a " + "-f -r",
+            "sudo rm " + "-fr x",
+            "git rm " + "-rf x",
         ]:
             result = self.bash(cmd)
             self.assertEqual(result.returncode, 2, cmd)
             self.assertIn("move it to ~/.Trash", result.stderr)
 
+    def test_unexpected_error_in_new_checks_fails_closed(self) -> None:
+        result = run_hook(
+            "rm-guard.py", {"tool_name": "Bash", "tool_input": {"command": 5}}
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("rm-guard failed", result.stderr)
+
     def test_sandbox_escape_denied_unless_excluded(self) -> None:
+        env = self.sandbox_env
         for cmd in ["npm install", "git push origin x && npm test", "/usr/local/bin/docker ps"]:
-            result = self.bash(cmd, escape=True)
+            result = self.bash(cmd, escape=True, env=env)
             self.assertEqual(result.returncode, 2, cmd)
             self.assertIn("decision report", result.stderr)
         for cmd in ["git push origin x", "git fetch && git pull --rebase", "herdr pane list | ps aux"]:
-            self.assertEqual(self.bash(cmd, escape=True).returncode, 0, cmd)
-        self.assertEqual(self.bash("npm install").returncode, 0)
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 0, cmd)
+        self.assertEqual(self.bash("npm install", env=env).returncode, 0)
+
+    def test_sandbox_escape_splits_on_unquoted_separators_only(self) -> None:
+        env = self.sandbox_env
+        for cmd in [
+            'gh pr comment 1 --body "fix a; b"',
+            "gh pr comment 1 --body 'a && b | c & d'",
+            "git fetch & git pull",
+            "git fetch\ngit pull",
+        ]:
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 0, cmd)
+        for cmd in [
+            "git fetch & npm test",
+            "git fetch\nnpm test",
+            "git fetch; (npm test)",
+            "(npm test)",
+            "git fetch || npm test",
+        ]:
+            self.assertEqual(self.bash(cmd, escape=True, env=env).returncode, 2, cmd)
+
+    def test_sandbox_escape_denies_redirects_and_substitution(self) -> None:
+        env = self.sandbox_env
+        for cmd in [
+            'gh pr comment 1 --body "$(cat x)"',
+            "gh pr comment 1 --body `cat x`",
+            "gh pr comment 1 --body $(cat x)",
+            "gh pr create --body-file - <<EOF\nbody\nEOF",
+            "gh api x > out",
+            "gh pr view 1 < in",
+            "gh pr view 1 2>&1",
+            "gh pr comment 1 --body 'unterminated",
+        ]:
+            result = self.bash(cmd, escape=True, env=env)
+            self.assertEqual(result.returncode, 2, cmd)
+            self.assertIn("--body-file", result.stderr)
+        self.assertEqual(
+            self.bash("gh pr comment 1 --body '$(not run) > x'", escape=True, env=env).returncode, 0
+        )
+
+    def test_sandbox_escape_flag_is_coerced(self) -> None:
+        env = self.sandbox_env
+        self.assertEqual(self.bash("npm install", escape="true", env=env).returncode, 2)
+        self.assertEqual(self.bash("npm install", escape="True", env=env).returncode, 2)
+        self.assertEqual(self.bash("npm install", escape="false", env=env).returncode, 0)
+
+    def test_excluded_list_validated_and_unreadable_fails_closed(self) -> None:
+        module = load_rm_guard()
+        missing = self.home / "none.json"
+        with mock.patch.object(module, "BASE_SETTINGS", missing), mock.patch.dict(
+            os.environ, {"HOME": str(self.home)}
+        ):
+            self.settings.write_text(
+                json.dumps({"sandbox": {"excludedCommands": ["git push*", 5, None]}})
+            )
+            self.assertEqual(module.excluded_patterns(), ["git push*"])
+            for content in (
+                "{bad",
+                "{}",
+                '{"sandbox": {}}',
+                '{"sandbox": {"excludedCommands": "git push*"}}',
+            ):
+                self.settings.write_text(content)
+                self.assertIsNone(module.excluded_patterns(), content)
+                self.assertIn("unreadable", module.excluded_reason("git push"))
+            self.settings.unlink()
+            self.assertIsNone(module.excluded_patterns())
 
     def test_sandbox_escape_reads_home_settings(self) -> None:
         with tempfile.TemporaryDirectory() as home:
@@ -347,16 +451,66 @@ class ProtectedWriteTest(unittest.TestCase):
             "/r/.husky/pre-commit",
             f"{home}/.config/git/ignore",
             f"{home}/.zshrc",
-            "/r/.pre-commit-config.yaml",
+            f"{home}/.pre-commit-config.yaml",
+            f"{home}/.npmrc",
             "/r/.claude/settings.json",
             f"{home}/.claude/hooks/x.py",
+            "/r/wt/.git",
         ]:
-            for extra in ({}, {"agent_id": "a1"}):
-                result = self.write(path, **extra)
-                self.assertEqual(result.returncode, 2, path)
-                self.assertIn(path, result.stderr)
-                self.assertIn("decision report", result.stderr)
-        self.assertEqual(self.write("/r/.mcp.json", "NotebookEdit").returncode, 2)
+            for tool in ("Write", "Edit", "MultiEdit"):
+                for extra in ({}, {"agent_id": "a1"}):
+                    result = self.write(path, tool, **extra)
+                    self.assertEqual(result.returncode, 2, (tool, path))
+                    self.assertIn(path, result.stderr)
+                    self.assertIn("decision report", result.stderr)
+        self.assertEqual(self.write(f"{Path.home()}/.mcp.json", "NotebookEdit").returncode, 2)
+
+    def test_protected_files_only_directly_under_home(self) -> None:
+        for path in ["/r/.pre-commit-config.yaml", "/r/.npmrc", "/r/.envrc", "/r/sub/.zshrc"]:
+            self.assertEqual(self.write(path, agent_id="a1").returncode, 0, path)
+        self.assertEqual(self.write("/r/.husky/pre-commit").returncode, 2)
+
+    def test_case_variants_denied(self) -> None:
+        home = str(Path.home())
+        for path in [f"{home}/.ZSHRC", "/r/.GIT/hooks/x", "/r/.Claude/settings.json", "/r/.CLAUDE/Plans/a/b.md"]:
+            self.assertEqual(self.write(path).returncode, 2, path)
+        self.assertEqual(self.write("/r/.Claude/Worktrees/x/y.py").returncode, 0)
+
+    def test_relative_and_symlinked_paths_resolved(self) -> None:
+        self.assertEqual(self.write(".git/hooks/x", cwd="/r").returncode, 2)
+        self.assertEqual(self.write("settings.json", cwd="/r/.claude").returncode, 2)
+        self.assertEqual(self.write("src/a.py", cwd="/r").returncode, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".git").mkdir()
+            (root / "link").symlink_to(root / ".git")
+            worktree = root / ".claude/worktrees/w"
+            worktree.mkdir(parents=True)
+            (worktree / "up").symlink_to(root / ".claude")
+            for path in (root / "link/hooks/x", worktree / "up/settings.json"):
+                self.assertEqual(self.write(str(path)).returncode, 2, path)
+
+    def test_claude_exemptions_are_single_segment(self) -> None:
+        home = str(Path.home())
+        for path in [
+            f"{home}/.claude/plans/a/b.md",
+            f"{home}/.claude/projects/p/q/memory/m.md",
+            f"{home}/.claude/projects/p/memory/s/m.md",
+            f"{home}/.claude/projects/p/memory/m.txt",
+            "/r/.claude/agent-memory/s/a.md",
+            "/r/.claude/worktrees",
+            "/r/.claude/worktrees/x/.git/hooks/y",
+            "/r/.claude/worktrees/x/.claude/settings.json",
+        ]:
+            self.assertEqual(self.write(path, agent_id="a1").returncode, 2, path)
+
+    def test_unexpected_error_fails_closed(self) -> None:
+        result = run_hook(
+            "main-thread-gate.py",
+            {"tool_name": "Write", "tool_input": {"file_path": 5}},
+            {"WORKSTATION_ROLE": "manager"},
+        )
+        self.assertEqual(result.returncode, 2)
 
     def test_worktrees_and_core_claude_dir_allowed(self) -> None:
         home = str(Path.home())

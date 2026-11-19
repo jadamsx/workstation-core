@@ -2,7 +2,9 @@
 """Block calls Claude Code would prompt on, and recursive `rm` outside throwaway locations.
 
 Denied everywhere: `rm -rf` in any form in the command text, and `dangerouslyDisableSandbox` for a
-command that is not on sandbox.excludedCommands (every `&&`/`;`/`|` part must match a pattern).
+command that is not on sandbox.excludedCommands (every part split on an unquoted `&&`, `||`, `;`, `|`, `&`,
+newline or parenthesis must match a pattern, and a redirect or command substitution outside single quotes
+makes the call not excluded).
 
 Allowed roots: $TMPDIR, the drafts dir (DRAFTS_DIR, default ~/drafts), ~/.cache, a repo's
 .claude/worktrees/*, and any path through node_modules, .venv, dist, build or __pycache__.
@@ -30,6 +32,16 @@ SANDBOX_MESSAGE = (
     "That command is not on the sandbox excluded list; do not escape the sandbox. "
     "Write a decision report to the coordinator instead."
 )
+SUBSTITUTION_MESSAGE = (
+    "A redirect or command substitution cannot be checked against the sandbox excluded list. "
+    "Put the body in a file and pass it with --body-file, with no substitution or redirect, "
+    "or write a decision report to the coordinator."
+)
+UNREADABLE_MESSAGE = (
+    "Sandbox excluded list unreadable: no settings file holds sandbox.excludedCommands, "
+    "so no command can be checked. Write a decision report to the coordinator."
+)
+FAILED_MESSAGE = "rm-guard failed unexpectedly ({}); the call is denied until the hook is fixed."
 
 
 def tokens(segment: str) -> list[str]:
@@ -39,33 +51,88 @@ def tokens(segment: str) -> list[str]:
         return segment.split()
 
 
+def split_command(command: str) -> tuple[list[str], bool]:
+    """Split on separators outside quotes; flag a redirect or substitution outside single quotes."""
+    command = command.replace("\\\n", "")
+    parts, buf, quote, unsafe, i = [], "", "", False, 0
+    while i < len(command):
+        ch = command[i]
+        if quote == "'":
+            quote = "" if ch == "'" else quote
+        elif ch == "\\":
+            buf += command[i : i + 2]
+            i += 2
+            continue
+        elif ch == "`" or command.startswith("$(", i):
+            unsafe = True
+        elif quote:
+            quote = "" if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch in ";&|()\n<>":
+            unsafe = unsafe or ch in "<>"
+            parts.append(buf)
+            buf = ""
+            i += 1
+            continue
+        buf += ch
+        i += 1
+    return [*parts, buf], unsafe or bool(quote)
+
+
+def rm_flags_forbidden(flags: list[str]) -> bool:
+    short = set("".join(f[1:] for f in flags if not f.startswith("--")))
+    recursive = "--recursive" in flags or short & {"r", "R"}
+    force = "--force" in flags or "f" in short
+    return bool(recursive and force)
+
+
 def has_rm_rf(command: str) -> bool:
-    for match in RM_FLAGS.finditer(command):
-        flags = match.group(1).split()
-        short = set("".join(f[1:] for f in flags if not f.startswith("--")))
-        recursive = "--recursive" in flags or short & {"r", "R"}
-        force = "--force" in flags or "f" in short
-        if recursive and force:
-            return True
+    if any(
+        rm_flags_forbidden(m.group(1).split())
+        for m in RM_FLAGS.finditer(command.replace("\\\n", ""))
+    ):
+        return True
+    for part in split_command(command)[0]:
+        words = tokens(part)
+        for i, word in enumerate(words):
+            if os.path.basename(word) != "rm":
+                continue
+            args = words[i + 1 :]
+            args = args[: args.index("--")] if "--" in args else args
+            if rm_flags_forbidden([a for a in args if a.startswith("-") and a != "-"]):
+                return True
     return False
 
 
-def excluded_patterns() -> list[str]:
+def excluded_patterns() -> list[str] | None:
     for path in (Path.home() / ".claude/settings.json", BASE_SETTINGS):
         try:
-            return json.loads(path.read_text())["sandbox"]["excludedCommands"]
+            patterns = json.loads(path.read_text())["sandbox"]["excludedCommands"]
         except (OSError, ValueError, KeyError, TypeError):
             continue
-    return []
+        if isinstance(patterns, list):
+            return [p for p in patterns if isinstance(p, str)]
+    return None
 
 
-def is_excluded(command: str) -> bool:
-    patterns = [
-        re.compile(".*".join(map(re.escape, p.split("*"))) + r"\Z", re.S)
-        for p in excluded_patterns()
-    ]
-    parts = [p.strip() for p in SEGMENT_SPLIT.split(command) if p.strip()]
-    return bool(parts) and all(any(rx.match(part) for rx in patterns) for part in parts)
+def excluded_reason(command: str) -> str | None:
+    """None when every part of the command is on the excluded list, else the denial message."""
+    patterns = excluded_patterns()
+    if patterns is None:
+        return UNREADABLE_MESSAGE
+    parts, unsafe = split_command(command)
+    if unsafe:
+        return SUBSTITUTION_MESSAGE
+    regexes = [re.compile(".*".join(map(re.escape, p.split("*"))) + r"\Z", re.S) for p in patterns]
+    parts = [p.strip() for p in parts if p.strip()]
+    if parts and all(any(rx.match(part) for rx in regexes) for part in parts):
+        return None
+    return SANDBOX_MESSAGE
+
+
+def escape_requested(value: object) -> bool:
+    return value is True or (isinstance(value, str) and value.strip().lower() == "true")
 
 
 def deny(message: str) -> None:
@@ -140,10 +207,19 @@ def main() -> None:
         sys.exit(0)
     tool_input = payload.get("tool_input") or {}
     command = tool_input.get("command", "")
-    if has_rm_rf(command):
+    try:
+        rm_rf = has_rm_rf(command)
+        escape = (
+            excluded_reason(command)
+            if escape_requested(tool_input.get("dangerouslyDisableSandbox"))
+            else None
+        )
+    except Exception as exc:
+        deny(FAILED_MESSAGE.format(type(exc).__name__))
+    if rm_rf:
         deny(RM_RF_MESSAGE)
-    if tool_input.get("dangerouslyDisableSandbox") is True and not is_excluded(command):
-        deny(SANDBOX_MESSAGE)
+    if escape:
+        deny(escape)
     check_rm(command, payload.get("cwd") or "")
     sys.exit(0)
 
