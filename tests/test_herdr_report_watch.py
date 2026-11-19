@@ -48,9 +48,9 @@ class StuckTests(ReportsCase):
         os.utime(path, (T0 + mtime, T0 + mtime))
         return path
 
-    def refusals(self, at: float, n: int = 3) -> None:
-        stamp = datetime.fromtimestamp(T0 + at, timezone.utc).isoformat()
-        self.transcript(at, "\n".join(json.dumps({"timestamp": stamp, "content": REFUSAL}, separators=(",", ":")) for _ in range(n)))
+    def refusals(self, at: float, n: int = 3, content: object = REFUSAL, stamp: str | None = None) -> None:
+        stamp = stamp or datetime.fromtimestamp(T0 + at, timezone.utc).isoformat().replace("+00:00", "Z")
+        self.transcript(at, "\n".join(json.dumps({"timestamp": stamp, "content": content}, separators=(",", ":")) for _ in range(n)))
 
     def test_silent_tab_is_stuck_after_stall_seconds_whatever_its_last_message_says(self) -> None:
         for message in ("● Looked around", "● WAITING: the review to finish", None):
@@ -116,6 +116,38 @@ class StuckTests(ReportsCase):
         self.at(100 + watch.STALL_SECONDS + 60)
         self.assertEqual([x for x in self.lines() if "refused" in x], [])
 
+    def test_a_guard_stall_is_not_repeated_after_later_transcript_writes(self) -> None:
+        self.refusals(100)
+        self.at(120)
+        os.utime(self.projects / "proj" / f"{SESSION}.jsonl", (T0 + 130, T0 + 130))
+        self.at(150)
+        self.at(180)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_quoted_hook_text_and_user_denials_are_not_refusals(self) -> None:
+        self.refusals(100, content=[{"type": "text", "text": REFUSAL}])
+        self.at(120)
+        self.refusals(110, content="Permission to use Bash has been denied")
+        self.at(150)
+        self.assertEqual(self.lines(), [])
+
+    def test_a_bad_timestamp_does_not_kill_the_watcher(self) -> None:
+        self.refusals(100, stamp="not-a-time")
+        self.at(120)
+        self.assertEqual(self.lines(), [])
+
+    def test_a_pane_that_is_gone_loses_its_stuck_state(self) -> None:
+        self.at(watch.STALL_SECONDS)
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1","tab_id":"w1:t1"}'
+        self.at(watch.STALL_SECONDS + 30)
+        self.assertEqual(json.loads((self.root / ".watch-state.json").read_text())["stuck"], {})
+
+    def test_a_reported_pane_does_not_read_the_transcript_tail(self) -> None:
+        self.at(watch.STALL_SECONDS)
+        with mock.patch.object(watch.Watcher, "refused_by") as refused:
+            self.at(watch.STALL_SECONDS + 30)
+        refused.assert_not_called()
+
     def test_running_shell_keeps_a_silent_tab_quiet(self) -> None:
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
         os.environ["FAKE_SHELL_PID"] = "5"
@@ -151,8 +183,22 @@ class StuckTests(ReportsCase):
         state = json.loads((self.root / ".watch-state.json").read_text())["stuck"]
         self.assertEqual(list(state), ["w1:p4"])
 
-    def test_the_idle_report_is_gone(self) -> None:
-        self.assertFalse(hasattr(watch, "IDLE_SECONDS") or hasattr(watch.Watcher, "report_idle"))
+    def test_a_restart_does_not_count_a_hung_shell_as_activity(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
+        os.environ["FAKE_SHELL_PID"] = "5"
+        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'sleep 9' < /dev/null"
+        rows = [watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}"), watch.Proc(20, 10, 100, 1.0, shell)]
+        first = watch.Watcher(self.root, procs=lambda: rows, wall=lambda: self.wall[0])
+        self.at(watch.STALL_SECONDS, first)
+        again = watch.Watcher(self.root, procs=lambda: rows, wall=lambda: self.wall[0])
+        self.at(watch.STALL_SECONDS + 30, again)
+        self.at(2 * watch.STALL_SECONDS + 60, again)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_a_kept_manager_with_no_reports_is_checked(self) -> None:
+        (self.folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "session_id": SESSION, "started": T0, "keep": True}))
+        self.at(watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
 
     def test_lead_brief_says_to_kick_a_looks_stuck_line_and_read_status_and_bluf_first(self) -> None:
         text = (REPO / "claude/engines/agent-core.md").read_text()
