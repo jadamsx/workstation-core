@@ -89,6 +89,7 @@ class StuckTests(ReportsCase):
 
     def test_blocked_status_open_for_60_seconds_is_stuck(self) -> None:
         self.status("blocked")
+        self.pane.write_text((FIXTURES / "pane-permission-prompt.txt").read_text())
         self.at(30)
         self.at(90)
         self.assertEqual(len(self.lines()), 1)
@@ -199,17 +200,96 @@ class StuckTests(ReportsCase):
         state = json.loads((self.root / ".watch-state.json").read_text())["stuck"]
         self.assertEqual(list(state), ["w1:p4"])
 
-    def test_a_restart_does_not_count_a_hung_shell_as_activity(self) -> None:
+    def turn(self, at: float, role: str, content: object) -> dict:
+        stamp = datetime.fromtimestamp(T0 + at, timezone.utc).isoformat().replace("+00:00", "Z")
+        return {"type": role, "timestamp": stamp, "message": {"content": content}}
+
+    def convo(self, *turns: dict) -> None:
+        self.transcript(0, "\n".join(json.dumps(t) for t in turns))
+
+    def report(self, at: float, name: str = "result-1.md") -> None:
+        path = self.folder / name
+        path.write_text("Status: decision\n")
+        os.utime(path, (T0 + at, T0 + at))
+
+    def shell_rows(self) -> None:
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
         os.environ["FAKE_SHELL_PID"] = "5"
-        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'sleep 9' < /dev/null"
-        rows = [watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}"), watch.Proc(20, 10, 100, 1.0, shell)]
-        first = watch.Watcher(self.root, procs=lambda: rows, wall=lambda: self.wall[0])
-        self.at(watch.STALL_SECONDS, first)
-        again = watch.Watcher(self.root, procs=lambda: rows, wall=lambda: self.wall[0])
-        self.at(watch.STALL_SECONDS + 30, again)
-        self.at(2 * watch.STALL_SECONDS + 60, again)
+        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'gh pr checks --watch' < /dev/null"
+        self.rows = [watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}"), watch.Proc(20, 10, 100, 1.0, shell)]
+
+    def test_a_coordinator_prompt_after_a_report_with_no_shell_is_kicked(self) -> None:
+        self.report(-50)
+        self.convo(self.turn(0, "user", "[coordinator] do the next thing"))
+        self.at(watch.STALL_SECONDS)
         self.assertEqual(len(self.lines()), 1)
+
+    def test_a_report_newer_than_the_dispatch_closes_the_job(self) -> None:
+        self.convo(self.turn(0, "user", [{"type": "text", "text": "[coordinator] go"}]))
+        self.report(100)
+        self.at(100 + watch.STALL_SECONDS)
+        self.at(100 + 2 * watch.STALL_SECONDS)
+        self.assertEqual(self.lines(), [])
+
+    def test_nothing_but_a_coordinator_dispatch_reopens_a_job(self) -> None:
+        for text in ("what is the status?", "<command-name>/clear</command-name>", "<local-command-stdout></local-command-stdout>",
+                     "<task-notification>done</task-notification>", "This session is being continued from a previous conversation.",
+                     "[watcher] alpha looks stuck", "<system-reminder>hook</system-reminder>"):
+            self.setUp()
+            self.report(100)
+            self.convo(self.turn(0, "user", "[coordinator] go"), self.turn(200, "user", text), self.turn(210, "user", [{"type": "tool_result", "content": "ok"}]))
+            self.at(200 + watch.STALL_SECONDS)
+            self.assertEqual(self.lines(), [], text)
+
+    def test_no_dispatch_in_the_tail_is_closed_by_a_report_and_open_without_one(self) -> None:
+        self.convo(self.turn(0, "user", "hello"))
+        self.report(100)
+        self.at(100 + watch.STALL_SECONDS)
+        self.assertEqual(self.lines(), [])
+        (self.folder / "result-1.md").unlink()
+        self.at(100 + 2 * watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_a_dispatch_that_scrolled_out_of_the_tail_leaves_the_job_open(self) -> None:
+        pad = [self.turn(t, "assistant", [{"type": "text", "text": "x" * 40}]) for t in range(1, 30)]
+        self.convo(self.turn(0, "user", "[coordinator] go"), *pad)
+        self.report(100)
+        with mock.patch.object(watch, "TRANSCRIPT_TAIL_BYTES", 600):
+            self.at(100 + watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_a_reaped_report_does_not_close_a_job(self) -> None:
+        self.convo(self.turn(0, "user", "[coordinator] go"))
+        self.report(100, "reaped-9.md")
+        self.at(100 + watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
+
+    def test_a_live_child_shell_keeps_a_silent_tab_quiet_even_without_cpu(self) -> None:
+        self.convo(self.turn(0, "user", "[coordinator] go"))
+        self.shell_rows()
+        self.at(watch.STALL_SECONDS)
+        self.at(2 * watch.STALL_SECONDS)
+        self.assertEqual(self.lines(), [])
+
+    def test_a_prompt_that_is_gone_at_send_time_sends_no_alert(self) -> None:
+        self.pane.write_text((FIXTURES / "pane-permission-prompt.txt").read_text())
+        self.transcript(0)
+        self.at(30)
+        gone = "● Pushing\n> \n  ? for shortcuts\n"
+        with mock.patch.object(watch, "pane_text", side_effect=[self.pane.read_text(), gone]):
+            self.at(90)
+        self.assertEqual(self.lines(), [])
+
+    def test_a_prompt_and_repeated_refusals_kick_whatever_the_job_state(self) -> None:
+        self.report(100)
+        self.shell_rows()
+        self.pane.write_text((FIXTURES / "pane-permission-prompt.txt").read_text())
+        self.at(30)
+        self.at(90)
+        self.assertIn("permission prompt", self.lines()[0])
+        self.refusals(120)
+        self.at(150)
+        self.assertEqual(len(self.lines()), 2)
 
     def test_a_kept_manager_with_no_reports_is_checked(self) -> None:
         (self.folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "session_id": SESSION, "started": T0, "keep": True}))
@@ -220,6 +300,7 @@ class StuckTests(ReportsCase):
         text = (REPO / "claude/engines/agent-core.md").read_text()
         self.assertIn("`[watcher] looks stuck` line means kick the tab at once", text)
         self.assertIn("`Status` and `BLUF` lines first", text)
+        self.assertIn("a `Status: decision` report", text)
 
 
 if __name__ == "__main__":

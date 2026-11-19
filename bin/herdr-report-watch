@@ -6,9 +6,9 @@ as `[worker-report] <path>` with `herdr agent prompt` to the pane saved by `herd
 retried every 15 seconds. A `Status: done` report also closes the manager's tab (a standing manager is `/clear`ed, a kept one
 left open); a manager whose pane is gone is reported once. Every 30 seconds each manager tab is checked: one
 `[watcher] <tab> looks stuck: <reason>` line goes to the lead when it shows no activity (reports, transcripts, CPU-using
-shells) for STALL_SECONDS, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
+shells) for STALL_SECONDS with its job open (its newest `[coordinator]` dispatch in the transcript is newer than every `result-*.md`, or it has no dispatch and no report yet; a dispatch beyond the 1 MB tail leaves it open) and no live Bash-tool shell, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
 it re-arms on new activity. Parked `manager-send` jobs resume when `usage-gate` opens. Bash-tool shells under a claude in a lead, work or manager pane that burn no CPU for
-10 minutes are reaped (never any other pane). A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
+10 minutes are reaped (never any other pane), except while the tab's last turn is a `WAITING:` message under 2 hours old. A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
 ready nodes and long shell waits. State is in `<root>/.watch-state.json`; stdout goes to ~/Library/Logs/herdr-report-watch.log.
 """
 import argparse
@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from contextlib import suppress
 from datetime import datetime
 from typing import Callable
 from importlib.machinery import SourceFileLoader
@@ -38,6 +39,9 @@ PROMPT_SECONDS = 60
 GUARD_REFUSALS = 3
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 PROJECTS = Path.home() / ".claude/projects"
+WAITING = re.compile(r"^[ \t]*WAITING:[^\n]*", re.M)
+WAIT_PARK_SECONDS = 2 * 3600
+PROMPT_REASON = "permission prompt open for"
 PERMISSION_PROMPT = re.compile(r"Do you want to [^\n]*\n[│\s]*❯ 1\. Yes")
 GUARD_REFUSAL = re.compile(r'"content":"[\w:.-]+ hook error: \[(?:[^\]]*/)?([\w.-]+)[^\]]*\]')
 TIMESTAMP = re.compile(r'"timestamp":"([^"]+)"')
@@ -92,6 +96,71 @@ def commit_time(trees: list[Path], node: str) -> float | None:
 
 def transcripts(session: str | None) -> list[Path]:
     return [*PROJECTS.glob(f"*/{session}.jsonl"), *PROJECTS.glob(f"*/{session}/subagents/*.jsonl")] if session else []
+
+
+def transcript_tail(session: str | None) -> tuple[list[dict], bool]:
+    """Parsed entries from the tail of the session's own transcript, oldest first, and whether the tail starts at the file's start."""
+    for path in PROJECTS.glob(f"*/{session}.jsonl") if session else ():
+        with path.open("rb") as handle:
+            skipped = max(0, path.stat().st_size - TRANSCRIPT_TAIL_BYTES)
+            handle.seek(skipped)
+            lines = handle.read().decode(errors="replace").splitlines()
+        entries = []
+        for line in lines[1:] if skipped else lines:
+            with suppress(ValueError):
+                if isinstance(entry := json.loads(line), dict):
+                    entries.append(entry)
+        return entries, not skipped
+    return [], True
+
+
+def blocks(entry: dict) -> list[dict]:
+    content = entry.get("message", {}).get("content") if isinstance(entry.get("message"), dict) else None
+    return [{"type": "text", "text": content}] if isinstance(content, str) else [b for b in content or [] if isinstance(b, dict)]
+
+
+def entry_time(entry: dict) -> float:
+    try:
+        return datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, AttributeError, ValueError):
+        return 0.0
+
+
+def is_prompt(entry: dict) -> bool:
+    """A user turn that starts with the `[coordinator]` prefix `manager-send` and `manager-start` put on a dispatch."""
+    texts = [b.get("text", "") for b in blocks(entry) if b.get("type") == "text"]
+    return entry.get("type") == "user" and bool(texts) and texts[0].lstrip().startswith("[coordinator]")
+
+
+def newest_prompt(session: str | None) -> tuple[float | None, bool]:
+    """Time of the newest dispatch in the tail, and whether the tail covers the whole transcript."""
+    entries, whole = transcript_tail(session)
+    return max((entry_time(e) for e in entries if is_prompt(e)), default=None), whole
+
+
+def waiting_since(session: str | None) -> float | None:
+    """Time of the last turn when it is an assistant message with a `WAITING:` line and no tool use after it."""
+    turns = [e for e in transcript_tail(session)[0] if e.get("type") in ("user", "assistant")]
+    if not turns or turns[-1].get("type") != "assistant" or any(b.get("type") == "tool_use" for b in blocks(turns[-1])):
+        return None
+    text = "\n".join(b.get("text", "") for b in blocks(turns[-1]) if b.get("type") == "text")
+    return entry_time(turns[-1]) if WAITING.search(text) else None
+
+
+def shell_owners(procs: list[Proc]) -> dict[int, Proc]:
+    """Bash-tool shell pid to the claude process above it."""
+    by_pid = {p.pid: p for p in procs}
+
+    def claude_above(proc: Proc) -> Proc | None:
+        seen = set()
+        while proc.ppid in by_pid and proc.ppid not in seen:
+            seen.add(proc.ppid)
+            proc = by_pid[proc.ppid]
+            if argv0(proc) == "claude":
+                return proc
+        return None
+
+    return {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_SHELL.match(p.command) and (c := claude_above(p))}
 
 
 class Watcher:
@@ -169,11 +238,34 @@ class Watcher:
                     counts[refusal[1]] += 1
         return counts.most_common(1)[0] if counts else None
 
-    def stuck_reason(self, active: float, since: float | None, refused: tuple[str, int] | None, wall: float) -> str | None:
-        if wall - active >= STALL_SECONDS:
+    def armed(self, manager: Path, info: dict) -> bool:
+        """A silent tab is worth a kick only while its job is open and no shell it started can wake it. A job opens on a `[coordinator]` dispatch newer than every report; with no dispatch in a fully read transcript it is open only until the first report."""
+        reports = [f.stat().st_mtime for f in manager.glob("result-*.md")]
+        prompted, whole = newest_prompt(info.get("session_id"))
+        if reports and (prompted is None and whole or prompted is not None and prompted <= max(reports)):
+            return False
+        try:
+            owners = shell_owners(self.procs())
+        except (OSError, ValueError, subprocess.CalledProcessError):
+            owners = {}
+        return not any(f"{manager}/mcp.json" in claude.command for claude in owners.values())
+
+    def waiting(self, claude: Proc) -> bool:
+        """True while a tab's last turn is a recent `WAITING:` message, so its shells are its wake source."""
+        for folder in self.managers_of(claude):
+            try:
+                since = waiting_since(read_manager(folder).get("session_id"))
+            except (OSError, ValueError):
+                continue
+            if since is not None and self.wall() - since < WAIT_PARK_SECONDS:
+                return True
+        return False
+
+    def stuck_reason(self, active: float, since: float | None, refused: tuple[str, int] | None, wall: float, armed: bool = True) -> str | None:
+        if armed and wall - active >= STALL_SECONDS:
             return f"no activity for {int((wall - active) // 60)} min"
         if since is not None and wall - since >= PROMPT_SECONDS:
-            return f"permission prompt open for {int(wall - since)} s"
+            return f"{PROMPT_REASON} {int(wall - since)} s"
         if refused and refused[1] >= GUARD_REFUSALS:
             return f"{refused[0]} refused it {refused[1]} times"
         return None
@@ -192,7 +284,14 @@ class Watcher:
             refused = self.refused_by(info.get("session_id"), wall, reported["at"] if reported else 0) if rearmed else None
         except (OSError, ValueError):
             return
-        reason = self.stuck_reason(active, since, refused, wall) if active and rearmed else None
+        reason = None
+        if active and rearmed:
+            reason = self.stuck_reason(active, since, refused, wall, wall - active < STALL_SECONDS or self.armed(manager, info))
+        if reason and reason.startswith(PROMPT_REASON):
+            try:
+                reason = reason if PERMISSION_PROMPT.search(pane_text(pane)) else None
+            except (subprocess.CalledProcessError, OSError):
+                reason = None
         if reason and self.deliver(f"stuck:{pane}", coordinator, f"[watcher] {manager.name} looks stuck: {reason}. Assume the worst and kick it.", None, now):
             self.state["stuck"][pane] = {"active": active, "at": wall}
             write_atomic(self.state_file, json.dumps(self.state))
@@ -241,16 +340,7 @@ class Watcher:
         for p in procs:
             children.setdefault(p.ppid, []).append(p)
 
-        def claude_above(proc: Proc) -> Proc | None:
-            seen = set()
-            while proc.ppid in by_pid and proc.ppid not in seen:
-                seen.add(proc.ppid)
-                proc = by_pid[proc.ppid]
-                if argv0(proc) == "claude":
-                    return proc
-            return None
-
-        owners = {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_SHELL.match(p.command) and (c := claude_above(p))}
+        owners = shell_owners(procs)
         if owners:
             try:
                 managed = managed_shell_pids()
@@ -286,7 +376,7 @@ class Watcher:
                     self.shell_wait[folder] = max(self.shell_wait.get(folder, 0), shell.age)
             if shell.ppid in owners or pid in self.terminated or now - since <= REAP_IDLE_SECONDS or shell.age <= REAP_IDLE_SECONDS:
                 continue
-            if any(k in p.command for p in tree for k in keep):
+            if any(k in p.command for p in tree for k in keep) or self.waiting(claude):
                 continue
             self.stop(shell, claude, procs)
             self.terminated[pid] = (now, shell)
