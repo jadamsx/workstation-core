@@ -20,7 +20,7 @@ Steps, in order:
 Two notes that disagree on a fact stop the run: ask which is right before merging.
 
 ### Where notes go
-- Project streams: `projects/<slug>/<type>/`, `<type>` one of `designs`, `decisions`, `research`, `incidents`, `reviews`, created on first use; nothing else sits in a project folder. The note carries `project: <slug>`. Resolve the slug with `current-project`; none means ask once or use the top-level folders.
+- Project streams: `projects/<slug>/<type>/`, `<type>` one of `designs`, `decisions`, `research`, `incidents`, created on first use; nothing else sits in a project folder. A review of someone's change is the exception: `projects/reviews/mrs/<repo>-<number>.md`, the path `engines/review.md` names. The note carries `project: <slug>`. Resolve the slug with `current-project`; none means ask once or use the top-level folders.
 - Knowledge serving several streams: top-level `runbooks/`, `reference/`, `howto/`.
 - Link a project as `[[projects/<slug>/index|Name]]`; every new project note is linked from that hub in a sentence saying why it matters.
 - Decisions: one note per accepted decision, body per `templates/decision.md`.
