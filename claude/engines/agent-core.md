@@ -22,6 +22,7 @@ Every spawned agent loads this file.
 - macOS `sed -i` needs `sed -i ''`; use python, or better the Edit tool.
 - Never use `rm -r` or `herdr workspace close`; hooks block them.
 - Never write `rm -rf` in any command, even quoted or as test text: Claude Code prompts on it even in bypass mode. Move things to `~/.Trash` instead.
+- Never escape the sandbox for a command that is not on `sandbox.excludedCommands`; write a decision report for the coordinator instead.
 - Never `git stash`: commit the work, or use a worktree. `git stash list` and `git stash show` are read-only and allowed.
 - Never `sleep` or poll in a loop: run the command with `run_in_background` and wait for its notice.
 - Every commit and change title starts with a gitmoji.

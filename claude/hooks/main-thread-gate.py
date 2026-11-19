@@ -22,6 +22,7 @@ Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -65,6 +66,12 @@ LEAD_DENIED_AGENTS = {
     "migration-verifier",
 }
 LEAD_HANDOFF = 'The lead never builds or reviews. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
+PROTECTED_DIRS = {".git", ".config/git", ".vscode", ".idea", ".husky", ".cargo", ".devcontainer", ".yarn", ".mvn", ".claude"}
+PROTECTED_FILES = {
+    ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".zshrc", ".zprofile", ".zshenv", ".profile",
+    ".envrc", ".npmrc", ".yarnrc", ".mcp.json", ".claude.json", ".pre-commit-config.yaml", ".ripgreprc",
+}
+CLAUDE_EXEMPT = ("worktrees/*", "plans/*", "projects/*/memory/*.md", "agent-memory/*.md")
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
@@ -403,6 +410,34 @@ def is_coordination_file(path: str) -> bool:
     )
 
 
+def protected_path(path: str) -> bool:
+    parts = Path(os.path.normpath(os.path.expanduser(path))).parts
+    if parts and parts[-1] in PROTECTED_FILES:
+        return True
+    dirs = parts[:-1]
+    for i, part in enumerate(dirs):
+        hit = part in PROTECTED_DIRS or "/".join(dirs[i : i + 2]) in PROTECTED_DIRS
+        if not hit:
+            continue
+        rest = "/".join(parts[i + 1 :])
+        if part != ".claude" or not any(fnmatch.fnmatchcase(rest, g) for g in CLAUDE_EXEMPT):
+            return True
+    return False
+
+
+def protected_reason(payload: dict) -> str | None:
+    if payload.get("tool_name") not in EDIT_TOOLS:
+        return None
+    tool_input = payload.get("tool_input") or {}
+    path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+    if path and protected_path(path):
+        return (
+            f"{path} is a protected config path and Claude Code would prompt on it. "
+            "Write a decision report for the coordinator asking the owner to make the change."
+        )
+    return None
+
+
 def block_reason(payload: dict) -> str | None:
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     if tool in EDIT_TOOLS:
@@ -436,7 +471,7 @@ def main() -> None:
         if reason:
             print(reason, file=sys.stderr)
             sys.exit(2)
-    reason = polling_reason(payload)
+    reason = protected_reason(payload) or polling_reason(payload)
     if reason:
         print(reason, file=sys.stderr)
         sys.exit(2)

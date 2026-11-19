@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parents[2] / "claude/hooks"
+RM_RF = "rm " + "-rf"
 
 
 def run_hook(
@@ -227,27 +228,36 @@ class SharedEnvGuardTest(unittest.TestCase):
 
 
 class RmGuardTest(unittest.TestCase):
-    def bash(self, command: str, cwd: str = "/work") -> subprocess.CompletedProcess:
+    def bash(
+        self,
+        command: str,
+        cwd: str = "/work",
+        escape: bool = False,
+        env: dict | None = None,
+    ) -> subprocess.CompletedProcess:
+        tool_input: dict = {"command": command}
+        if escape:
+            tool_input["dangerouslyDisableSandbox"] = True
         return run_hook(
             "rm-guard.py",
-            {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd},
-            {"DRAFTS_DIR": str(Path.home() / "drafts")},
+            {"tool_name": "Bash", "tool_input": tool_input, "cwd": cwd},
+            {"DRAFTS_DIR": str(Path.home() / "drafts"), **(env or {})},
         )
 
     def test_recursive_rm_outside_safe_roots_blocked(self) -> None:
         for cmd in [
-            "rm -rf /",
-            "rm -rf ~",
-            "rm -rf ~/code/app",
+            "rm -r /",
+            "rm -r ~",
+            "rm -r ~/code/app",
             "rm -r ../x",
-            "rm -fr *",
-            "rm -rf ~/.cache/../.ssh",
-            "rm -rf $TMPDIR/a ~/Documents",
-            "rm -rf $UNSET/x",
-            "rm -rf $(pwd)",
-            "ls && rm -Rf /work/src",
-            "rm -rf ~/drafts",
-            "rm --recursive --force /work/src",
+            "rm -R *",
+            "rm -r ~/.cache/../.ssh",
+            "rm -r $TMPDIR/a ~/Documents",
+            "rm -r $UNSET/x",
+            "rm -r $(pwd)",
+            "ls && rm -R /work/src",
+            "rm -r ~/drafts",
+            "rm --recursive /work/src",
         ]:
             result = self.bash(cmd)
             self.assertEqual(result.returncode, 2, cmd)
@@ -256,18 +266,18 @@ class RmGuardTest(unittest.TestCase):
     def test_recursive_rm_in_safe_roots_allowed(self) -> None:
         home = str(Path.home())
         for cmd in [
-            "rm -rf $TMPDIR/scratch",
-            "rm -rf ${TMPDIR}/a/b",
-            f"rm -rf {home}/drafts/x",
-            "rm -rf ~/drafts/x/y",
-            "rm -rf ~/code/app/.claude/worktrees/feat",
-            "rm -rf node_modules",
-            "rm -rf /work/web/node_modules/.cache",
-            "rm -rf .venv dist build",
-            "rm -rf src/__pycache__",
-            "rm -rf ~/.cache/uv",
-            "rm -r -f -- dist",
-            "rm -rf /work/a/dist/*",
+            "rm -r $TMPDIR/scratch",
+            "rm -r ${TMPDIR}/a/b",
+            f"rm -r {home}/drafts/x",
+            "rm -r ~/drafts/x/y",
+            "rm -r ~/code/app/.claude/worktrees/feat",
+            "rm -r node_modules",
+            "rm -r /work/web/node_modules/.cache",
+            "rm -r .venv dist build",
+            "rm -r src/__pycache__",
+            "rm -r ~/.cache/uv",
+            "rm -r -- dist",
+            "rm -r /work/a/dist/*",
         ]:
             self.assertEqual(self.bash(cmd).returncode, 0, cmd)
 
@@ -275,17 +285,89 @@ class RmGuardTest(unittest.TestCase):
         for cmd in [
             "rm file.txt",
             "rm -f /work/a.log",
-            "echo rm -rf /",
             "git add rm",
-            "rm -rf",
+            "rm -r",
+            "echo rm -r /",
         ]:
             self.assertEqual(self.bash(cmd).returncode, 0, cmd)
 
+    def test_rm_rf_denied_anywhere_in_text(self) -> None:
+        for cmd in [
+            RM_RF + " $TMPDIR/x",
+            f"echo '{RM_RF} /'",
+            "rm " + "-fr dist",
+            "rm " + "-r -f dist",
+            "rm " + "--recursive --force dist",
+            f"cat <<EOF\n{RM_RF} x\nEOF",
+            f"ls # {RM_RF}",
+        ]:
+            result = self.bash(cmd)
+            self.assertEqual(result.returncode, 2, cmd)
+            self.assertIn("move it to ~/.Trash", result.stderr)
+
+    def test_sandbox_escape_denied_unless_excluded(self) -> None:
+        for cmd in ["npm install", "git push origin x && npm test", "/usr/local/bin/docker ps"]:
+            result = self.bash(cmd, escape=True)
+            self.assertEqual(result.returncode, 2, cmd)
+            self.assertIn("decision report", result.stderr)
+        for cmd in ["git push origin x", "git fetch && git pull --rebase", "herdr pane list | ps aux"]:
+            self.assertEqual(self.bash(cmd, escape=True).returncode, 0, cmd)
+        self.assertEqual(self.bash("npm install").returncode, 0)
+
+    def test_sandbox_escape_reads_home_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as home:
+            (Path(home) / ".claude").mkdir()
+            (Path(home) / ".claude/settings.json").write_text(
+                json.dumps({"sandbox": {"excludedCommands": ["npm install"]}})
+            )
+            env = {"HOME": home}
+            self.assertEqual(self.bash("npm install", escape=True, env=env).returncode, 0)
+            self.assertEqual(self.bash("git push", escape=True, env=env).returncode, 2)
+
     def test_non_bash_tool_ignored(self) -> None:
         result = run_hook(
-            "rm-guard.py", {"tool_name": "Read", "tool_input": {"command": "rm -rf /"}}
+            "rm-guard.py", {"tool_name": "Read", "tool_input": {"command": RM_RF + " /"}}
         )
         self.assertEqual(result.returncode, 0)
+
+
+class ProtectedWriteTest(unittest.TestCase):
+    def write(self, path: str, tool: str = "Write", **payload: object) -> subprocess.CompletedProcess:
+        key = "notebook_path" if tool == "NotebookEdit" else "file_path"
+        return run_hook(
+            "main-thread-gate.py",
+            {"tool_name": tool, "tool_input": {key: path}, **payload},
+            {"WORKSTATION_ROLE": "manager"},
+        )
+
+    def test_protected_paths_denied_for_every_caller(self) -> None:
+        home = str(Path.home())
+        for path in [
+            "/r/.git/hooks/pre-commit",
+            "/r/.husky/pre-commit",
+            f"{home}/.config/git/ignore",
+            f"{home}/.zshrc",
+            "/r/.pre-commit-config.yaml",
+            "/r/.claude/settings.json",
+            f"{home}/.claude/hooks/x.py",
+        ]:
+            for extra in ({}, {"agent_id": "a1"}):
+                result = self.write(path, **extra)
+                self.assertEqual(result.returncode, 2, path)
+                self.assertIn(path, result.stderr)
+                self.assertIn("decision report", result.stderr)
+        self.assertEqual(self.write("/r/.mcp.json", "NotebookEdit").returncode, 2)
+
+    def test_worktrees_and_core_claude_dir_allowed(self) -> None:
+        home = str(Path.home())
+        for path in [
+            "/r/.claude/worktrees/x/claude/hooks/x.py",
+            "/r/claude/hooks/x.py",
+            f"{home}/.claude/plans/p.md",
+            f"{home}/.claude/projects/p/memory/m.md",
+            "/r/.claude/agent-memory/a.md",
+        ]:
+            self.assertEqual(self.write(path, agent_id="a1").returncode, 0, path)
 
 
 class AgentModelGateTest(unittest.TestCase):
