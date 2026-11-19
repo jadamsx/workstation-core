@@ -142,6 +142,9 @@ def main(argv: list[str]) -> int:
         if info.get("closed"):
             raise ReportsError(f"manager {name!r} is closed")
         write_owns(text)
+        plan = re.match(r"/build\s.*?(\S+\.md)\b", text)
+        if plan and info.get("plan") != str(Path(plan.group(1)).expanduser()):
+            write_atomic(folder / "manager.json", json.dumps({**info, "plan": str(Path(plan.group(1)).expanduser())}))
     except ReportsError as err:
         print(f"manager-send: {err}", file=sys.stderr)
         return 2

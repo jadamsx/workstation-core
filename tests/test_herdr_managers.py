@@ -403,6 +403,17 @@ class ManagerTests(ReportsCase):
     def usage(self, five: float, reset: float) -> None:
         Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
 
+    def test_a_build_job_records_its_plan_in_manager_json(self) -> None:
+        folder = self.manager()
+        tree = self.root / "tree"
+        tree.mkdir()
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text("legacy: true\n")
+        r = self.bin("manager-send", "alpha", f"/build {plan} node N1 worktree {tree}")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads((folder / "manager.json").read_text())["plan"], str(plan))
+
     def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
         folder = self.manager()
         self.usage(90, time.time() + 3600)
