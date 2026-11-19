@@ -269,6 +269,12 @@ class PayloadTest(unittest.TestCase):
             "sleep 11",
             "sleep 1m",
             "sleep 0.5h",
+            "sleep infinity",
+            "sleep inf",
+            "timeout 60 bash -c 'until x; do sleep 1; done'",
+            "bash -c 'sleep 30'",
+            "a=1; while true; do sleep 1; done",
+            "(until x; do sleep 1; done)",
         ]
         for command in commands:
             with self.subTest(command=command):
@@ -281,7 +287,17 @@ class PayloadTest(unittest.TestCase):
                 del self.env["WORKSTATION_REPORTS"]
 
     def test_short_sleep_and_quoted_text_allowed(self) -> None:
-        for command in ("sleep 2", "sleep 10", 'echo "while we sleep 30"'):
+        allowed = (
+            "sleep 2",
+            "sleep 10",
+            'echo "while we sleep 30"',
+            "git log --until=1d; sleep 2",
+            "echo until done; sleep 2",
+            "while read x; do echo $x; done < f; sleep 1",
+            "cat <<EOF\nsleep 30\nEOF",
+            "bash -c 'sleep 2'",
+        )
+        for command in allowed:
             self.assertEqual(self.run_hook(self.pre("Bash", {"command": command})).returncode, 0, command)
 
     def test_ask_gate_still_applies_beside_the_sleep_rule(self) -> None:
@@ -296,9 +312,35 @@ class PayloadTest(unittest.TestCase):
         self.assertEqual(out["hookEventName"], "PreToolUse")
         updated = out["updatedInput"]
         self.assertTrue(updated["run_in_background"])
-        self.assertRegex(updated["command"], r"^(gtimeout 1200|perl -e 'alarm 1200; exec @ARGV' --) bash -c ")
+        self.assertRegex(updated["command"], r"^(gtimeout 1200|perl -e 'alarm 1200; exec @ARGV' --) \"\$\{SHELL:-bash\}\" -c ")
         shell = subprocess.run(updated["command"], shell=True, text=True, capture_output=True)
         self.assertEqual(shell.stdout.strip(), "its")
+
+    def test_wrapper_runs_under_the_user_shell_and_keeps_quoting(self) -> None:
+        command = "echo \"a b\" '$HOME' $0; echo \"it's\""
+        updated = gate.with_timeout(self.pre("Bash", {"command": command, "run_in_background": True}))
+        env = {**os.environ, "SHELL": "/bin/sh"}
+        shell = subprocess.run(updated["command"], shell=True, text=True, capture_output=True, env=env)
+        self.assertEqual(shell.stdout.splitlines(), ["a b $HOME /bin/sh", "it's"])
+
+    def test_commands_matched_by_permission_rules_are_not_wrapped(self) -> None:
+        for command in (
+            "git push --force",
+            "FOO=1 git push",
+            "gh pr merge 1",
+            "glab mr list",
+            "launchctl unload x",
+            "rm -rf x",
+            "sudo ls",
+            "docker ps",
+            "kubectl get pods",
+            "shell-reap",
+            "ps aux",
+        ):
+            with self.subTest(command=command):
+                self.assertIsNone(gate.with_timeout(self.pre("Bash", {"command": command, "run_in_background": True})))
+        wrapped = gate.with_timeout(self.pre("Bash", {"command": "git2 x; sleep 3", "run_in_background": True}))
+        self.assertIn("-c ", wrapped["command"])
 
     def test_foreground_and_wrapped_commands_unchanged(self) -> None:
         self.assertEqual(self.run_hook(self.pre("Bash", {"command": "echo hi"})).stdout, "")
