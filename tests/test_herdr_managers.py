@@ -1049,6 +1049,27 @@ class PlanAlertTests(ReportsCase):
         self.watcher(wall).scan(3)
         self.assertEqual(len(self.alerts()), 1)
 
+    def test_needs_wording_with_possessive_still_reads_the_node_id(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second")
+        plan = self.root.parent / "plan.md"
+        plan.write_text(plan.read_text().replace("(needs N1)", "(needs N1's owns file)"))
+        os.utime(plan, (1000, 1000))
+        watcher = self.watcher([1121.0])
+        watcher.scan(0)
+        watcher.scan(1)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready", self.alerts()[0])
+
+    def test_node_with_a_trailer_commit_counts_as_done(self) -> None:
+        _, tree = self.setup_plan("- [ ] N1 first\n- [ ] N2 second")
+        git = ["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x\n\nNode: N1"], check=True)
+        watcher = self.watcher([time.time() + 121])
+        watcher.scan(0)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready", self.alerts()[0])
+
     def test_running_blocked_and_done_nodes_never_prompt(self) -> None:
         self.setup_plan("- [x] N1 first\n- [~] N2 second\n- [ ] N3 third")
         self.watcher([5000.0]).scan(0)
