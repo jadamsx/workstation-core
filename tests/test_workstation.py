@@ -237,9 +237,10 @@ class BaseSettingsTest(unittest.TestCase):
 
     def test_only_git_network_commands_skip_the_sandbox(self) -> None:
         excluded = self.base["sandbox"]["excludedCommands"]
-        for cmd in ("gh *", "launchctl *", "git fetch*", "git push*", "git pull*", "git clone*", "git ls-remote*"):
+        for cmd in ("ps *", "shell-reap *", "gh *", "launchctl *", "git fetch*", "git push*", "git pull*", "git clone*", "git ls-remote*"):
             self.assertIn(cmd, excluded)
         self.assertNotIn("git *", excluded)
+        self.assertNotIn("kill *", excluded)
 
     def test_git_state_and_caches_are_writable_in_the_sandbox(self) -> None:
         writable = self.base["sandbox"]["filesystem"]["allowWrite"]
@@ -249,7 +250,8 @@ class BaseSettingsTest(unittest.TestCase):
     def test_allow_is_narrow_and_has_no_blanket_git(self) -> None:
         allow = self.base["permissions"]["allow"]
         self.assertNotIn("Bash(git *)", allow)
-        for rule in ("Bash(gh *)", "Bash(launchctl *)", "Bash(git fetch*)", "Bash(git push*)", "Bash(git worktree*)", "Bash(herdr *)", "Bash(docker ps*)", "Bash(docker logs*)", "Bash(docker inspect*)"):
+        self.assertNotIn("Bash(kill *)", allow)
+        for rule in ("Bash(gh *)", "Bash(launchctl *)", "Bash(git fetch*)", "Bash(git push*)", "Bash(git worktree*)", "Bash(herdr *)", "Bash(ps *)", "Bash(shell-reap *)", "Bash(docker ps*)", "Bash(docker logs*)", "Bash(docker inspect*)"):
             self.assertIn(rule, allow)
 
     def test_destructive_git_stays_denied(self) -> None:

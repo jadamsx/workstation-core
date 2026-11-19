@@ -935,16 +935,18 @@ class ReaperTests(ReportsCase):
 
     def test_idle_descendant_shell_is_killed_and_a_decision_report_written(self) -> None:
         watcher, kills = self.reaper(self.table())
-        self.assertEqual(kills, [(20, signal.SIGTERM)])
+        self.assertEqual(kills, [(21, signal.SIGTERM), (20, signal.SIGTERM)])
         report = (self.manager() / "reaped-20.md").read_text()
         self.assertEqual(report.split("\n")[0], "Status: decision")
         self.assertIn("pid 20", report)
         self.assertIn("make serve", report)
+        self.assertIn("foreground with a timeout", report)
+        self.assertNotIn("run_in_background", report)
         self.assertIn(f"[worker-report] {self.manager() / 'reaped-20.md'}", " ".join(self.prompts()))
         watcher.scan(603)
-        self.assertEqual(len(kills), 1)
+        self.assertEqual(len(kills), 2)
         watcher.scan(607)
-        self.assertEqual(kills[1], (20, signal.SIGKILL))
+        self.assertEqual(kills[2], (20, signal.SIGKILL))
 
     def test_keep_listed_busy_and_unrelated_shells_survive(self) -> None:
         for rows in (
@@ -962,6 +964,36 @@ class ReaperTests(ReportsCase):
         watcher.procs = lambda: rows[1]
         watcher.scan(601)
         self.assertEqual(kills, [])
+
+    def test_stop_shell_accepts_only_a_shell_under_claude(self) -> None:
+        rows = self.table() + [watch.Proc(30, 1, 900, 0.0, "/bin/zsh -c orphan"), watch.Proc(40, 20, 900, 0.0, "python3 x")]
+        sent: list = []
+
+        def stop(pid: int, caller: int = 999) -> None:
+            herdr_reports.stop_shell(pid, lambda: rows, lambda p, sig: sent.append((p, sig)), caller)
+
+        for pid in (40, 30, 10, 1):
+            with self.assertRaises(herdr_reports.ReportsError):
+                stop(pid)
+        with self.assertRaises(herdr_reports.ReportsError):
+            stop(20, caller=21)
+        self.assertEqual(sent, [])
+        stop(20)
+        self.assertEqual(sent, [(40, signal.SIGTERM), (21, signal.SIGTERM), (20, signal.SIGTERM)])
+
+    def test_sigkill_is_skipped_when_the_pid_was_reused(self) -> None:
+        kills: list = []
+        watcher, _ = self.reaper(self.table())
+        watcher.kill = lambda pid, sig: kills.append((pid, sig))
+        reused = [watch.Proc(20, 1, 3, 0.0, "other thing")]
+        watcher.procs = lambda: self.table()[:1] + reused
+        watcher.scan(607)
+        self.assertEqual(kills, [])
+
+    def test_shell_that_only_mentions_the_snapshot_mark_is_not_reaped(self) -> None:
+        rows = self.table()
+        rows[1] = rows[1]._replace(command="/bin/zsh -c echo shell-snapshots/")
+        self.assertEqual(self.reaper(rows)[1], [])
 
     def test_ps_fields_parse(self) -> None:
         self.assertEqual(watch.clock_seconds("1-02:03:04"), 93784)
