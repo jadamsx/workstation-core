@@ -155,6 +155,15 @@ class PayloadTest(unittest.TestCase):
                     self.run_hook(self.pre(tool, {"file_path": path})).returncode, 0
                 )
 
+    def test_layer_supplied_dirs_exempt(self) -> None:
+        self.env["WORKSTATION_EDIT_EXEMPT_DIRS"] = "/home/u/layer/memory:~/other"
+        for path in ("/home/u/layer/memory/m.md", os.path.expanduser("~/other/n.md")):
+            self.assertEqual(
+                self.run_hook(self.pre("Write", {"file_path": path})).returncode, 0
+            )
+        code = self.pre("Write", {"file_path": "/home/u/layer/memory/tool.py"})
+        self.assertEqual(self.run_hook(code).returncode, 2)
+
     def test_code_under_notes_still_blocked(self) -> None:
         payload = self.pre("Write", {"file_path": "/home/u/notes/bin/tool.py"})
         self.assertEqual(self.run_hook(payload).returncode, 2)

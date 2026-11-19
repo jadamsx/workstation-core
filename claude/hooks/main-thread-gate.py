@@ -42,10 +42,11 @@ POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_back
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
-def coordination_dirs() -> tuple[str, str]:
+def coordination_dirs() -> tuple[str, ...]:
     notes = os.path.expanduser(os.environ.get("NOTES_DIR") or "~/notes")
     drafts = os.path.expanduser(os.environ.get("DRAFTS_DIR") or "~/drafts")
-    return (drafts, notes)
+    extra = tuple(os.path.expanduser(d) for d in os.environ.get("WORKSTATION_EDIT_EXEMPT_DIRS", "").split(":") if d)
+    return (drafts, notes, *extra)
 
 
 TOOL_HEADS = {
