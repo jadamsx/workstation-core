@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -147,6 +148,12 @@ class AgentTest(ScratchCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.ws.LIVE = True
+        self.ws.ROOT = self.tmp / "root"
+        shutil.copytree(
+            REPO,
+            self.ws.ROOT,
+            ignore=shutil.ignore_patterns(".git", "worktrees", "__pycache__"),
+        )
         self.plist = (
             self.home / "Library/LaunchAgents/dev.workstation.herdr-report-watch.plist"
         )
@@ -179,6 +186,55 @@ class AgentTest(ScratchCase):
             c.split()[0] for c in self.launchctl_calls() if c.split()[0] != "print"
         ]
         self.assertEqual(verbs, ["bootstrap", "bootout", "bootstrap"])
+
+    def kickstarts(self) -> list[str]:
+        return [c for c in self.launchctl_calls() if c.startswith("kickstart")]
+
+    def change(self, rel: str) -> None:
+        with (self.ws.ROOT / rel).open("a") as handle:
+            handle.write("\n# changed\n")
+
+    def test_changed_program_is_kickstarted(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.change("bin/herdr-report-watch")
+        out = run_quiet(self.ws.cmd_install, False)
+        self.assertIn("restart agent", out)
+        self.assertEqual(
+            self.kickstarts(),
+            [f"kickstart -k gui/{os.getuid()}/dev.workstation.herdr-report-watch"],
+        )
+
+    def test_changed_lib_is_kickstarted(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.change("lib/herdr_reports.py")
+        run_quiet(self.ws.cmd_install, False)
+        self.assertEqual(len(self.kickstarts()), 1)
+
+    def test_unchanged_program_is_not_kickstarted(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        run_quiet(self.ws.cmd_install, False)
+        self.assertEqual(self.kickstarts(), [])
+
+    def test_missing_stamp_is_written_without_restart(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        stamp = self.home / ".local/state/workstation/dev.workstation.herdr-report-watch.sha256"
+        stamp.unlink()
+        run_quiet(self.ws.cmd_install, False)
+        self.assertTrue(stamp.exists())
+        self.assertEqual(self.kickstarts(), [])
+
+    def test_check_mode_does_not_kickstart(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.change("bin/herdr-report-watch")
+        out = run_quiet(self.ws.cmd_install, True)
+        self.assertIn("would restart agent", out)
+        self.assertEqual(self.kickstarts(), [])
+
+    def test_uninstall_removes_the_stamp(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        run_quiet(self.ws.cmd_uninstall, False)
+        stamp = self.home / ".local/state/workstation/dev.workstation.herdr-report-watch.sha256"
+        self.assertFalse(stamp.exists())
 
     def test_uninstall_boots_out_and_removes_the_plist(self) -> None:
         run_quiet(self.ws.cmd_install, False)
