@@ -540,6 +540,16 @@ class BaselineTest(LintCase):
         replace("reference/ref.md", "ticket: []", "ticket: []\nlegacy: true")(self.root)
         self.assertEqual(self.lint(), (0, []))
 
+    def test_legacy_design_in_old_key_order_is_clean(self) -> None:
+        design = "projects/p/designs/ABC-1-thing.md"
+        sub(self.root, design, "type: design\nstatus: proposed\n", "legacy: true\nstatus: proposed\ntype: design\n")
+        self.assertEqual(self.lint(), (0, []))
+
+    def test_design_in_old_key_order_without_legacy_fails(self) -> None:
+        design = "projects/p/designs/ABC-1-thing.md"
+        sub(self.root, design, "type: design\nstatus: proposed\n", "status: proposed\ntype: design\n")
+        self.assertIn("key-order", self.rules())
+
     def test_progress_checklist_with_in_progress_marks_is_clean(self) -> None:
         sub(
             self.root,
