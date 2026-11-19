@@ -11,8 +11,10 @@ machine. ``WORKSTATION_HOME`` and ``WORKSTATION_HOST`` override the home directo
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import plistlib
 import pwd
 import re
 import shutil
@@ -312,13 +314,32 @@ class PluginCommand(Item):
 class Agent(Item):
     """A launchd agent: the plist rendered from ``src`` plus its loaded state."""
 
-    kind, verb = "agent", "install agent"
+    kind = "agent"
 
     def __init__(self, dest: Path, src: Path) -> None:
         super().__init__(dest)
         self.src = src
         self.label = dest.stem
         self.target = f"gui/{os.getuid()}/{self.label}"
+        self.stamp = HOME / ".local/state/workstation" / f"{self.label}.sha256"
+
+    @property
+    def verb(self) -> str:
+        return "restart agent" if self.written() and self.stale() else "install agent"
+
+    def digest(self) -> str:
+        """Hash of the files the plist runs, so a rebuilt program restarts a running agent."""
+        args = plistlib.loads(self.body().encode())["ProgramArguments"]
+        sha = hashlib.sha256()
+        for arg in args:
+            if Path(arg).is_file():
+                sha.update(Path(arg).read_bytes())
+        return sha.hexdigest()
+
+    def stale(self) -> bool:
+        if not LIVE or not self.loaded():
+            return False
+        return not self.stamp.exists() or self.stamp.read_text() != self.digest()
 
     def body(self) -> str:
         return (
@@ -343,10 +364,13 @@ class Agent(Item):
             return MISSING if not self.dest.exists() else DIFFERS
         if not LIVE:
             return OK
-        return OK if self.loaded() else MISSING
+        if not self.loaded():
+            return MISSING
+        return DIFFERS if self.stale() else OK
 
     def apply(self, backup: Backup) -> None:
         changed = not self.written()
+        restart = not changed and self.stale()
         if changed:
             self.dest.parent.mkdir(parents=True, exist_ok=True)
             self.dest.write_text(self.body())
@@ -360,11 +384,16 @@ class Agent(Item):
                 ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(self.dest)],
                 check=True,
             )
+        elif restart:
+            subprocess.run(["launchctl", "kickstart", "-k", self.target], check=True)
+        self.stamp.parent.mkdir(parents=True, exist_ok=True)
+        self.stamp.write_text(self.digest())
 
     def uninstall(self, restorable: set[str]) -> None:
         if LIVE and self.loaded():
             subprocess.run(["launchctl", "bootout", self.target], check=True)
         self.dest.unlink(missing_ok=True)
+        self.stamp.unlink(missing_ok=True)
 
 
 def agent_items() -> list[Item]:

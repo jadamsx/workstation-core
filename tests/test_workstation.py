@@ -180,6 +180,37 @@ class AgentTest(ScratchCase):
         ]
         self.assertEqual(verbs, ["bootstrap", "bootout", "bootstrap"])
 
+    def kickstarts(self) -> list[str]:
+        return [c for c in self.launchctl_calls() if c.startswith("kickstart")]
+
+    def change_program(self) -> None:
+        program = self.ws.ROOT / "bin/herdr-report-watch"
+        original = program.read_bytes()
+        program.write_bytes(original + b"\n# changed\n")
+        self.addCleanup(program.write_bytes, original)
+
+    def test_changed_program_is_kickstarted(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.change_program()
+        out = run_quiet(self.ws.cmd_install, False)
+        self.assertIn("restart agent", out)
+        self.assertEqual(
+            self.kickstarts(),
+            [f"kickstart -k gui/{os.getuid()}/dev.workstation.herdr-report-watch"],
+        )
+
+    def test_unchanged_program_is_not_kickstarted(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        run_quiet(self.ws.cmd_install, False)
+        self.assertEqual(self.kickstarts(), [])
+
+    def test_check_mode_does_not_kickstart(self) -> None:
+        run_quiet(self.ws.cmd_install, False)
+        self.change_program()
+        out = run_quiet(self.ws.cmd_install, True)
+        self.assertIn("would restart agent", out)
+        self.assertEqual(self.kickstarts(), [])
+
     def test_uninstall_boots_out_and_removes_the_plist(self) -> None:
         run_quiet(self.ws.cmd_install, False)
         run_quiet(self.ws.cmd_uninstall, False)
