@@ -63,7 +63,7 @@ Any source change after the final pass goes back through this mode before the pu
 
 ### Mode `change`
 
-Optional review note `${NOTES_DIR:-~/notes}/projects/reviews/<repo>-<number>.md` per `templates/review.md`, with `reviewed_sha`, `verdict` and one line per posted thread.
+Optional review note `${NOTES_DIR:-~/notes}/projects/reviews/mrs/<repo>-<number>.md` per `templates/review.md`, with `reviewed_sha`, `verdict` and one line per posted thread.
 
 `light` and `medium` skip the ledger, approach pass and merge-time checks. Read the cited code yourself for anything Blocker or Refuse. A control missing from this repo may live in the caller, gateway or shared library.
 
