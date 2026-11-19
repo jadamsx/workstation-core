@@ -441,6 +441,11 @@ def plugin_items() -> list[Item]:
     return items
 
 
+def shell_links() -> list[Item]:
+    src = ROOT / "shell/zshenv"
+    return [Link(HOME / ".zshenv", src)] if src.exists() else []
+
+
 def bin_links() -> list[Item]:
     return [
         Link(HOME / ".local/bin" / name, ROOT / "bin" / name)
@@ -466,6 +471,7 @@ def plan() -> list[Item]:
         *claude_links(),
         *([settings] if settings.base.exists() else []),
         *mcp,
+        *shell_links(),
         *bin_links(),
         *agent_items(),
         *plugin_items(),

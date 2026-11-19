@@ -1,0 +1,4 @@
+unsetopt EQUALS
+if [[ -n $CLAUDECODE ]]; then
+  setopt NULL_GLOB
+fi
