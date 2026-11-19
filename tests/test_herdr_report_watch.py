@@ -200,17 +200,17 @@ class StuckTests(ReportsCase):
         state = json.loads((self.root / ".watch-state.json").read_text())["stuck"]
         self.assertEqual(list(state), ["w1:p4"])
 
-    def dispatch(self, at: float) -> None:
-        info = json.loads((self.folder / "manager.json").read_text())
-        (self.folder / "manager.json").write_text(json.dumps({**info, "sent_at": T0 + at}))
+    def turn(self, at: float, role: str, content: object) -> dict:
+        stamp = datetime.fromtimestamp(T0 + at, timezone.utc).isoformat().replace("+00:00", "Z")
+        return {"type": role, "timestamp": stamp, "message": {"content": content}}
 
-    def report(self, at: float) -> None:
-        path = self.folder / "result-1.md"
+    def convo(self, *turns: dict) -> None:
+        self.transcript(0, "\n".join(json.dumps(t) for t in turns))
+
+    def report(self, at: float, name: str = "result-1.md") -> None:
+        path = self.folder / name
         path.write_text("Status: decision\n")
         os.utime(path, (T0 + at, T0 + at))
-
-    def assistant(self, text: str) -> None:
-        self.transcript(0, json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}))
 
     def shell_rows(self) -> None:
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
@@ -218,37 +218,41 @@ class StuckTests(ReportsCase):
         shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'gh pr checks --watch' < /dev/null"
         self.rows = [watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}"), watch.Proc(20, 10, 100, 1.0, shell)]
 
-    def test_a_dispatched_job_with_no_report_and_no_children_is_kicked(self) -> None:
-        self.dispatch(0)
+    def test_a_prompt_newer_than_the_last_report_with_no_shell_is_kicked(self) -> None:
+        self.report(-50)
+        self.convo(self.turn(0, "user", "do the next thing"))
         self.at(watch.STALL_SECONDS)
         self.assertEqual(len(self.lines()), 1)
 
-    def test_a_report_newer_than_the_dispatch_closes_the_job(self) -> None:
-        self.dispatch(0)
+    def test_a_report_newer_than_the_prompt_closes_the_job(self) -> None:
+        self.convo(self.turn(0, "user", [{"type": "text", "text": "go"}]))
         self.report(100)
         self.at(100 + watch.STALL_SECONDS)
         self.at(100 + 2 * watch.STALL_SECONDS)
         self.assertEqual(self.lines(), [])
 
+    def test_tool_results_and_system_reminders_do_not_reopen_a_job(self) -> None:
+        self.report(100)
+        self.convo(
+            self.turn(0, "user", "go"),
+            self.turn(200, "user", [{"type": "tool_result", "content": "ok"}]),
+            self.turn(210, "user", [{"type": "text", "text": "<system-reminder>hook</system-reminder>"}]),
+        )
+        self.at(200 + watch.STALL_SECONDS)
+        self.assertEqual(self.lines(), [])
+
+    def test_a_reaped_report_does_not_close_a_job(self) -> None:
+        self.convo(self.turn(0, "user", "go"))
+        self.report(100, "reaped-9.md")
+        self.at(100 + watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
+
     def test_a_live_child_shell_keeps_a_silent_tab_quiet_even_without_cpu(self) -> None:
-        self.dispatch(0)
+        self.convo(self.turn(0, "user", "go"))
         self.shell_rows()
         self.at(watch.STALL_SECONDS)
         self.at(2 * watch.STALL_SECONDS)
         self.assertEqual(self.lines(), [])
-
-    def test_waiting_on_a_person_is_parked_like_a_decision(self) -> None:
-        self.dispatch(0)
-        for text in ("Done so far.\nWAITING: owner approval to push", "waiting: the reviewer", "WAITING: you to pick one"):
-            self.assistant(text)
-            self.at(watch.STALL_SECONDS)
-            self.assertEqual(self.lines(), [], text)
-
-    def test_waiting_on_a_pipeline_with_no_child_is_kicked(self) -> None:
-        self.dispatch(0)
-        self.assistant("WAITING: the pipeline to go green, next poll ~17:27")
-        self.at(watch.STALL_SECONDS)
-        self.assertEqual(len(self.lines()), 1)
 
     def test_a_prompt_that_is_gone_at_send_time_sends_no_alert(self) -> None:
         self.pane.write_text((FIXTURES / "pane-permission-prompt.txt").read_text())
@@ -260,10 +264,8 @@ class StuckTests(ReportsCase):
         self.assertEqual(self.lines(), [])
 
     def test_a_prompt_and_repeated_refusals_kick_whatever_the_job_state(self) -> None:
-        self.dispatch(0)
-        self.report(0)
+        self.report(100)
         self.shell_rows()
-        self.assistant("WAITING: owner approval")
         self.pane.write_text((FIXTURES / "pane-permission-prompt.txt").read_text())
         self.at(30)
         self.at(90)
@@ -281,7 +283,7 @@ class StuckTests(ReportsCase):
         text = (REPO / "claude/engines/agent-core.md").read_text()
         self.assertIn("`[watcher] looks stuck` line means kick the tab at once", text)
         self.assertIn("`Status` and `BLUF` lines first", text)
-        self.assertIn("`WAITING: <person>`", text)
+        self.assertIn("a `Status: decision` report", text)
 
 
 if __name__ == "__main__":

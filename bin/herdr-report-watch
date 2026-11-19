@@ -6,9 +6,9 @@ as `[worker-report] <path>` with `herdr agent prompt` to the pane saved by `herd
 retried every 15 seconds. A `Status: done` report also closes the manager's tab (a standing manager is `/clear`ed, a kept one
 left open); a manager whose pane is gone is reported once. Every 30 seconds each manager tab is checked: one
 `[watcher] <tab> looks stuck: <reason>` line goes to the lead when it shows no activity (reports, transcripts, CPU-using
-shells) for STALL_SECONDS with its job open (manager.json `sent_at` newer than every report), no live Bash-tool shell and no `WAITING: <person>` last line, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
+shells) for STALL_SECONDS with its job open (its newest prompt in the transcript is newer than every `result-*.md`) and no live Bash-tool shell, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
 it re-arms on new activity. Parked `manager-send` jobs resume when `usage-gate` opens. Bash-tool shells under a claude in a lead, work or manager pane that burn no CPU for
-10 minutes are reaped (never any other pane). A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
+10 minutes are reaped (never any other pane), except while the tab's last turn is a `WAITING:` message under 2 hours old. A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
 ready nodes and long shell waits. State is in `<root>/.watch-state.json`; stdout goes to ~/Library/Logs/herdr-report-watch.log.
 """
 import argparse
@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from contextlib import suppress
 from datetime import datetime
 from typing import Callable
 from importlib.machinery import SourceFileLoader
@@ -39,7 +40,7 @@ GUARD_REFUSALS = 3
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 PROJECTS = Path.home() / ".claude/projects"
 WAITING = re.compile(r"^[ \t]*WAITING:[^\n]*", re.M)
-WAITING_ON_PERSON = re.compile(r"\b(?:owner|approval|approves?|review(?:er)?|you|human)\b", re.I)
+WAIT_PARK_SECONDS = 2 * 3600
 PROMPT_REASON = "permission prompt open for"
 PERMISSION_PROMPT = re.compile(r"Do you want to [^\n]*\n[│\s]*❯ 1\. Yes")
 GUARD_REFUSAL = re.compile(r'"content":"[\w:.-]+ hook error: \[(?:[^\]]*/)?([\w.-]+)[^\]]*\]')
@@ -97,29 +98,52 @@ def transcripts(session: str | None) -> list[Path]:
     return [*PROJECTS.glob(f"*/{session}.jsonl"), *PROJECTS.glob(f"*/{session}/subagents/*.jsonl")] if session else []
 
 
-def last_message(session: str | None) -> str:
-    """Text of the newest assistant message with text in the session transcript, or ''."""
+def transcript_tail(session: str | None) -> list[dict]:
+    """Parsed entries from the tail of the session's own transcript, oldest first."""
     for path in PROJECTS.glob(f"*/{session}.jsonl") if session else ():
         with path.open("rb") as handle:
             skipped = max(0, path.stat().st_size - TRANSCRIPT_TAIL_BYTES)
             handle.seek(skipped)
             lines = handle.read().decode(errors="replace").splitlines()
-        for line in reversed(lines[1:] if skipped else lines):
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
-            blocks = entry.get("message", {}).get("content") if entry.get("type") == "assistant" else None
-            text = "\n".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text") if isinstance(blocks, list) else ""
-            if text.strip():
-                return text
-    return ""
+        entries = []
+        for line in lines[1:] if skipped else lines:
+            with suppress(ValueError):
+                if isinstance(entry := json.loads(line), dict):
+                    entries.append(entry)
+        return entries
+    return []
 
 
-def waiting_line(session: str | None) -> str | None:
-    """The last `WAITING:` line of the session's last assistant message."""
-    lines = WAITING.findall(last_message(session))
-    return lines[-1] if lines else None
+def blocks(entry: dict) -> list[dict]:
+    content = entry.get("message", {}).get("content") if isinstance(entry.get("message"), dict) else None
+    return [{"type": "text", "text": content}] if isinstance(content, str) else [b for b in content or [] if isinstance(b, dict)]
+
+
+def entry_time(entry: dict) -> float:
+    try:
+        return datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, AttributeError, ValueError):
+        return 0.0
+
+
+def is_prompt(entry: dict) -> bool:
+    """A user turn with text of its own: not a tool result, a meta line or a system reminder."""
+    texts = [b.get("text", "") for b in blocks(entry) if b.get("type") == "text"]
+    return entry.get("type") == "user" and not entry.get("isMeta") and any(t.strip() and not t.lstrip().startswith("<system-reminder") for t in texts)
+
+
+def newest_prompt(session: str | None) -> float | None:
+    times = [entry_time(e) for e in transcript_tail(session) if is_prompt(e)]
+    return max(times, default=None)
+
+
+def waiting_since(session: str | None) -> float | None:
+    """Time of the last turn when it is an assistant message with a `WAITING:` line and no tool use after it."""
+    turns = [e for e in transcript_tail(session) if e.get("type") in ("user", "assistant")]
+    if not turns or turns[-1].get("type") != "assistant" or any(b.get("type") == "tool_use" for b in blocks(turns[-1])):
+        return None
+    text = "\n".join(b.get("text", "") for b in blocks(turns[-1]) if b.get("type") == "text")
+    return entry_time(turns[-1]) if WAITING.search(text) else None
 
 
 def shell_owners(procs: list[Proc]) -> dict[int, Proc]:
@@ -214,19 +238,26 @@ class Watcher:
         return counts.most_common(1)[0] if counts else None
 
     def armed(self, manager: Path, info: dict) -> bool:
-        """A silent tab is worth a kick only while its job is open, nothing it started can wake it, and it is not waiting on a person."""
-        sent = info.get("sent_at")
-        if sent is not None and sent <= max((f.stat().st_mtime for f in manager.glob("*.md")), default=0):
+        """A silent tab is worth a kick only while its job is open (a prompt newer than every report) and no shell it started can wake it."""
+        prompted = newest_prompt(info.get("session_id"))
+        if prompted is not None and prompted <= max((f.stat().st_mtime for f in manager.glob("result-*.md")), default=0):
             return False
-        mcp = f"{manager}/mcp.json"
         try:
             owners = shell_owners(self.procs())
         except (OSError, ValueError, subprocess.CalledProcessError):
             owners = {}
-        if any(mcp in claude.command for claude in owners.values()):
-            return False
-        waiting = waiting_line(info.get("session_id"))
-        return not (waiting and WAITING_ON_PERSON.search(waiting))
+        return not any(f"{manager}/mcp.json" in claude.command for claude in owners.values())
+
+    def waiting(self, claude: Proc) -> bool:
+        """True while a tab's last turn is a recent `WAITING:` message, so its shells are its wake source."""
+        for folder in self.managers_of(claude):
+            try:
+                since = waiting_since(read_manager(folder).get("session_id"))
+            except (OSError, ValueError):
+                continue
+            if since is not None and self.wall() - since < WAIT_PARK_SECONDS:
+                return True
+        return False
 
     def stuck_reason(self, active: float, since: float | None, refused: tuple[str, int] | None, wall: float, armed: bool = True) -> str | None:
         if armed and wall - active >= STALL_SECONDS:
@@ -343,7 +374,7 @@ class Watcher:
                     self.shell_wait[folder] = max(self.shell_wait.get(folder, 0), shell.age)
             if shell.ppid in owners or pid in self.terminated or now - since <= REAP_IDLE_SECONDS or shell.age <= REAP_IDLE_SECONDS:
                 continue
-            if any(k in p.command for p in tree for k in keep) or any(waiting_line(read_manager(f).get("session_id")) for f in self.managers_of(claude)):
+            if any(k in p.command for p in tree for k in keep) or self.waiting(claude):
                 continue
             self.stop(shell, claude, procs)
             self.terminated[pid] = (now, shell)

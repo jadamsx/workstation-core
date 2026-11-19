@@ -50,6 +50,6 @@ The watcher also prompts the lead when a ready node sits unstarted over 2 minute
 - Startup prompts are answered for you: folder trust and external `CLAUDE.md` imports, only under the lead's folder. Anywhere else, run `claude` there once to trust it.
 - `herdr-manager keep <name>` marks a manager as a long-lived named worker: its reports still arrive, but the watcher never closes or clears it and you close it yourself.
 - `herdr-manager list` shows each manager, whether its pane is alive, and its newest report.
-- `[watcher] <name> looks stuck: <reason>` means a manager with an open job, no live background shell and no `WAITING: <person>` line sat silent for 10 minutes, showed a permission prompt, or kept hitting one guard. Kick it.
+- `[watcher] <name> looks stuck: <reason>` means a manager with an open job and no live background shell sat silent for 10 minutes, showed a permission prompt, or kept hitting one guard. Kick it.
 
 [Managers](../reference/managers.md) lists every command.

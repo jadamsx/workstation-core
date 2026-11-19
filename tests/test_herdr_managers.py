@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timezone
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest import mock
@@ -389,7 +390,6 @@ class ManagerTests(ReportsCase):
         wait = calls.index("agent wait w1:p4 --until idle --timeout 120000")
         self.assertGreater(calls.index("agent prompt w1:p4 do the thing"), wait)
         self.assertGreater(wait, next(i for i, c in enumerate(calls) if c.startswith("agent start")))
-        self.assertAlmostEqual(json.loads((self.space / "beta/manager.json").read_text())["sent_at"], time.time(), delta=60)
 
     def test_manager_send_prefixes_the_text_and_retries_while_blocked(self) -> None:
         self.manager()
@@ -399,7 +399,6 @@ class ManagerTests(ReportsCase):
         r = self.bin("manager-send", "alpha", "OK to push")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertGreater(len(self.prompts()), 1)
-        self.assertAlmostEqual(json.loads((self.space / "alpha/manager.json").read_text())["sent_at"], time.time(), delta=60)
         self.assertEqual(self.prompts()[-1], "agent prompt w1:p4 [coordinator] OK to push")
 
     def usage(self, five: float, reset: float) -> None:
@@ -923,18 +922,37 @@ class ReaperTests(ReportsCase):
         watcher.scan(601)
         self.assertEqual(kills, [])
 
-    def test_a_waiting_tabs_shell_survives_until_its_last_message_moves_on(self) -> None:
+    def waiting_tab(self, text: str, age: float) -> list:
         projects = self.root.parent / "projects"
         (projects / "proj").mkdir(parents=True)
         rows = self.table()
         (self.manager() / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "session_id": "s1"}))
-        transcript = projects / "proj" / "s1.jsonl"
-        message = lambda text: json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}) + "\n"
-        with mock.patch.object(watch, "PROJECTS", projects):
-            transcript.write_text(message("WAITING: the pipeline"))
-            self.assertEqual(self.reaper(rows)[1], [])
-            transcript.write_text(message("WAITING: the pipeline") + message("Pipeline passed, carrying on."))
-            self.assertEqual(self.reaper(rows)[1], [(21, signal.SIGTERM), (20, signal.SIGTERM)])
+        stamp = datetime.fromtimestamp(time.time() - age, timezone.utc).isoformat().replace("+00:00", "Z")
+        turn = {"type": "assistant", "timestamp": stamp, "message": {"content": [{"type": "text", "text": text}]}}
+        (projects / "proj" / "s1.jsonl").write_text(json.dumps(turn) + "\n")
+        patcher = mock.patch.object(watch, "PROJECTS", projects)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return rows
+
+    def test_a_recent_waiting_message_spares_the_shell_and_an_old_one_does_not(self) -> None:
+        self.assertEqual(self.reaper(self.waiting_tab("WAITING: the pipeline", 60))[1], [])
+
+    def test_a_waiting_message_older_than_two_hours_no_longer_spares_the_shell(self) -> None:
+        kills = self.reaper(self.waiting_tab("WAITING: the pipeline", watch.WAIT_PARK_SECONDS + 60))[1]
+        self.assertEqual(kills, [(21, signal.SIGTERM), (20, signal.SIGTERM)])
+
+    def test_a_message_without_waiting_does_not_spare_the_shell(self) -> None:
+        self.assertEqual(len(self.reaper(self.waiting_tab("Carrying on.", 60))[1]), 2)
+
+    def test_a_manager_json_that_vanishes_mid_reap_does_not_raise(self) -> None:
+        rows = self.waiting_tab("WAITING: the pipeline", 60)
+        kills: list = []
+        watcher = watch.Watcher(self.root, procs=lambda: rows, kill=lambda pid, sig: kills.append(pid))
+        watcher.reap(0)
+        with mock.patch.object(watch, "read_manager", side_effect=FileNotFoundError):
+            watcher.reap(601)
+        self.assertEqual(kills, [21, 20])
 
     def test_shell_under_a_claude_outside_a_managed_pane_survives(self) -> None:
         self.assertEqual(self.reaper(self.table(pane_shell=77))[1], [])
