@@ -6,4 +6,4 @@ Not changed: <what you could have changed and did not>
 Omitted: <what you left out, with its trigger>
 Out: <anything needing the owner or another node>
 Deviations: <none, or the Decided or Not-building line and the diff that breaks it>
-Done-check: <pass / deviation <sha>>
+Done-check: <pass / n/a (no diff) / deviation <sha>>
