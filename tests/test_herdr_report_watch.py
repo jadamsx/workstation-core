@@ -250,6 +250,14 @@ class StuckTests(ReportsCase):
         self.at(100 + 2 * watch.STALL_SECONDS)
         self.assertEqual(len(self.lines()), 1)
 
+    def test_a_dispatch_that_scrolled_out_of_the_tail_leaves_the_job_open(self) -> None:
+        pad = [self.turn(t, "assistant", [{"type": "text", "text": "x" * 40}]) for t in range(1, 30)]
+        self.convo(self.turn(0, "user", "[coordinator] go"), *pad)
+        self.report(100)
+        with mock.patch.object(watch, "TRANSCRIPT_TAIL_BYTES", 600):
+            self.at(100 + watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
+
     def test_a_reaped_report_does_not_close_a_job(self) -> None:
         self.convo(self.turn(0, "user", "[coordinator] go"))
         self.report(100, "reaped-9.md")
