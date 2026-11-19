@@ -237,7 +237,8 @@ class Watcher:
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as err:
             self.log(f"reaper skipped: {err}")
             return
-        self.shell_wait, self.shell_busy = {}, {}
+        self.shell_wait = {}
+        self.shell_busy = {f: t for f, t in self.shell_busy.items() if (f / "manager.json").exists()}
         by_pid = {p.pid: p for p in procs}
         children: dict[int, list[Proc]] = {}
         for p in procs:

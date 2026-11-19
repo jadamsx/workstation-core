@@ -158,6 +158,22 @@ class StuckTests(ReportsCase):
             self.at(t)
         self.assertEqual(self.lines(), [])
 
+    def test_a_tab_whose_cpu_shell_ended_is_stuck_stall_seconds_after_the_last_cpu_sample(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
+        os.environ["FAKE_SHELL_PID"] = "5"
+        claude = watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}")
+        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make test' < /dev/null"
+        for t in range(0, 601, 30):
+            self.rows = [claude, watch.Proc(20, 10, 100, t / 10, shell)]
+            self.at(t)
+        self.rows = [claude]
+        self.at(600 + 30)
+        self.at(600 + watch.STALL_SECONDS - 30)
+        self.assertEqual(self.lines(), [])
+        self.at(600 + watch.STALL_SECONDS)
+        self.at(600 + watch.STALL_SECONDS + 60)
+        self.assertEqual(len(self.lines()), 1)
+
     def test_subagent_transcript_activity_keeps_a_silent_tab_quiet(self) -> None:
         self.transcript(0)
         for t in range(0, 1200, 30):

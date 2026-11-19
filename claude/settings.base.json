@@ -215,7 +215,6 @@
         ]
       },
       {
-        "matcher": "compact|clear",
         "hooks": [
           {
             "type": "command",
