@@ -963,6 +963,22 @@ class ReaperTests(ReportsCase):
         watcher.scan(601)
         self.assertEqual(kills, [])
 
+    def test_stop_shell_accepts_only_a_shell_under_claude(self) -> None:
+        rows = self.table() + [watch.Proc(30, 1, 900, 0.0, "/bin/zsh -c orphan"), watch.Proc(40, 20, 900, 0.0, "python3 x")]
+        sent: list = []
+
+        def stop(pid: int, caller: int = 999) -> None:
+            herdr_reports.stop_shell(pid, lambda: rows, lambda p, sig: sent.append((p, sig)), caller)
+
+        for pid in (40, 30, 10, 1):
+            with self.assertRaises(herdr_reports.ReportsError):
+                stop(pid)
+        with self.assertRaises(herdr_reports.ReportsError):
+            stop(20, caller=21)
+        self.assertEqual(sent, [])
+        stop(20)
+        self.assertEqual(sent, [(20, signal.SIGTERM)])
+
     def test_ps_fields_parse(self) -> None:
         self.assertEqual(watch.clock_seconds("1-02:03:04"), 93784)
         self.assertEqual(watch.clock_seconds("35:36"), 2136)

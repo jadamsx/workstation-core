@@ -2,9 +2,11 @@
 import json
 import os
 import re
+import signal
 import subprocess
 import time
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 LEAD_TAB = "◆ lead"
@@ -124,3 +126,72 @@ def read_manager(folder: Path) -> dict:
 def is_done(result: Path) -> bool:
     """True when the report's first non-blank line is `Status: done`, as the report-format guard reads it."""
     return result.read_text().lstrip("\n").split("\n", 1)[0].strip() == "Status: done"
+
+
+class Proc(NamedTuple):
+    pid: int
+    ppid: int
+    age: float
+    cpu: float
+    command: str
+
+
+def clock_seconds(text: str) -> float:
+    """Seconds in a ps `[[dd-]hh:]mm:ss[.ff]` field."""
+    days, _, clock = text.rpartition("-")
+    total = 0.0
+    for part in clock.split(":"):
+        total = total * 60 + float(part)
+    return total + (int(days) * 86400 if days else 0)
+
+
+def read_procs() -> list[Proc]:
+    out = subprocess.run(["ps", "-axo", "pid,ppid,etime,time,command"], check=True, capture_output=True, text=True).stdout
+    rows = (line.split(None, 4) for line in out.splitlines()[1:])
+    return [Proc(int(r[0]), int(r[1]), clock_seconds(r[2]), clock_seconds(r[3]), r[4]) for r in rows if len(r) == 5]
+
+
+def argv0(proc: Proc) -> str:
+    return Path(proc.command.split(None, 1)[0]).name.lstrip("-")
+
+
+SHELLS = {"bash", "zsh", "sh"}
+KILL_GRACE_SECONDS = 5
+
+
+def stop_shell(pid: int, procs: Callable[[], list[Proc]] = read_procs, kill: Callable[[int, int], None] = os.kill,
+               caller: int | None = None, wait: bool = False) -> None:
+    """SIGTERM a shell that has a claude process above it; with `wait`, SIGKILL it if it outlives the grace period.
+
+    Refuses anything else, and the caller's own process chain, with ReportsError.
+    """
+    by_pid = {p.pid: p for p in procs()}
+
+    def chain(start: int) -> list[Proc]:
+        found: list[Proc] = []
+        while start in by_pid and by_pid[start] not in found:
+            found.append(by_pid[start])
+            start = by_pid[start].ppid
+        return found
+
+    target = by_pid.get(pid)
+    if pid <= 1 or target is None:
+        raise ReportsError(f"{pid} is not a running process")
+    if argv0(target) not in SHELLS:
+        raise ReportsError(f"{pid} is not a shell")
+    above = chain(target.ppid)
+    if not any(argv0(p) == "claude" for p in above):
+        raise ReportsError(f"{pid} has no claude process above it")
+    if pid in {p.pid for p in chain(os.getpid() if caller is None else caller)}:
+        raise ReportsError(f"{pid} is the caller's own shell")
+    kill(pid, signal.SIGTERM)
+    if not wait:
+        return
+    deadline = time.monotonic() + KILL_GRACE_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            kill(pid, 0)
+        except OSError:
+            return
+        time.sleep(0.1)
+    kill(pid, signal.SIGKILL)
