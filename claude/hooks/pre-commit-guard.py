@@ -21,6 +21,7 @@ import re
 import shlex
 import subprocess
 import sys
+from typing import Callable
 
 from hook_config import load, ticket_exempt
 
@@ -155,26 +156,18 @@ def invoked(command: str) -> list[list[str]]:
     return found
 
 
-def runs_commit(command: str) -> bool:
+def runs(command: str, fallback: re.Pattern[str], matches: Callable[[list[str]], bool]) -> bool:
     try:
-        calls = invoked(command)
+        return any(matches(argv) for argv in invoked(command))
     except ValueError:
-        return bool(COMMIT.search(command))
-    for argv in calls:
-        args = argv[1:] if argv[0] == "git" else []
-        while args and args[0].startswith("-"):
-            args = args[2:] if args[0] in ("-C", "-c") else args[1:]
-        if args[:1] == ["commit"]:
-            return True
-    return False
+        return bool(fallback.search(command))
 
 
-def runs_change_create(command: str) -> bool:
-    try:
-        calls = invoked(command)
-    except ValueError:
-        return bool(CHANGE_CREATE.search(command))
-    return any(CHANGE_CREATE.fullmatch(" ".join(argv[:3])) for argv in calls)
+def git_subcommand(argv: list[str]) -> str:
+    args = argv[1:] if argv[0] == "git" else []
+    while args and args[0].startswith("-"):
+        args = args[2:] if args[0] in ("-C", "-c") else args[1:]
+    return args[0] if args else ""
 
 
 def commit_pathspecs(args: list[str]) -> tuple[bool, list[str]]:
@@ -204,16 +197,9 @@ def commit_pathspecs(args: list[str]) -> tuple[bool, list[str]]:
 def would_stage(command: str, cwd: str, top: str) -> tuple[set[str], bool]:
     paths = set(git_out(["diff", "--cached", "--name-only"], top))
     override = False
-    for argv in shell_commands(command):
-        while argv and re.fullmatch(r"\w+=.*", argv[0]):
-            argv = argv[1:]
+    for argv in invoked(command):
         if argv[:2] == [":", "scope-grew"]:
             override = True
-        elif argv[:1] and argv[0] in ("sh", "bash", "zsh") and any(SHELL_C.match(t) for t in argv[1:-1]):
-            flag = next(i for i, t in enumerate(argv) if i and SHELL_C.match(t))
-            inner, grew = would_stage(argv[flag + 1], cwd, top)
-            paths |= inner
-            override |= grew
         elif argv[:1] == ["git"]:
             where, args = cwd, argv[1:]
             while args and args[0].startswith("-"):
@@ -440,7 +426,7 @@ def main() -> None:
             cwd,
             str(tool_input.get("project_id", "")),
         )
-    elif runs_change_create(command):
+    elif runs(command, CHANGE_CREATE, lambda argv: bool(CHANGE_CREATE.fullmatch(" ".join(argv[:3])))):
         body_flags = (
             "--body|-b" if re.search(r"\bgh\s+pr\b", command) else "--description|-d"
         )
@@ -451,7 +437,7 @@ def main() -> None:
             command_cwd(command, cwd, CHANGE_CREATE),
             repo.group(1) if repo else "",
         )
-    elif runs_commit(command):
+    elif runs(command, COMMIT, lambda argv: git_subcommand(argv) == "commit"):
         commit_cwd = command_cwd(command, cwd, COMMIT)
         errors = owns_errors(command, commit_cwd)
         if not ("--amend" in command and "-m" not in command):
