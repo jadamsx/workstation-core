@@ -196,7 +196,7 @@ class ParkedResumeTests(ReportsCase):
     def test_resumes_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
         now = time.time()
         self.park(("alpha", "/plan-task a", now + 3600), ("beta", "/plan-task b", now + 3600))
-        self.usage(95, now + 3600)
+        self.usage(99, now + 3600)
         watcher = watch.Watcher(self.root)
         watcher.scan(0)
         self.assertEqual(self.prompts(), [])
@@ -216,7 +216,7 @@ class ParkedResumeTests(ReportsCase):
     def test_an_override_releases_parked_jobs(self) -> None:
         now = time.time()
         self.park(("alpha", "/plan-task a", now + 3600))
-        self.usage(95, now + 3600)
+        self.usage(99, now + 3600)
         watcher = watch.Watcher(self.root)
         watcher.scan(0)
         self.assertEqual(self.left(), ["alpha"])
@@ -460,10 +460,10 @@ class ManagerTests(ReportsCase):
 
     def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
         folder = self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         r = self.bin("manager-send", "alpha", "/build plan.md node N1 worktree /tmp")
         self.assertEqual(r.returncode, 2, r.stderr)
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         r = self.bin("manager-send", "alpha", "/plan-task x")
         self.assertEqual((r.returncode, r.stdout.count("\n"), r.stdout.startswith("parked until ")), (0, 1, True))
         self.assertEqual(self.prompts(), [])
@@ -474,7 +474,7 @@ class ManagerTests(ReportsCase):
 
     def test_concurrent_parks_keep_every_job(self) -> None:
         self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         procs = [
             subprocess.Popen([str(REPO / "bin/manager-send"), "alpha", f"/plan-task {n}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             for n in range(12)
@@ -486,7 +486,7 @@ class ManagerTests(ReportsCase):
 
     def test_the_override_lifts_the_park(self) -> None:
         self.manager()
-        self.usage(90, time.time() + 3600)
+        self.usage(99, time.time() + 3600)
         os.environ["USAGE_GATE"] = "off"
         self.addCleanup(os.environ.pop, "USAGE_GATE", None)
         self.assertEqual(self.bin("manager-send", "alpha", "/plan-task x").returncode, 0)
@@ -608,7 +608,7 @@ class ManagerTests(ReportsCase):
         self.assertEqual((self.space / "coordinator").read_text().strip(), "w1:p1")
         self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
         work, ask = self.creates()
-        self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
+        self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'} --env WORKSTATION_ROLE=work", work)
         self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true --env DISABLE_UPDATE_PROMPT=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
         self.assertIn("-- --model sonnet --strict-mcp-config --mcp-config", starts[0])
@@ -709,7 +709,7 @@ class ManagerTests(ReportsCase):
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
         self.assertEqual(r.returncode, 0, r.stderr)
         tab = next(c for c in self.calls() if c.startswith("tab create"))
-        self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
+        self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'} --env WORKSTATION_ROLE=work", tab)
         self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
         for item in herdr_reports.NO_STDIN_ENV:
             self.assertIn(f"--env {item}", tab)
@@ -853,128 +853,6 @@ class ManagerTests(ReportsCase):
         self.manager("gone", "w1:p9")
         out = self.bin("herdr-manager", "list").stdout.splitlines()
         self.assertEqual(out, ["alpha\tlive\tresult-2.md", "gone\tgone\t-"])
-
-
-class IdleTests(ReportsCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.pane.write_text("● Looked around\n  nothing more to do\n> \n  ? for shortcuts\n")
-        self.status("idle")
-
-    def status(self, state: str) -> None:
-        os.environ["FAKE_PANES"] = (
-            '{"pane_id":"w1:p1","tab_id":"w1:t1"},'
-            f'{{"pane_id":"w1:p4","tab_id":"w1:t4","agent":"claude","agent_status":"{state}"}}'
-        )
-
-    def idle_lines(self) -> list[str]:
-        return [p for p in self.prompts() if "idle, no report" in p]
-
-    def test_idle_over_15_minutes_without_a_report_sends_one_line_with_the_pane_tail(self) -> None:
-        self.manager()
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(899)
-        self.assertEqual(self.idle_lines(), [])
-        w.scan(901)
-        w.scan(5000)
-        self.assertEqual(self.idle_lines(), ["agent prompt w1:p1 [worker-report] alpha idle, no report"])
-        self.assertIn("nothing more to do", self.log.read_text())
-
-    def test_a_new_idle_spell_is_reported_again(self) -> None:
-        self.manager()
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(901)
-        self.status("working")
-        w.scan(1000)
-        self.status("idle")
-        w.scan(1100)
-        w.scan(2100)
-        self.assertEqual(len(self.idle_lines()), 2)
-
-    def test_idle_spell_is_reported_once_across_watcher_restarts(self) -> None:
-        self.manager()
-        watch.Watcher(self.root).scan(0)
-        watch.Watcher(self.root).scan(0)
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(901)
-        self.assertEqual(len(self.idle_lines()), 1)
-        again = watch.Watcher(self.root)
-        again.scan(0)
-        again.scan(901)
-        self.assertEqual(len(self.idle_lines()), 1)
-
-    def test_waiting_message_is_not_reported(self) -> None:
-        self.manager()
-        self.pane.write_text("● WAITING: the review to finish\n> \n")
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(901)
-        self.assertEqual(self.idle_lines(), [])
-
-    def test_report_written_in_the_turn_is_not_reported_as_missing(self) -> None:
-        folder = self.manager()
-        w = watch.Watcher(self.root)
-        self.status("working")
-        w.scan(0)
-        (folder / "result-1.md").write_text("Status: decision\nQ")
-        self.status("idle")
-        w.scan(10)
-        w.scan(1000)
-        self.assertEqual(self.idle_lines(), [])
-
-    def test_standing_tab_idle_after_a_done_report_or_before_its_first_job_is_not_reported(self) -> None:
-        folder = self.manager()
-        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(5000)
-        (folder / "result-1.md").write_text("Status: done\nx\n")
-        w.scan(6000)
-        w.scan(20000)
-        self.assertEqual(self.idle_lines(), [])
-
-    def standing(self) -> Path:
-        folder = self.manager()
-        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
-        return folder
-
-    def test_standing_tab_that_works_after_a_done_report_then_idles_is_reported_once(self) -> None:
-        folder = self.standing()
-        (folder / "result-1.md").write_text("Status: done\nx\n")
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(10)
-        self.status("working")
-        w.scan(100)
-        self.status("idle")
-        w.scan(200)
-        w.scan(1100)
-        w.scan(5000)
-        self.assertEqual(len(self.idle_lines()), 1)
-
-    def test_standing_tab_cleared_and_never_working_is_not_reported(self) -> None:
-        folder = self.standing()
-        (folder / "result-1.md").write_text("Status: done\nx\n")
-        w = watch.Watcher(self.root)
-        self.status("working")
-        w.scan(0)
-        self.status("idle")
-        w.scan(10)
-        self.assertEqual([p for p in self.prompts() if p.endswith("/clear")], ["agent prompt w1:p4 /clear"])
-        w.scan(20)
-        w.scan(5000)
-        self.assertEqual(self.idle_lines(), [])
-
-    def test_working_manager_is_never_reported(self) -> None:
-        self.manager()
-        self.status("working")
-        w = watch.Watcher(self.root)
-        w.scan(0)
-        w.scan(5000)
-        self.assertEqual(self.idle_lines(), [])
 
 
 class NoStdinEnvTests(unittest.TestCase):

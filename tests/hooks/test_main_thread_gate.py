@@ -574,7 +574,7 @@ class PayloadTest(unittest.TestCase):
 
     def test_lead_cannot_spawn_builders_but_may_prompt_and_spawn_readers(self) -> None:
         self.env["WORKSTATION_ROLE"] = "lead"
-        for agent in ("builder", "builder-small", "rebase-resolver"):
+        for agent in ("builder", "builder-small", "rebase-resolver", "cold-reviewer", "security-reviewer", "finding-refuter"):
             result = self.run_hook(self.pre("Agent", {"subagent_type": agent}))
             self.assertEqual(result.returncode, 2, agent)
             self.assertIn("manager-send work", result.stderr)
@@ -582,6 +582,12 @@ class PayloadTest(unittest.TestCase):
         self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 2)
         self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "run-digest"})).returncode, 0)
         self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 0)
+
+    def test_manager_tab_writes_review_drafts_under_drafts_dir(self) -> None:
+        draft = self.pre("Write", {"file_path": "/home/u/drafts/reviews/mr-1/findings.json"})
+        self.assertEqual(self.run_hook(draft).returncode, 2)
+        self.env["WORKSTATION_REPORTS"] = "/home/u/reports"
+        self.assertEqual(self.run_hook(draft).returncode, 0)
 
     def test_settings_route_agent_spawns_to_the_gate(self) -> None:
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())

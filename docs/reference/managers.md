@@ -24,7 +24,7 @@ Delegated work runs inside [herdr](https://herdr.dev). The coordinator is the ma
 A manager reports by writing `result-<timestamp>.md` into `$WORKSTATION_REPORTS`. The first line is `Status: decision` (the tab stays open) or `Status: done` (the watcher delivers it, then closes the tab, or sends `/clear` to a standing manager once its pane is idle; a kept manager is never closed or cleared, the human closes it). The watcher sends the coordinator `[worker-report] <path>` once per file, retrying every 15 seconds while the coordinator is blocked. It also sends:
 
 - `[worker-report] <name> exited without a report`, once per pane, when a manager's pane is gone.
-- `[worker-report] <name> idle, no report` with the last lines of the pane, once per idle spell, when a manager has been idle for 15 minutes without writing a report and its last message does not start with `WAITING:`. A manager whose newest report is `Status: done` is never reported idle. A standing manager is reported only if its pane was seen working after its newest report (or after the last `/clear` the watcher sent); a kept manager is treated the same way.
+- `[watcher] <name> looks stuck: <reason>. Assume the worst and kick it.`, one line with no pane text, checked every 30 seconds for each manager and work tab and sent once per stall. A tab looks stuck when it shows no activity for `STALL_SECONDS` (default 600) and writes no report, whatever its last message says (a tab that never reported included), when a permission prompt has stood for 60 seconds, or when one guard has refused it 3 times within `STALL_SECONDS`. Activity is a change to the session or a subagent transcript, a report, or a shell under the tab that is using CPU. The tab re-arms on new activity, and a restart does not repeat the line. A manager whose newest report is `Status: done` is not checked.
 
 State is kept in `<root>/.watch-state.json`. The root is `WORKSTATION_REPORTS_ROOT`, default `~/.local/state/workstation/reports`.
 
@@ -33,7 +33,7 @@ State is kept in `<root>/.watch-state.json`. The root is `WORKSTATION_REPORTS_RO
 Active only where `WORKSTATION_REPORTS` is set, so only in manager sessions. [Hooks](hooks.md) lists their events.
 
 - `report-format-guard.py` blocks a file in the reports folder that is not named `result-*.md` (or the `.draft` that is moved to such a name) or whose first line is not a Status line, and prints the correct command.
-- `manager-brief-inject.py` returns `claude/templates/manager-brief.md` after a compact or clear, and on every session start records `session_id` in manager.json.
+- `manager-brief-inject.py` returns `claude/templates/manager-brief.md` after a compact or clear, and on every session start records `session_id` in manager.json. A lead (`WORKSTATION_ROLE=lead`) gets `claude/templates/lead-brief.md` on every source. Manager and work tabs start with `WORKSTATION_ROLE=work`.
 
 ## The watcher agent
 

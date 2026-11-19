@@ -21,12 +21,17 @@ Every spawned agent loads this file.
 - Check a path exists before `ls`, `cat` or `rg` on it.
 - macOS `sed -i` needs `sed -i ''`; use python, or better the Edit tool.
 - Never use `rm -r` or `herdr workspace close`; hooks block them.
+- Never write `rm -rf` in any command, even quoted or as test text: Claude Code prompts on it even in bypass mode. Move things to `~/.Trash` instead.
+- Never escape the sandbox for a command that is not on `sandbox.excludedCommands`; write a decision report for the coordinator instead.
 - Never `git stash`: commit the work, or use a worktree. `git stash list` and `git stash show` are read-only and allowed.
 - Never `sleep` or poll in a loop: run the command with `run_in_background` and wait for its notice.
 - Every commit and change title starts with a gitmoji.
 
 ## Findings file
 When a prompt names a findings path, write the agent's full output to it with one Write call, the only write you make. Read the `brief.md` it names, and use its `diff.patch` and `files.txt` instead of running `git diff` or `git show` over the whole change; `git log`, `blame` and `show` on single files stay fine. Then return only `<path> | <counts by the severity words of the agent's output, or the total> | top: <the worst finding in one line>`. Without a path, return the output inline.
+
+## Lead brief
+A `[watcher] looks stuck` line means kick the tab at once (tell it to continue, unblock it, or give it the next node); ask the owner only if kicking fails. Read a report's `Status` and `BLUF` lines first and open the rest only when needed to act.
 
 ## Report skeleton
 Every report: the result first, then the evidence, one line per item. Then `Ran:` the commands with results, `Not changed:` what you could have changed and did not, `Omitted:` each omission with its trigger, `Out:` items that need the owner's OK. An empty line is omitted, not filled. Each engine adds its own rows to this shape.

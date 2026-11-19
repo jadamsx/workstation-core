@@ -8,10 +8,13 @@ from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parents[2] / "claude/hooks"
 BRIEF = Path(__file__).resolve().parents[2] / "claude/templates/manager-brief.md"
+LEAD_BRIEF = Path(__file__).resolve().parents[2] / "claude/templates/lead-brief.md"
 
 
-def run_hook(name: str, payload: dict, reports: Path | None) -> subprocess.CompletedProcess:
-    env = {k: v for k, v in os.environ.items() if k != "WORKSTATION_REPORTS"}
+def run_hook(name: str, payload: dict, reports: Path | None, role: str | None = None) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k not in ("WORKSTATION_REPORTS", "WORKSTATION_ROLE")}
+    if role is not None:
+        env["WORKSTATION_ROLE"] = role
     if reports is not None:
         env["WORKSTATION_REPORTS"] = str(reports)
     return subprocess.run(
@@ -122,6 +125,12 @@ class ManagerBriefInjectTest(ReportsCase):
         self.assertEqual(self.start("startup", self.reports).stdout, "")
         self.assertEqual(self.start("resume", self.reports).stdout, "")
         self.assertEqual(self.start("compact", None).stdout, "")
+
+    def test_lead_gets_the_lead_brief_on_every_source(self) -> None:
+        for source in ("startup", "resume", "clear", "compact"):
+            result = run_hook("manager-brief-inject.py", {"source": source}, None, role="lead")
+            out = json.loads(result.stdout)["hookSpecificOutput"]
+            self.assertEqual(out["additionalContext"], LEAD_BRIEF.read_text(), source)
 
     def test_every_source_records_the_session_id_in_manager_json(self) -> None:
         (self.reports / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "keep": True}))

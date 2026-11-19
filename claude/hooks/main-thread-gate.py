@@ -8,8 +8,8 @@ edit gate for the main thread this turn: the UserPromptSubmit wiring records it 
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
-With WORKSTATION_ROLE=lead the gate denies spawning builder, builder-small and rebase-resolver, whatever the prompt
-says: a lead hands builds to the work tab with manager-send.
+With WORKSTATION_ROLE=lead the gate denies spawning the build and review agents, whatever the prompt
+says: a lead hands builds and reviews to the work tab with manager-send.
 
 Every role: a Bash polling loop (`until`/`while` with `sleep`) or a `sleep` over 10 seconds is denied in favour
 of run_in_background, and a run_in_background command is rewritten to run under a 20-minute timeout.
@@ -22,6 +22,7 @@ Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -42,8 +43,35 @@ UNWRAPPED_HEADS = {"git", "gh", "glab", "launchctl", "rm", "sudo", "docker", "ku
 SLEEP_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 WRAPPED = re.compile(rf"^\s*(gtimeout|timeout)\s+{BACKGROUND_TIMEOUT_SECONDS}\b|^\s*perl -e 'alarm {BACKGROUND_TIMEOUT_SECONDS};")
 POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_background, which notifies when the command finishes."
-LEAD_DENIED_AGENTS = {"builder", "builder-small", "rebase-resolver"}
-LEAD_HANDOFF = 'The lead never builds. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
+LEAD_DENIED_AGENTS = {
+    "builder",
+    "builder-small",
+    "rebase-resolver",
+    "approach-reviewer",
+    "cold-reviewer",
+    "security-reviewer",
+    "finding-refuter",
+    "clean-code",
+    "test-gap-auditor",
+    "premise-attacker",
+    "comment-cutter",
+    "comprehension-cutter",
+    "claim-prover",
+    "a11y-auditor",
+    "edge-case-explorer",
+    "role-tester",
+    "ui-verifier",
+    "ops-readiness-auditor",
+    "perf-tester",
+    "migration-verifier",
+}
+LEAD_HANDOFF = 'The lead never builds or reviews. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
+PROTECTED_DIRS = {".git", ".config/git", ".vscode", ".idea", ".husky", ".cargo", ".devcontainer", ".yarn", ".mvn", ".claude"}
+PROTECTED_FILES = {
+    ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".zshrc", ".zprofile", ".zshenv", ".profile",
+    ".envrc", ".npmrc", ".yarnrc", ".mcp.json", ".claude.json", ".pre-commit-config.yaml", ".ripgreprc",
+}
+CLAUDE_EXEMPT = (("plans", "*"), ("projects", "*", "memory", "*.md"), ("agent-memory", "*.md"))
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
@@ -382,6 +410,57 @@ def is_coordination_file(path: str) -> bool:
     )
 
 
+def claude_exempt(rest: tuple[str, ...]) -> bool:
+    if rest[:1] == ("worktrees",):
+        return len(rest) > 1
+    return any(
+        len(rest) == len(shape) and all(fnmatch.fnmatchcase(seg, pat) for seg, pat in zip(rest, shape))
+        for shape in CLAUDE_EXEMPT
+    )
+
+
+def protected_shape(path: str, homes: set[str]) -> bool:
+    parts = tuple(part.casefold() for part in Path(path).parts)
+    if not parts:
+        return False
+    if parts[-1] == ".git" or (parts[-1] in PROTECTED_FILES and os.path.dirname(path).casefold() in homes):
+        return True
+    dirs = parts[:-1]
+    for i, part in enumerate(dirs):
+        hit = part in PROTECTED_DIRS or "/".join(dirs[i : i + 2]) in PROTECTED_DIRS
+        if hit and (part != ".claude" or not claude_exempt(parts[i + 1 :])):
+            return True
+    return False
+
+
+def protected_path(path: str, cwd: str = "") -> bool:
+    expanded = os.path.expanduser(path)
+    given = os.path.normpath(os.path.join(cwd, expanded) if cwd else expanded)
+    home = os.path.expanduser("~")
+    homes = {os.path.normpath(home).casefold(), os.path.realpath(home).casefold()}
+    return any(protected_shape(p, homes) for p in (given, os.path.realpath(given)))
+
+
+def protected_reason(payload: dict) -> str | None:
+    if payload.get("tool_name") not in EDIT_TOOLS:
+        return None
+    tool_input = payload.get("tool_input") or {}
+    path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+    try:
+        hit = bool(path) and protected_path(path, payload.get("cwd") or "")
+    except Exception as exc:
+        return (
+            f"Could not check {path!r} against the protected config paths ({type(exc).__name__}); "
+            "the call is denied until the hook is fixed."
+        )
+    if hit:
+        return (
+            f"{path} is a protected config path and Claude Code would prompt on it. "
+            "Write a decision report for the coordinator asking the owner to make the change."
+        )
+    return None
+
+
 def block_reason(payload: dict) -> str | None:
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     if tool in EDIT_TOOLS:
@@ -415,7 +494,7 @@ def main() -> None:
         if reason:
             print(reason, file=sys.stderr)
             sys.exit(2)
-    reason = polling_reason(payload)
+    reason = protected_reason(payload) or polling_reason(payload)
     if reason:
         print(reason, file=sys.stderr)
         sys.exit(2)

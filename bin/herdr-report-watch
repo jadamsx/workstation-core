@@ -4,8 +4,10 @@
 Carries manager reports to the coordinator without spending tokens: each new `*.md` file in a manager folder is sent once
 as `[worker-report] <path>` with `herdr agent prompt` to the pane saved by `herdr-manager register`. A failed send is
 retried every 15 seconds. A `Status: done` report also closes the manager's tab (a standing manager is `/clear`ed, a kept one
-left open); a manager idle for 15 minutes without a report, or whose pane is gone, is reported once. Parked `manager-send`
-jobs resume when `usage-gate` opens. Bash-tool shells under a claude in a lead, work or manager pane that burn no CPU for
+left open); a manager whose pane is gone is reported once. Every 30 seconds each manager tab is checked: one
+`[watcher] <tab> looks stuck: <reason>` line goes to the lead when it shows no activity (reports, transcripts, CPU-using
+shells) for STALL_SECONDS, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
+it re-arms on new activity. Parked `manager-send` jobs resume when `usage-gate` opens. Bash-tool shells under a claude in a lead, work or manager pane that burn no CPU for
 10 minutes are reaped (never any other pane). A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
 ready nodes and long shell waits. State is in `<root>/.watch-state.json`; stdout goes to ~/Library/Logs/herdr-report-watch.log.
 """
@@ -17,6 +19,8 @@ import signal
 import subprocess
 import sys
 import time
+from collections import Counter
+from datetime import datetime
 from typing import Callable
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -28,18 +32,18 @@ usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent 
 manager_send = SourceFileLoader("manager_send", str(Path(__file__).resolve().parent / "manager-send")).load_module()
 
 RETRY_SECONDS = 15
-IDLE_SECONDS = 900
-TAIL_LINES = 15
-WAITING = "WAITING:"
+STALL_SECONDS = int(os.environ.get("STALL_SECONDS", "600"))
+STUCK_CHECK_SECONDS = 30
+PROMPT_SECONDS = 60
+GUARD_REFUSALS = 3
+TRANSCRIPT_TAIL_BYTES = 1 << 20
+PROJECTS = Path.home() / ".claude/projects"
+PERMISSION_PROMPT = re.compile(r"Do you want to [^\n]*\n[│\s]*❯ 1\. Yes")
+GUARD_REFUSAL = re.compile(r'"content":"[\w:.-]+ hook error: \[(?:[^\]]*/)?([\w.-]+)[^\]]*\]')
+TIMESTAMP = re.compile(r'"timestamp":"([^"]+)"')
 REAP_IDLE_SECONDS = int(os.environ.get("REAP_IDLE_SECONDS", "600"))
 READY_ALERT_SECONDS = 120
 POLICY = Path(__file__).resolve().parent.parent / "claude/resource-policy.json"
-
-
-def last_message(text: str) -> str:
-    """The text of the newest assistant message in a pane read, whose lines start with `●`."""
-    marked = [line.strip() for line in text.splitlines() if line.strip().startswith("●")]
-    return marked[-1].lstrip("● ").strip() if marked else ""
 
 
 def plan_needs(text: str) -> dict[str, tuple[str, ...]]:
@@ -86,21 +90,27 @@ def commit_time(trees: list[Path], node: str) -> float | None:
     return max(times, default=None)
 
 
+def transcripts(session: str | None) -> list[Path]:
+    return [*PROJECTS.glob(f"*/{session}.jsonl"), *PROJECTS.glob(f"*/{session}/subagents/*.jsonl")] if session else []
+
+
 class Watcher:
     def __init__(self, root: Path, procs: Callable[[], list[Proc]] = read_procs, kill: Callable[[int, int], None] = os.kill, wall: Callable[[], float] = time.time) -> None:
         self.root = root
         self.wall = wall
         self.shell_wait: dict[Path, float] = {}
+        self.shell_busy: dict[Path, float] = {}
         self.procs = procs
         self.kill = kill
-        self.cpu_seen: dict[int, tuple[float, float]] = {}
+        self.cpu_seen: dict[int, tuple[float, float, bool]] = {}
         self.terminated: dict[int, tuple[float, Proc]] = {}
         self.state_file = root / ".watch-state.json"
-        self.state = {"sent": [], "exited": [], "idle": [], "cleared": []}
+        self.state = {"sent": [], "exited": [], "stuck": {}, "cleared": []}
         if self.state_file.exists():
             self.state.update(json.loads(self.state_file.read_text()))
         self.retry_at: dict[str, float] = {}
-        self.spells: dict[str, dict] = {}
+        self.prompt_since: dict[str, float] = {}
+        self.stuck_at = 0.0
         self.worked: dict[str, int] = {}
         self.clearing: set[str] = set()
 
@@ -141,32 +151,51 @@ class Watcher:
         elif status not in IDLE_STATES:
             self.worked[pane] = results
 
-    def track_idle(self, pane: str, status: str, results: int, now: float) -> dict:
-        """Per-pane idle bookkeeping: when the current idle spell began and whether a report came with it."""
-        spell = self.spells.get(pane)
-        if status not in IDLE_STATES:
-            self.spells[pane] = {"active_results": results, "since": None, "reported": True, "checked": False}
-            if pane in self.state["idle"]:
-                self.state["idle"].remove(pane)
-                write_atomic(self.state_file, json.dumps(self.state))
-        elif spell is None:
-            self.spells[pane] = {"active_results": results, "since": now, "reported": bool(results), "checked": False}
-        elif spell["since"] is None:
-            spell.update(since=now, reported=results > spell["active_results"])
-        return self.spells[pane]
+    def last_activity(self, manager: Path, info: dict, now: float) -> float:
+        busy = self.shell_busy.get(manager)
+        files = [*manager.glob("*.md"), *transcripts(info.get("session_id"))]
+        return max(info.get("started", 0), self.wall() - (now - busy) if busy else 0, *(f.stat().st_mtime for f in files))
 
-    def report_idle(self, manager: Path, pane: str, spell: dict, coordinator: str | None, now: float) -> None:
-        if spell["reported"] or spell["checked"] or pane in self.state["idle"] or now - spell["since"] < IDLE_SECONDS:
-            return
+    def refused_by(self, session: str | None, wall: float, after: float) -> tuple[str, int] | None:
+        counts: Counter[str] = Counter()
+        for path in transcripts(session):
+            with path.open("rb") as handle:
+                skipped = max(0, path.stat().st_size - TRANSCRIPT_TAIL_BYTES)
+                handle.seek(skipped)
+                lines = handle.read().decode(errors="replace").splitlines()
+            for line in lines[1:] if skipped else lines:
+                refusal, stamp = GUARD_REFUSAL.search(line), TIMESTAMP.search(line)
+                if refusal and stamp and datetime.fromisoformat(stamp[1].replace("Z", "+00:00")).timestamp() > max(after, wall - STALL_SECONDS):
+                    counts[refusal[1]] += 1
+        return counts.most_common(1)[0] if counts else None
+
+    def stuck_reason(self, active: float, since: float | None, refused: tuple[str, int] | None, wall: float) -> str | None:
+        if wall - active >= STALL_SECONDS:
+            return f"no activity for {int((wall - active) // 60)} min"
+        if since is not None and wall - since >= PROMPT_SECONDS:
+            return f"permission prompt open for {int(wall - since)} s"
+        if refused and refused[1] >= GUARD_REFUSALS:
+            return f"{refused[0]} refused it {refused[1]} times"
+        return None
+
+    def check_stuck(self, manager: Path, info: dict, pane: str, status: str, coordinator: str | None, now: float) -> None:
+        wall = self.wall()
         try:
-            text = pane_text(pane)
+            shown = status == "blocked" or bool(PERMISSION_PROMPT.search(pane_text(pane)))
         except (subprocess.CalledProcessError, OSError):
+            shown = False
+        since = self.prompt_since.setdefault(pane, wall) if shown else self.prompt_since.pop(pane, None)
+        reported = self.state["stuck"].get(pane)
+        try:
+            active = self.last_activity(manager, info, now)
+            rearmed = reported is None or active > reported["active"]
+            refused = self.refused_by(info.get("session_id"), wall, reported["at"] if reported else 0) if rearmed else None
+        except (OSError, ValueError):
             return
-        if last_message(text).startswith(WAITING):
-            spell["checked"] = True
-            return
-        tail = "\n".join([line for line in text.splitlines() if line.strip()][-TAIL_LINES:])
-        self.deliver(pane, coordinator, f"[worker-report] {manager.name} idle, no report\n{tail}", "idle", now)
+        reason = self.stuck_reason(active, since, refused, wall) if active and rearmed else None
+        if reason and self.deliver(f"stuck:{pane}", coordinator, f"[watcher] {manager.name} looks stuck: {reason}. Assume the worst and kick it.", None, now):
+            self.state["stuck"][pane] = {"active": active, "at": wall}
+            write_atomic(self.state_file, json.dumps(self.state))
 
     def resume_parked(self) -> None:
         if usage_gate.parked_until() is not None:
@@ -206,6 +235,7 @@ class Watcher:
             self.log(f"reaper skipped: {err}")
             return
         self.shell_wait = {}
+        self.shell_busy = {f: t for f, t in self.shell_busy.items() if (f / "manager.json").exists()}
         by_pid = {p.pid: p for p in procs}
         children: dict[int, list[Proc]] = {}
         for p in procs:
@@ -236,7 +266,7 @@ class Watcher:
                 return proc.ppid in managed
 
             owners = {pid: c for pid, c in owners.items() if in_managed_pane(c)}
-        seen_cpu: dict[int, tuple[float, float]] = {}
+        seen_cpu: dict[int, tuple[float, float, bool]] = {}
         for pid, claude in owners.items():
             tree, queue = [], [by_pid[pid]]
             while queue:
@@ -244,11 +274,15 @@ class Watcher:
                 queue += children.get(tree[-1].pid, [])
             cpu = sum(p.cpu for p in tree)
             before = self.cpu_seen.get(pid)
-            since = before[1] if before and before[0] == cpu else now
-            seen_cpu[pid] = (cpu, since)
+            changed = before is not None and before[0] != cpu
+            since = before[1] if before and not changed else now
+            moved = changed or bool(before and before[2])
+            seen_cpu[pid] = (cpu, since, moved)
             shell = by_pid[pid]
-            if shell.ppid not in owners:
-                for folder in self.managers_of(claude):
+            for folder in self.managers_of(claude):
+                if moved:
+                    self.shell_busy[folder] = max(self.shell_busy.get(folder, 0), since)
+                if shell.ppid not in owners:
                     self.shell_wait[folder] = max(self.shell_wait.get(folder, 0), shell.age)
             if shell.ppid in owners or pid in self.terminated or now - since <= REAP_IDLE_SECONDS or shell.age <= REAP_IDLE_SECONDS:
                 continue
@@ -317,6 +351,9 @@ class Watcher:
             self.state["cleared"] = [*self.state["cleared"], *(k for k in on_disk if k not in self.state["cleared"])]
         self.resume_parked()
         self.reap(now)
+        stuck_due = now >= self.stuck_at
+        if stuck_due:
+            self.stuck_at = now + STUCK_CHECK_SECONDS
         panes: dict[str, str] | None = None
         for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
             coordinator_file = space / "coordinator"
@@ -351,13 +388,19 @@ class Watcher:
                             self.worked.pop(pane, None)
                             self.clearing.add(pane)
                     resumed = longlived and self.worked.get(pane) == len(results)
-                    if (done or (longlived and not results)) and not resumed:
+                    if done and not resumed:
                         continue
                     if pane not in panes:
                         self.deliver(pane, coordinator, f"[worker-report] {manager.name} exited without a report", "exited", now)
-                    else:
-                        spell = self.track_idle(pane, panes[pane], len(results), now)
-                        self.report_idle(manager, pane, spell, coordinator, now)
+                    elif stuck_due:
+                        self.check_stuck(manager, info, pane, panes[pane], coordinator, now)
+        if stuck_due and panes is not None:
+            gone = [p for p in self.state["stuck"] if p not in panes]
+            for pane in gone:
+                del self.state["stuck"][pane]
+            self.prompt_since = {p: t for p, t in self.prompt_since.items() if p in panes}
+            if gone:
+                write_atomic(self.state_file, json.dumps(self.state))
 
 
 def main(argv: list[str]) -> int:

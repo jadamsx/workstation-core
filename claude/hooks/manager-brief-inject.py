@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""SessionStart hook for manager sessions (WORKSTATION_REPORTS set): hand back the manager brief.
+"""SessionStart hook for lead and manager sessions: hand back the role's brief.
 
-Runs on source `compact` or `clear`, when the system prompt addition may no longer be in context, and returns
-`claude/templates/manager-brief.md` as additionalContext. Prints nothing otherwise. On every source it also records
-the payload's `session_id` as `session_id` in the manager's manager.json, so a restart can resume the conversation.
+A lead (WORKSTATION_ROLE=lead) gets `claude/templates/lead-brief.md` on every source, since nothing else carries it.
+A manager (WORKSTATION_REPORTS set) gets `claude/templates/manager-brief.md` on source `compact` or `clear`, when the
+system prompt addition may no longer be in context. Prints nothing otherwise. A manager's every source also records
+the payload's `session_id` as `session_id` in its manager.json, so a restart can resume the conversation.
 Always exits 0.
 """
 
@@ -15,7 +16,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-BRIEF = Path(__file__).resolve().parent.parent / "templates/manager-brief.md"
+TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
+BRIEF = TEMPLATES / "manager-brief.md"
+LEAD_BRIEF = TEMPLATES / "lead-brief.md"
 SOURCES = {"compact", "clear"}
 
 
@@ -34,22 +37,32 @@ def record_session(reports: Path, session_id: object) -> None:
         return
 
 
+def brief_for(source: object) -> Path | None:
+    if os.environ.get("WORKSTATION_ROLE") == "lead":
+        return LEAD_BRIEF
+    if os.environ.get("WORKSTATION_REPORTS") and source in SOURCES:
+        return BRIEF
+    return None
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
         return 0
-    if not os.environ.get("WORKSTATION_REPORTS") or not isinstance(payload, dict):
+    if not isinstance(payload, dict):
         return 0
-    record_session(Path(os.environ["WORKSTATION_REPORTS"]), payload.get("session_id"))
-    if payload.get("source") not in SOURCES or not BRIEF.is_file():
+    if os.environ.get("WORKSTATION_REPORTS"):
+        record_session(Path(os.environ["WORKSTATION_REPORTS"]), payload.get("session_id"))
+    brief = brief_for(payload.get("source"))
+    if brief is None or not brief.is_file():
         return 0
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "SessionStart",
-                    "additionalContext": BRIEF.read_text(),
+                    "additionalContext": brief.read_text(),
                 }
             }
         )
