@@ -978,9 +978,11 @@ class IdleTests(ReportsCase):
 
 
 class NoStdinEnvTests(unittest.TestCase):
-    def test_settings_env_carries_the_same_five_keys(self) -> None:
+    def test_settings_env_adds_only_ci_to_the_tab_env_because_ci_strips_claude_colours(self) -> None:
         env = json.loads((REPO / "claude/settings.base.json").read_text())["env"]
-        self.assertEqual({f"{k}={v}" for k, v in env.items() if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}, set(herdr_reports.NO_STDIN_ENV))
+        settings = {f"{k}={v}" for k, v in env.items() if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
+        self.assertEqual(settings, {"CI=1", *herdr_reports.NO_STDIN_ENV})
+        self.assertNotIn("CI=1", herdr_reports.NO_STDIN_ENV)
 
 
 class ReaperTests(ReportsCase):
