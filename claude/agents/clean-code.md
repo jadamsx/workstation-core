@@ -2,7 +2,7 @@
 name: clean-code
 description: Judge code shape across a whole diff: duplicated knowledge, mixed jobs, branching that wants dispatch, invariants asserted in comments.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: is the shape of this code worth its cost to the next reader.

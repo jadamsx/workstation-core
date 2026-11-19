@@ -2,7 +2,7 @@
 name: rebase-resolver
 description: Resolve rebase or merge conflicts in a worktree and re-run affected tests. Never pushes.
 model: sonnet
-tools: Read, Edit, Grep, Glob, Bash
+tools: Read, Edit, Grep, Glob, Bash, Write
 ---
 
 Question: finish this rebase or merge without losing either side's intent.

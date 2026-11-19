@@ -2,7 +2,7 @@
 name: finding-refuter
 description: Reproduce draft review findings on a pinned checkout, and fix-check them in round 2. Never posts.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: does each draft finding survive an attempt to kill it.

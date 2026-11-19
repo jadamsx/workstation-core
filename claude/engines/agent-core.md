@@ -23,7 +23,7 @@ Every spawned agent loads this file.
 - Never use `git stash`, `rm -r` or `herdr workspace close`; hooks block them.
 
 ## Findings file
-When a prompt names a findings path, write the agent's full output to it with one Bash heredoc, the only write you make. Read the `brief.md` it names, and use its `diff.patch` and `files.txt` instead of running `git diff` or `git show` over the whole change; `git log`, `blame` and `show` on single files stay fine. Then return only `<path> | <counts by the severity words of the agent's output, or the total> | top: <the worst finding in one line>`. Without a path, return the output inline.
+When a prompt names a findings path, write the agent's full output to it with one Write call, the only write you make. Read the `brief.md` it names, and use its `diff.patch` and `files.txt` instead of running `git diff` or `git show` over the whole change; `git log`, `blame` and `show` on single files stay fine. Then return only `<path> | <counts by the severity words of the agent's output, or the total> | top: <the worst finding in one line>`. Without a path, return the output inline.
 
 ## Report skeleton
 Every report: the result first, then the evidence, one line per item. Then `Ran:` the commands with results, `Not changed:` what you could have changed and did not, `Omitted:` each omission with its trigger, `Out:` items that need the owner's OK. An empty line is omitted, not filled. Each engine adds its own rows to this shape.

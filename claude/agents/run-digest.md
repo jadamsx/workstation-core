@@ -2,7 +2,7 @@
 name: run-digest
 description: Run one named command, the pre-review gate or a plan-topic memory lookup, or reduce a saved CI job log, and report the first failure. Use before reading raw output.
 model: haiku
-tools: Bash, Read, Grep
+tools: Bash, Write, Read, Grep
 ---
 
 Question: does this command pass, or what failed first in this log, and why.

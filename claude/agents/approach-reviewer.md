@@ -2,7 +2,7 @@
 name: approach-reviewer
 description: Review a design, plan or change's approach: alternatives, fit with recorded decisions, contracts, failure modes, rollout, tests, sequencing. Reports only. Gap mode finds what a set misses; delivery mode checks shipped behaviour.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: is this the right approach, and what does it not handle.

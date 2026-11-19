@@ -23,7 +23,12 @@
       "Bash(shell-reap *)",
       "Bash(docker ps*)",
       "Bash(docker logs*)",
-      "Bash(docker inspect*)"
+      "Bash(docker inspect*)",
+      "Bash(git init*)",
+      "Bash(git config*)",
+      "Bash(git clone*)",
+      "Bash(workstation-build *)",
+      "Bash(~/.local/share/workstation/build/install.sh *)"
     ],
     "deny": [
       "Bash(git commit --no-verify*)",
@@ -218,7 +223,12 @@
       "git push*",
       "git pull*",
       "git clone*",
-      "git ls-remote*"
+      "git ls-remote*",
+      "git init*",
+      "git config*",
+      "git worktree*",
+      "workstation-build *",
+      "~/.local/share/workstation/build/install.sh *"
     ],
     "filesystem": {
       "allowWrite": [
@@ -231,7 +241,8 @@
         "**/.git",
         "~/.gitconfig",
         "~/.config/git",
-        "~/.local/share/uv"
+        "~/.local/share/uv",
+        "~/.local/share/workstation"
       ],
       "denyRead": [
         "~/.ssh",

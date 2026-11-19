@@ -2,7 +2,7 @@
 name: cold-reviewer
 description: Review a diff with ticket and code only, never the plan or authoring session. Finds correctness, security and contract bugs.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: what is wrong with this diff.

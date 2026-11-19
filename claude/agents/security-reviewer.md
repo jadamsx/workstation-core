@@ -2,7 +2,7 @@
 name: security-reviewer
 description: Review a diff for auth, input, secrets and permission flaws, or scan added dependencies and licences.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: can a caller do something here they should not be able to.

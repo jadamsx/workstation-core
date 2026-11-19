@@ -2,7 +2,7 @@
 name: comment-cutter
 description: Strip AI comment slop from a branch before push: restated-what comments, ticket references, tutorial docstrings. Edits comments only.
 model: haiku
-tools: Read, Edit, Grep, Glob, Bash
+tools: Read, Edit, Grep, Glob, Bash, Write
 ---
 
 Question: which comments this diff adds should not exist.

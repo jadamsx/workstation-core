@@ -2,7 +2,7 @@
 name: premise-attacker
 description: Attack a ticket before it is built: premise, existing work, trivial baselines, sequencing.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: is the premise true, and does this already exist?

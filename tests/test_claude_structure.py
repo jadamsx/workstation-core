@@ -163,5 +163,27 @@ class Intensity(unittest.TestCase):
                     self.assertIn(found, {"light", "medium", "intense"})
 
 
+TEXT_ONLY_AGENTS = {"comprehension-cutter", "change-reader", "done-check", "code-locator", "caller-mapper", "researcher"}
+UNSANDBOXED = ["git init*", "git config*", "git worktree*", "git clone*", "launchctl *", "workstation-build *", "~/.local/share/workstation/build/install.sh *"]
+
+
+class SandboxAndToolsTests(unittest.TestCase):
+    def test_setup_commands_run_unsandboxed_with_no_prompt(self) -> None:
+        import json
+
+        settings = json.loads((CLAUDE / "settings.base.json").read_text())
+        for command in UNSANDBOXED:
+            self.assertIn(command, settings["sandbox"]["excludedCommands"])
+            self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
+        self.assertIn("~/.local/share/workstation", settings["sandbox"]["filesystem"]["allowWrite"])
+
+    def test_every_agent_that_writes_a_findings_file_has_write(self) -> None:
+        for path in sorted((CLAUDE / "agents").glob("*.md")):
+            tools = frontmatter(path.read_text()).get("tools", "")
+            if path.stem in TEXT_ONLY_AGENTS or "findings file" not in path.read_text():
+                continue
+            self.assertIn("Write", [t.strip() for t in tools.split(",")], path.stem)
+
+
 if __name__ == "__main__":
     unittest.main()

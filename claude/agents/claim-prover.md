@@ -2,7 +2,7 @@
 name: claim-prover
 description: Run the real suite or endpoint to confirm behaviours, or replay build-time bugs. Pass or fail with output tail.
 model: haiku
-tools: Read, Bash, Grep, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_console_messages, mcp__playwright__browser_take_screenshot
+tools: Read, Bash, Write, Grep, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_console_messages, mcp__playwright__browser_take_screenshot
 ---
 
 Question: is this one stated behaviour true when run for real.
