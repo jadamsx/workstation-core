@@ -56,7 +56,7 @@ RETRY_SECONDS = 15
 IDLE_SECONDS = 900
 TAIL_LINES = 15
 WAITING = "WAITING:"
-REAP_IDLE_SECONDS = 600
+REAP_IDLE_SECONDS = int(os.environ.get("REAP_IDLE_SECONDS", "600"))
 READY_ALERT_SECONDS = 120
 POLICY = Path(__file__).resolve().parent.parent / "claude/resource-policy.json"
 

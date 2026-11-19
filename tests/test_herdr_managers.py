@@ -403,6 +403,13 @@ class ManagerTests(ReportsCase):
     def usage(self, five: float, reset: float) -> None:
         Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
 
+    def test_shell_reap_reports_an_unreadable_process_table_in_one_line(self) -> None:
+        ps = self.log.parent / "bin/ps"
+        ps.write_text("#!/bin/sh\nexit 1\n")
+        ps.chmod(ps.stat().st_mode | stat.S_IXUSR)
+        r = self.bin("shell-reap", "1")
+        self.assertEqual((r.returncode, r.stderr.count("\n"), "Traceback" in r.stderr), (1, 1, False))
+
     def test_a_build_job_records_its_plan_in_manager_json(self) -> None:
         folder = self.manager()
         tree = self.root / "tree"
