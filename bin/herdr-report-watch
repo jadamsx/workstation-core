@@ -26,12 +26,18 @@ SIGKILL 5 seconds later if it is still there. Output cannot be watched cheaply, 
 whose command line contains a `reaper_keep` substring from `claude/resource-policy.json` are left alone. A shell under
 a manager's claude also gets a `Status: decision` report, `reaped-<pid>.md`, in that manager's folder.
 
+A manager.json with `plan` (the plan note's path) and `dir` lets the watcher prompt the coordinator, once per node and
+condition: `[watcher] <id> ready for <m> min and not started` when a node whose needs are done has had no `[~]` mark or
+`.owns` for over 2 minutes (counted from the newest `Node: <need>` commit, else the plan's mtime), and
+`[watcher] <id> waiting on a shell for <m> min` when a Bash-tool shell under the manager of a node (`dir/.owns`) is over 10 minutes old.
+
 Sent files are recorded in `<root>/.watch-state.json`. Every send and retry is logged to stdout, which
 the launchd agent writes to ~/Library/Logs/herdr-report-watch.log.
 """
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -51,6 +57,7 @@ IDLE_SECONDS = 900
 TAIL_LINES = 15
 WAITING = "WAITING:"
 REAP_IDLE_SECONDS = 600
+READY_ALERT_SECONDS = 120
 POLICY = Path(__file__).resolve().parent.parent / "claude/resource-policy.json"
 
 
@@ -60,9 +67,55 @@ def last_message(text: str) -> str:
     return marked[-1].lstrip("● ").strip() if marked else ""
 
 
+def plan_needs(text: str) -> dict[str, tuple[str, ...]]:
+    """Node id to the ids its Wave cell `N (needs X, Y)` names, from the note's `## Node table`."""
+    rows, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip() == "Node table"
+        elif inside and line.startswith("|"):
+            rows.append([c.strip() for c in line.strip().strip("|").split("|")])
+    if len(rows) < 3 or "wave" not in (header := [c.lower() for c in rows[0]]):
+        return {}
+    nodes = {}
+    for row in rows[2:]:
+        ident, needs = re.match(r"[`*]*([\w-]+)", row[0]), re.search(r"needs\s+([^)]*)", row[header.index("wave")])
+        if ident:
+            nodes[ident[1]] = tuple(x for x in re.findall(r"[\w-]+", needs[1]) if x != "and") if needs else ()
+    return nodes
+
+
+def plan_marks(text: str) -> dict[str, str]:
+    """Node id to the mark of its `- [ ] Nn title` line under `## Progress`."""
+    marks, inside = {}, False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip() == "Progress"
+        elif inside and (m := re.match(r"- \[([ ~xX])\] (\S+)", line)):
+            marks[m[2]] = m[1].lower()
+    return marks
+
+
+def owned_nodes(trees: list[Path]) -> set[str]:
+    """Ids named by `.owns` files (`node: Nn` or manager-send's `. Nn`) in the trees and their worktrees."""
+    owns = [o for t in trees for o in [t / ".owns", *t.glob(".claude/worktrees/*/.owns")] if o.is_file()]
+    return {m[1] for o in owns if (m := re.match(r"(?:node:|\.)\s*(\S+)", o.read_text().split("\n")[0]))}
+
+
+def commit_time(trees: list[Path], node: str) -> float | None:
+    """Commit time of the newest commit with trailer `Node: <node>` in any of the trees' repos."""
+    times = []
+    for tree in trees:
+        out = subprocess.run(["git", "-C", str(tree), "log", "--all", "-1", "--format=%ct", "-E", f"--grep=^Node: {node}$"], capture_output=True, text=True)
+        times += [float(t) for t in out.stdout.split()]
+    return max(times, default=None)
+
+
 class Watcher:
-    def __init__(self, root: Path, procs: Callable[[], list[Proc]] = read_procs, kill: Callable[[int, int], None] = os.kill) -> None:
+    def __init__(self, root: Path, procs: Callable[[], list[Proc]] = read_procs, kill: Callable[[int, int], None] = os.kill, wall: Callable[[], float] = time.time) -> None:
         self.root = root
+        self.wall = wall
+        self.shell_wait: dict[Path, float] = {}
         self.procs = procs
         self.kill = kill
         self.cpu_seen: dict[int, tuple[float, float]] = {}
@@ -177,6 +230,7 @@ class Watcher:
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as err:
             self.log(f"reaper skipped: {err}")
             return
+        self.shell_wait = {}
         by_pid = {p.pid: p for p in procs}
         children: dict[int, list[Proc]] = {}
         for p in procs:
@@ -203,6 +257,9 @@ class Watcher:
             since = before[1] if before and before[0] == cpu else now
             seen_cpu[pid] = (cpu, since)
             shell = by_pid[pid]
+            if shell.ppid not in owners:
+                for folder in self.managers_of(claude):
+                    self.shell_wait[folder] = max(self.shell_wait.get(folder, 0), shell.age)
             if shell.ppid in owners or pid in self.terminated or now - since <= REAP_IDLE_SECONDS or shell.age <= REAP_IDLE_SECONDS:
                 continue
             if any(k in p.command for p in tree for k in keep):
@@ -222,15 +279,45 @@ class Watcher:
         command = shell.command.split("eval ", 1)[-1][:200]
         stop_shell(shell.pid, lambda: procs, self.kill)
         self.log(f"reaped shell {shell.pid}: {command}")
-        for info in self.root.glob("*/*/manager.json"):
-            if f"{info.parent}/mcp.json" in claude.command:
-                body = (
-                    "Status: decision\n"
-                    f"Stopped shell pid {shell.pid}: no CPU use for over {REAP_IDLE_SECONDS // 60} minutes.\n"
-                    f"Command: {command}\n"
-                    "Rerun it in the foreground with a timeout, or add the command to reaper_keep in claude/resource-policy.json.\n"
-                )
-                write_atomic(info.parent / f"reaped-{shell.pid}.md", body)
+        for folder in self.managers_of(claude):
+            body = (
+                "Status: decision\n"
+                f"Stopped shell pid {shell.pid}: no CPU use for over {REAP_IDLE_SECONDS // 60} minutes.\n"
+                f"Command: {command}\n"
+                "Rerun it in the foreground with a timeout, or add the command to reaper_keep in claude/resource-policy.json.\n"
+            )
+            write_atomic(folder / f"reaped-{shell.pid}.md", body)
+
+    def managers_of(self, claude: Proc) -> list[Path]:
+        return [info.parent for info in self.root.glob("*/*/manager.json") if f"{info.parent}/mcp.json" in claude.command]
+
+    def alert(self, key: str, coordinator: str | None, text: str, now: float) -> None:
+        if key not in self.state["sent"]:
+            self.deliver(key, coordinator, text, "sent", now)
+
+    def alert_lead(self, space: Path, coordinator: str | None, now: float) -> None:
+        """Prompt the lead once per node and condition: ready and unstarted for READY_ALERT_SECONDS, or its manager's shell older than REAP_IDLE_SECONDS.
+        The plan is the `plan` field of a manager.json in the space."""
+        managers = {m: read_manager(m) for m in space.glob("*") if (m / "manager.json").exists()}
+        trees = [Path(i["dir"]) for i in managers.values() if i.get("dir")]
+        wall = self.wall()
+        for folder, info in managers.items():
+            wait = self.shell_wait.get(folder, 0)
+            running = owned_nodes([Path(info["dir"])]) if info.get("dir") else set()
+            for node in running if wait > REAP_IDLE_SECONDS else ():
+                self.alert(f"alert:{folder}:{node}:shell", coordinator, f"[watcher] {node} waiting on a shell for {int(wait // 60)} min", now)
+        for plan in {Path(i["plan"]).expanduser() for i in managers.values() if i.get("plan")}:
+            try:
+                text, edited = plan.read_text(), plan.stat().st_mtime
+            except OSError:
+                continue
+            needs, marks, running = plan_needs(text), plan_marks(text), owned_nodes(trees)
+            for node, deps in needs.items():
+                if marks.get(node) in ("x", "~") or node in running or any(marks.get(d) != "x" for d in deps):
+                    continue
+                since = max((commit_time(trees, d) or edited for d in deps), default=edited)
+                if wall - since > READY_ALERT_SECONDS:
+                    self.alert(f"alert:{plan}:{node}:ready", coordinator, f"[watcher] {node} ready for {int((wall - since) // 60)} min and not started", now)
 
     def scan(self, now: float) -> None:
         if self.state_file.exists():
@@ -242,6 +329,7 @@ class Watcher:
         for space in sorted(p for p in self.root.glob("*") if p.is_dir()):
             coordinator_file = space / "coordinator"
             coordinator = coordinator_file.read_text().strip() if coordinator_file.exists() else None
+            self.alert_lead(space, coordinator, now)
             for manager in sorted(p for p in space.glob("*") if (p / "manager.json").exists()):
                 allresults = sorted(manager.glob("*.md"))
                 pending = [r for r in allresults if str(r) not in self.state["sent"]]

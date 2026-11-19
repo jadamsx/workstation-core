@@ -945,6 +945,7 @@ class ReaperTests(ReportsCase):
         self.assertIn(f"[worker-report] {self.manager() / 'reaped-20.md'}", " ".join(self.prompts()))
         watcher.scan(603)
         self.assertEqual(len(kills), 2)
+        self.assertEqual(len([p for p in self.prompts() if "reaped-20.md" in p]), 1)
         watcher.scan(607)
         self.assertEqual(kills[2], (20, signal.SIGKILL))
 
@@ -999,6 +1000,63 @@ class ReaperTests(ReportsCase):
         self.assertEqual(watch.clock_seconds("1-02:03:04"), 93784)
         self.assertEqual(watch.clock_seconds("35:36"), 2136)
         self.assertEqual(watch.clock_seconds("0:05.11"), 5.11)
+
+
+class PlanAlertTests(ReportsCase):
+    PLAN = "## Node table\n| Node | Wave |\n|---|---|\n| N1 first | 1 |\n| N2 second | 2 (needs N1) |\n| N3 third | 3 (needs N2) |\n\n## Progress\n{progress}\n"
+
+    def setup_plan(self, progress: str, owns: str | None = None) -> tuple[Path, Path]:
+        plan = self.root.parent / "plan.md"
+        plan.write_text(self.PLAN.format(progress=progress))
+        os.utime(plan, (1000, 1000))
+        tree = self.root.parent / "tree"
+        tree.mkdir(exist_ok=True)
+        if owns:
+            (tree / ".owns").write_text(f"node: {owns}\n")
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "dir": str(tree), "plan": str(plan)}))
+        return folder, tree
+
+    def watcher(self, wall: list, rows: list | None = None) -> watch.Watcher:
+        return watch.Watcher(self.root, procs=lambda: rows or [], wall=lambda: wall[0])
+
+    def alerts(self) -> list[str]:
+        return [p for p in self.prompts() if "[watcher]" in p]
+
+    def test_ready_node_prompts_once_after_two_minutes(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second")
+        wall = [1119.0]
+        watcher = self.watcher(wall)
+        watcher.scan(0)
+        self.assertEqual(self.alerts(), [])
+        wall[0] = 1121.0
+        watcher.scan(1)
+        watcher.scan(2)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready for 2 min and not started", self.alerts()[0])
+        self.assertIn("w1:p1", self.alerts()[0])
+        self.watcher(wall).scan(3)
+        self.assertEqual(len(self.alerts()), 1)
+
+    def test_running_blocked_and_done_nodes_never_prompt(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [~] N2 second\n- [ ] N3 third")
+        self.watcher([5000.0]).scan(0)
+        self.setup_plan("- [x] N1 first\n- [x] N2 second\n- [x] N3 third")
+        self.watcher([5000.0]).scan(0)
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second", owns="N2")
+        self.watcher([5000.0]).scan(0)
+        self.assertEqual(self.alerts(), [])
+
+    def test_node_waiting_on_a_shell_prompts_once_after_ten_minutes(self) -> None:
+        folder, tree = self.setup_plan("- [x] N1 first\n- [~] N2 second", owns="N2")
+        claude = watch.Proc(10, 1, 5000, 50.0, f"claude --mcp-config {folder}/mcp.json")
+        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make serve' < /dev/null"
+        for age, expected in ((599, 0), (700, 1)):
+            watcher = self.watcher([1000.0], [claude, watch.Proc(20, 10, age, 5.0, shell)])
+            watcher.scan(0)
+            watcher.scan(1)
+            self.assertEqual(len(self.alerts()), expected)
+        self.assertIn("[watcher] N2 waiting on a shell for 11 min", self.alerts()[0])
 
 
 if __name__ == "__main__":
