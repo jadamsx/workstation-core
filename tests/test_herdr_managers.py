@@ -414,6 +414,20 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads((folder / "manager.json").read_text())["plan"], str(plan))
 
+    def test_a_build_job_sends_the_owns_lines_after_the_job_line(self) -> None:
+        self.manager()
+        tree = self.root / "tree"
+        tree.mkdir()
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text("| N1 | first | x | `a.py` | y |\n- Decided: use x\n- Not-building: y\n")
+        job = f"/build {plan} node N1 worktree {tree}"
+        r = self.bin("manager-send", "alpha", job)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        sent = "\n".join(self.calls())
+        self.assertIn(f"agent prompt w1:p4 [coordinator] {job}\nnode: N1\nowns: a.py\nDecided: use x\nNot-building: y", sent)
+        self.assertEqual(sent.count("[coordinator]"), 1)
+
     def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
         folder = self.manager()
         self.usage(90, time.time() + 3600)
