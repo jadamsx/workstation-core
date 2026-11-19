@@ -12,6 +12,7 @@ The branch, and the design note or ticket it implements. Without a ticket it sto
 
 ## Differs
 - Rounds follow `engines/review.md` "Round shapes": `light` unless the owner says otherwise; a planned change reviews at the highest node `intensity`.
+- Fixes: grouped by edited file, one builder per group (`engines/build.md` "The graph").
 - Pushing and CI: `engines/ship.md`. Description: `change-write`; diagrams as it asks.
 
 ## Output

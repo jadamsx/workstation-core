@@ -36,7 +36,7 @@ Rules for every round:
 - `comment-cutter` runs at `medium` and above over the branch diff. `comprehension-cutter` runs on posted comments at `intense`.
 - A rebase that leaves `git patch-id --stable` unchanged skips re-review only when CI is green and the base diff does not touch the patch's files.
 - Prove or drop. A code finding needs a rerun or a quoted `file:line`; a plan finding a quoted `file:line` that contradicts the claim. A read-only security finding with a quoted line may still block. Anything else is listed as Dropped with why. `claim-prover` reruns without a browser when the claim needs none.
-- Round 1 fixes every severity in `self`. Rounds 2 and 3: a new finding counts only if it is a Blocker or Should-fix inside the fix delta or its callers; the rest is listed. `clean-code` runs in round 1 only.
+- Round 1 fixes every severity in `self`, grouped by edited file and dispatched per `engines/build.md` "The graph". Rounds 2 and 3: a new finding counts only if it is a Blocker or Should-fix inside the fix delta or its callers; the rest is listed. `clean-code` runs in round 1 only.
 - Findings per agent per round, most severe first: `cold-reviewer` 10, `clean-code` 5, the others 8.
 
 ## Modes
