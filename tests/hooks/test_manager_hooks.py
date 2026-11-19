@@ -123,6 +123,11 @@ class ManagerBriefInjectTest(ReportsCase):
         self.assertEqual(self.start("resume", self.reports).stdout, "")
         self.assertEqual(self.start("compact", None).stdout, "")
 
+    def test_every_source_records_the_session_id_in_manager_json(self) -> None:
+        (self.reports / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "keep": True}))
+        run_hook("manager-brief-inject.py", {"source": "startup", "session_id": "abc"}, self.reports)
+        self.assertEqual(json.loads((self.reports / "manager.json").read_text()), {"pane_id": "w1:p4", "keep": True, "session_id": "abc"})
+
 
 if __name__ == "__main__":
     unittest.main()

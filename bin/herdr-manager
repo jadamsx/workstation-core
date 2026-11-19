@@ -11,7 +11,8 @@ setup     run in the coordinator's pane: registers it, then opens a standing `â–
           `--no-work` stores {"work": false} in the space's setup.json so setup never starts work (the space
           uses named managers or runs in place); `--work` stores true again. Plain setup keeps the stored choice.
 start     opens a tab named `â–¸ <name>` running `claude --model sonnet` with the manager brief, and
-          WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into.
+          WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into. A kept
+          manager resumes the `session_id` its SessionStart hook stored; without a usable one it starts fresh and says so.
 keep      sets `"keep": true` in the manager's manager.json (`--off` removes it): the watcher then never closes
           or clears that manager, and the human closes it.
 list      the managers of this space, whether their pane is alive, and their newest result file.
@@ -140,6 +141,13 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     return pane, tab["tab"]["tab_id"]
 
 
+def latest_session(reports: Path) -> str | None:
+    """The session id the SessionStart hook has recorded since launch, if any."""
+    with suppress(OSError, ValueError):
+        return read_manager(reports).get("session_id")
+    return None
+
+
 def start(name: str, resume: str | None, directory: str, standing: bool = False) -> int:
     if not NAME.fullmatch(name):
         raise ReportsError(f"name must match {NAME.pattern}: {name!r}")
@@ -151,13 +159,22 @@ def start(name: str, resume: str | None, directory: str, standing: bool = False)
         previous = read_manager(reports)
         if not previous.get("closed") and previous.get("pane_id") in (live_panes() or set()):
             raise ReportsError(f"manager {name!r} is already running in pane {previous['pane_id']}")
+    if previous.get("keep") and not resume:
+        resume = previous.get("session_id")
+        if isinstance(resume, str) and SESSION_ID.fullmatch(resume):
+            print(f"{name}: kept manager, resuming session {resume}")
+        else:
+            resume = None
+            print(f"{name}: kept manager has no usable stored session id, starting a fresh session", file=sys.stderr)
     reports.mkdir(parents=True, exist_ok=True)
     directory = Path(directory).resolve()
     role = name if name == "work" else "manager"
     claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), *mcp_args(role, reports), "--append-system-prompt-file", str(BRIEF)]
     pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}"], directory, claude_args)
     carried = {k: True for k in ("standing", "keep") if previous.get(k)}
-    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **carried, **({"standing": True} if standing else {})}
+    session = latest_session(reports)
+    session = session if session not in (None, previous.get("session_id")) else resume
+    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **carried, **({"session_id": session} if session else {}), **({"standing": True} if standing else {})}
     write_atomic(reports / "manager.json", json.dumps(info))
     print(f"{name}: pane {pane}, reports {reports}")
     return 0

@@ -570,6 +570,21 @@ class ManagerTests(ReportsCase):
         self.assertTrue(info["keep"] and info["standing"])
         self.assertNotIn("closed", info)
 
+    def test_restart_of_a_kept_manager_resumes_its_stored_session_or_says_it_starts_fresh(self) -> None:
+        folder = self.space / "alpha"
+        folder.mkdir(parents=True)
+        session = "0a1b2c3d-0000-4000-8000-000000000002"
+        base = {"pane_id": "w1:p9", "tab_id": "w1:t9", "closed": True, "keep": True}
+        (folder / "manager.json").write_text(json.dumps({**base, "session_id": session}))
+        r = self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"--model sonnet --resume {session}", next(c for c in self.calls() if c.startswith("agent start")))
+        self.assertEqual(json.loads((folder / "manager.json").read_text())["session_id"], session)
+        (folder / "manager.json").write_text(json.dumps(base))
+        r = self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        self.assertIn("starting a fresh session", r.stderr)
+        self.assertNotIn("--resume", [c for c in self.calls() if c.startswith("agent start")][-1])
+
     def test_keep_sets_and_off_clears_the_flag(self) -> None:
         folder = self.manager()
         self.assertEqual(self.bin("herdr-manager", "keep", "alpha").returncode, 0)
