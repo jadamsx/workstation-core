@@ -259,7 +259,7 @@ class BaseSettingsTest(unittest.TestCase):
         for rule in ("Bash(git stash*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
             self.assertIn(rule, deny)
         self.assertIn("Read(~/.ssh/**)", deny)
-        for rule in ("Bash(git push * -f*)", "Bash(git push *+*)", "Bash(git * reset --hard*)", "Bash(git * clean *)", "Bash(git checkout .*)", "Bash(git -c *)", "Bash(git config *core.sshCommand*)", "Bash(git push --delete*)", "Bash(git push -f*)", "Bash(gh repo delete*)", "Bash(gh auth *)", "Bash(launchctl submit*)"):
+        for rule in ("Bash(git push * -f*)", "Bash(git push *+*)", "Bash(git * reset --hard*)", "Bash(git * clean *)", "Bash(git checkout .*)", "Bash(git -c *=*)", "Bash(git config *core.sshCommand*)", "Bash(git push --delete*)", "Bash(git push -f*)", "Bash(gh repo delete*)", "Bash(gh auth *)", "Bash(launchctl submit*)"):
             self.assertIn(rule, deny)
 
     def test_remote_branch_pushes_and_api_deletes_ask(self) -> None:
