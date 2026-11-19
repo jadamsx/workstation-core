@@ -2,7 +2,7 @@
 """Usage: usage-gate
 
 Exit 0 when new work may start, silently. Exit 1 and print `parked until <time>` when the 5h usage is at or over
-USAGE_GATE_5H (default 95) or the 7d usage at or over USAGE_GATE_7D (default 90). Reads the file the statusline
+USAGE_GATE_5H (default 98) or the 7d usage at or over USAGE_GATE_7D (default 98). Reads the file the statusline
 writes (USAGE_FILE, default ~/.claude/usage.json), the only place `rate_limits` reach a script. A missing file, one
 older than 15 minutes, or one without rate limits fails open, as do `USAGE_GATE=off` and an unexpired
 ~/.claude/usage-override (USAGE_OVERRIDE_FILE) holding an expiry as epoch seconds.
@@ -45,7 +45,7 @@ def parked_until(now: float | None = None) -> float | None:
         data = json.loads(path.read_text())
         if not isinstance(data, dict):
             return None
-        limits = {"five_hour": float(os.environ.get("USAGE_GATE_5H", 95)), "seven_day": float(os.environ.get("USAGE_GATE_7D", 90))}
+        limits = {"five_hour": float(os.environ.get("USAGE_GATE_5H", 98)), "seven_day": float(os.environ.get("USAGE_GATE_7D", 98))}
         resets = [
             float(data[window]["resets_at"])
             for window, limit in limits.items()

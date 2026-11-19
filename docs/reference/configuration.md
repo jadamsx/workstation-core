@@ -50,11 +50,11 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 
 ## Usage gate
 
-The statusline writes `~/.claude/usage.json` from `rate_limits`. At 5h 95% or 7d 90% `manager-send` parks a slash-command job, `herdr-report-watch` resumes it as soon as the gate opens (reset passed, usage under the limit, override or a stale reading), and the `Agent` hook denies new top-level spawns. Running work is never cut off. `USAGE_GATE=off` or an unexpired `~/.claude/usage-override` (an expiry in epoch seconds) lifts the gate. A missing file, a reading older than 15 minutes or a plan that sends no `rate_limits` (team plans may not) fails open. Leave "Continue automatically at usage limit" on in `/config` as the backstop.
+The statusline writes `~/.claude/usage.json` from `rate_limits`. At 5h 98% or 7d 98% `manager-send` parks a slash-command job, `herdr-report-watch` resumes it as soon as the gate opens (reset passed, usage under the limit, override or a stale reading), and the `Agent` hook denies new top-level spawns. Running work is never cut off. `USAGE_GATE=off` or an unexpired `~/.claude/usage-override` (an expiry in epoch seconds) lifts the gate. A missing file, a reading older than 15 minutes or a plan that sends no `rate_limits` (team plans may not) fails open. Leave "Continue automatically at usage limit" on in `/config` as the backstop.
 
 | Variable | Default | Use |
 | --- | --- | --- |
-| `USAGE_GATE_5H`, `USAGE_GATE_7D` | `95`, `90` | Park thresholds in percent |
+| `USAGE_GATE_5H`, `USAGE_GATE_7D` | `98`, `98` | Park thresholds in percent |
 | `USAGE_FILE`, `USAGE_OVERRIDE_FILE` | `~/.claude/usage.json`, `~/.claude/usage-override` | Where the gate reads and where the override lives |
 
 Run `grep -rn "environ" bin lib claude/hooks` for the full list.
