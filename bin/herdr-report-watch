@@ -91,7 +91,6 @@ def commit_time(trees: list[Path], node: str) -> float | None:
 
 
 def transcripts(session: str | None) -> list[Path]:
-    """The session transcript and its subagent transcripts."""
     return [*PROJECTS.glob(f"*/{session}.jsonl"), *PROJECTS.glob(f"*/{session}/subagents/*.jsonl")] if session else []
 
 
@@ -153,13 +152,11 @@ class Watcher:
             self.worked[pane] = results
 
     def last_activity(self, manager: Path, info: dict, now: float) -> float:
-        """Newest of the tab's start, its reports, its transcripts, and its last CPU-using shell, as wall time."""
         busy = self.shell_busy.get(manager)
         files = [*manager.glob("*.md"), *transcripts(info.get("session_id"))]
         return max(info.get("started", 0), self.wall() - (now - busy) if busy else 0, *(f.stat().st_mtime for f in files))
 
     def refused_by(self, session: str | None, wall: float, after: float) -> tuple[str, int] | None:
-        """The guard that refused the session most often within STALL_SECONDS and after `after`, with the count."""
         counts: Counter[str] = Counter()
         for path in transcripts(session):
             with path.open("rb") as handle:

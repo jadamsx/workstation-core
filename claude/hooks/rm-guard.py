@@ -52,7 +52,6 @@ def tokens(segment: str) -> list[str]:
 
 
 def split_command(command: str) -> tuple[list[str], bool]:
-    """Split on separators outside quotes; flag a redirect or substitution outside single quotes."""
     command = command.replace("\\\n", "")
     parts, buf, quote, unsafe, i = [], "", "", False, 0
     while i < len(command):
@@ -117,7 +116,6 @@ def excluded_patterns() -> list[str] | None:
 
 
 def excluded_reason(command: str) -> str | None:
-    """None when every part of the command is on the excluded list, else the denial message."""
     patterns = excluded_patterns()
     if patterns is None:
         return UNREADABLE_MESSAGE
