@@ -299,7 +299,9 @@
         "files.pythonhosted.org",
         "ghcr.io",
         "docker.io",
-        "*.docker.io"
+        "*.docker.io",
+        "localhost",
+        "127.0.0.1"
       ]
     }
   },
