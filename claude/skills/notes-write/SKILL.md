@@ -23,6 +23,7 @@ Two notes that disagree on a fact stop the run: ask which is right before mergin
 - Project streams: `projects/<slug>/<type>/`, `<type>` one of `designs`, `decisions`, `research`, `incidents`, `reviews`, created on first use; nothing else sits in a project folder. The note carries `project: <slug>`. Resolve the slug with `current-project`; none means ask once or use the top-level folders.
 - Knowledge serving several streams: top-level `runbooks/`, `reference/`, `howto/`.
 - Link a project as `[[projects/<slug>/index|Name]]`; every new project note is linked from that hub in a sentence saying why it matters.
+- Decisions: one note per accepted decision, body per `templates/decision.md`.
 - Designs: one note per ticket or epic, `<KEY>-<slug>.md`, body per `templates/design.md`. Status proposed, approved (with `date`, the gate the build reads), shipped or superseded. A replaced design stays, marked superseded and linked to its successor.
 
 ### Format
