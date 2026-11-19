@@ -43,6 +43,8 @@ It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and l
 The watcher also stops a shell that a Bash tool call left behind: one under a `claude` process, older than 10 minutes, whose processes have used no CPU for 10 minutes. It sends SIGTERM, then SIGKILL after 5 seconds, and a manager gets a `Status: decision` report naming the command and pid.
 Commands containing a `reaper_keep` entry in `claude/resource-policy.json` (`docker`, `kubectl`, `tail -f` by default) are never stopped.
 
+The watcher also prompts the lead when a ready node sits unstarted over 2 minutes or waits on a shell over 10 minutes.
+
 ## Troubleshooting
 
 - Startup prompts are answered for you: folder trust and external `CLAUDE.md` imports, only under the lead's folder. Anywhere else, run `claude` there once to trust it.

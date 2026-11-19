@@ -9,6 +9,10 @@ This moves a space that already runs a lead, a work tab and kept managers onto t
 - `manager-send` writes `<worktree>/.owns` for each `/build` job: the node, the files it owns, and the Decided, Standing and Not-building lines. A commit outside those files is refused.
 - A done report carries a `Done-check:` line, `pass` or `deviation`, with a quoted line for each deviation.
 - A usage gate parks new starts near the 5-hour and 7-day limits. Running work finishes, and parked work resumes after the reset. [Configuration](../reference/configuration.md) has the thresholds and the override.
+- A Bash hook denies polling loops and sleeps over 10 seconds. Background commands time out after 20 minutes.
+- The watcher reaps a Bash-tool shell idle for 10 minutes under `claude` and writes a decision report. To stop a stuck shell, run `shell-reap <pid>`, never `kill`.
+- The watcher prompts the lead when a ready node sits unstarted over 2 minutes, a node waits on a shell over 10 minutes, or a shell is reaped.
+- Git network commands, `gh` and `launchctl` run outside the sandbox, with the deny list intact. Tabs run non-interactive (`CI=1`, `GIT_TERMINAL_PROMPT=0`, `PAGER=cat`, `GIT_EDITOR=true`).
 
 ## Steps
 
@@ -27,7 +31,7 @@ Do these at a stage boundary, when no manager is mid-job.
 4. Brief the lead with one line:
 
    ```
-   [workstation] The workflow was rebuilt: light review by default, round cap 3, .owns, Done-check:, usage gate. Reread the engines you use.
+   [workstation] The workflow was rebuilt: light review by default, round cap 3, .owns, Done-check:, usage gate, review fixes fan out by file with one builder per group. Reread the engines you use.
    ```
 
 ## Plans in flight
