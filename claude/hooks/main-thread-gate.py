@@ -32,9 +32,10 @@ WORKER_REPORT = re.compile(r"^\s*\[worker-report\]", re.MULTILINE)
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 MAX_SLEEP_SECONDS = 10
 BACKGROUND_TIMEOUT_SECONDS = 1200
-SLEEP_ARG = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)([smhd]?)\b")
-LOOP_WORD = re.compile(r"\b(until|while)\b")
-SLEEP_WORD = re.compile(r"\bsleep\b")
+SLEEP_ARG = re.compile(r"\bsleep\s+(?:(\d+(?:\.\d+)?)([smhd]?)|inf(?:inity)?)\b")
+SLEEP_LOOP = re.compile(r"(?:^|[;&|()\n])\s*(?:until|while)\b.*?\bdo\b(?:(?!\bdone\b).)*?\bsleep\b.*?\bdone\b", re.DOTALL)
+COMMAND_BODY = re.compile(r"""\s-c\s+('[^']*'|"(?:[^"\\]|\\.)*")""")
+UNWRAPPED_HEADS = {"git", "gh", "glab", "launchctl", "rm", "sudo", "docker", "kubectl", "shell-reap", "ps"}
 SLEEP_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 WRAPPED = re.compile(rf"^\s*(gtimeout|timeout)\s+{BACKGROUND_TIMEOUT_SECONDS}\b|^\s*perl -e 'alarm {BACKGROUND_TIMEOUT_SECONDS};")
 POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_background, which notifies when the command finishes."
@@ -324,14 +325,27 @@ def ask_block_reason(payload: dict) -> str | None:
     return None
 
 
+def polls(text: str) -> bool:
+    long_sleep = any(
+        not n or float(n) * SLEEP_UNITS[u] > MAX_SLEEP_SECONDS for n, u in SLEEP_ARG.findall(text)
+    )
+    return long_sleep or bool(SLEEP_LOOP.search(text))
+
+
 def polling_reason(payload: dict) -> str | None:
     if payload.get("tool_name") != "Bash":
         return None
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    bare = QUOTED.sub('""', HEREDOC.sub("", command))
-    long_sleep = any(float(n) * SLEEP_UNITS[u] > MAX_SLEEP_SECONDS for n, u in SLEEP_ARG.findall(bare))
-    loop = LOOP_WORD.search(bare) and SLEEP_WORD.search(bare)
-    return POLLING_DENIED if long_sleep or loop else None
+    command = HEREDOC.sub("", (payload.get("tool_input") or {}).get("command") or "")
+    texts = [command, *(body[1:-1] for body in COMMAND_BODY.findall(command))]
+    return POLLING_DENIED if any(polls(QUOTED.sub('""', text)) for text in texts) else None
+
+
+def first_word(command: str) -> str:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    return next((t for t in tokens if not ENV_ASSIGN.match(t)), "")
 
 
 def with_timeout(payload: dict) -> dict | None:
@@ -339,9 +353,11 @@ def with_timeout(payload: dict) -> dict | None:
     command = tool_input.get("command") or ""
     if payload.get("tool_name") != "Bash" or not tool_input.get("run_in_background") or WRAPPED.match(command):
         return None
+    if first_word(command) in UNWRAPPED_HEADS:
+        return None
     limit = BACKGROUND_TIMEOUT_SECONDS
     runner = f"gtimeout {limit}" if shutil.which("gtimeout") else f"perl -e 'alarm {limit}; exec @ARGV' --"
-    return {**tool_input, "command": f"{runner} bash -c {shlex.quote(command)}"}
+    return {**tool_input, "command": f'{runner} "${{SHELL:-bash}}" -c {shlex.quote(command)}'}
 
 
 def is_coordination_file(path: str) -> bool:
