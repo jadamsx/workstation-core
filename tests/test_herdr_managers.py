@@ -388,7 +388,7 @@ class ManagerTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         calls = self.calls()
         wait = calls.index("agent wait w1:p4 --until idle --timeout 120000")
-        self.assertGreater(calls.index("agent prompt w1:p4 do the thing"), wait)
+        self.assertGreater(calls.index("agent prompt w1:p4 [coordinator] do the thing"), wait)
         self.assertGreater(wait, next(i for i, c in enumerate(calls) if c.startswith("agent start")))
 
     def test_manager_send_prefixes_the_text_and_retries_while_blocked(self) -> None:
@@ -832,7 +832,7 @@ class ManagerTests(ReportsCase):
         (self.root.parent / "wait-fail").write_text("")
         r = self.bin("manager-start", "beta", "--prompt", "go", "--dir", "/tmp")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.prompts(), ["agent prompt w1:p4 go"])
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] go"])
 
     def test_wait_timeout_without_the_input_box_fails_and_closes_the_tab(self) -> None:
         (self.root.parent / "wait-fail").write_text("")

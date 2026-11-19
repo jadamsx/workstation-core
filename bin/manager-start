@@ -55,7 +55,7 @@ def main(argv: list[str]) -> int:
             except subprocess.CalledProcessError:
                 if not INPUT_BOX.search(pane_text(pane)):
                     raise
-            herdr("agent", "prompt", pane, args.prompt)
+            herdr("agent", "prompt", pane, f"[coordinator] {args.prompt}")
         except Exception:
             with suppress(subprocess.CalledProcessError, OSError):
                 close_manager(folder)

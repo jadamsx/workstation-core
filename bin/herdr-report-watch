@@ -6,7 +6,7 @@ as `[worker-report] <path>` with `herdr agent prompt` to the pane saved by `herd
 retried every 15 seconds. A `Status: done` report also closes the manager's tab (a standing manager is `/clear`ed, a kept one
 left open); a manager whose pane is gone is reported once. Every 30 seconds each manager tab is checked: one
 `[watcher] <tab> looks stuck: <reason>` line goes to the lead when it shows no activity (reports, transcripts, CPU-using
-shells) for STALL_SECONDS with its job open (its newest prompt in the transcript is newer than every `result-*.md`) and no live Bash-tool shell, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
+shells) for STALL_SECONDS with its job open (its newest `[coordinator]` dispatch in the transcript is newer than every `result-*.md`, or it has no dispatch and no report yet) and no live Bash-tool shell, a permission prompt has stood for 60 seconds, or one guard refused it 3 times in STALL_SECONDS;
 it re-arms on new activity. Parked `manager-send` jobs resume when `usage-gate` opens. Bash-tool shells under a claude in a lead, work or manager pane that burn no CPU for
 10 minutes are reaped (never any other pane), except while the tab's last turn is a `WAITING:` message under 2 hours old. A manager.json with `plan` and `dir` lets it prompt the lead about unstarted
 ready nodes and long shell waits. State is in `<root>/.watch-state.json`; stdout goes to ~/Library/Logs/herdr-report-watch.log.
@@ -127,9 +127,9 @@ def entry_time(entry: dict) -> float:
 
 
 def is_prompt(entry: dict) -> bool:
-    """A user turn with text of its own: not a tool result, a meta line or a system reminder."""
+    """A user turn that starts with the `[coordinator]` prefix `manager-send` and `manager-start` put on a dispatch."""
     texts = [b.get("text", "") for b in blocks(entry) if b.get("type") == "text"]
-    return entry.get("type") == "user" and not entry.get("isMeta") and any(t.strip() and not t.lstrip().startswith("<system-reminder") for t in texts)
+    return entry.get("type") == "user" and bool(texts) and texts[0].lstrip().startswith("[coordinator]")
 
 
 def newest_prompt(session: str | None) -> float | None:
@@ -238,9 +238,10 @@ class Watcher:
         return counts.most_common(1)[0] if counts else None
 
     def armed(self, manager: Path, info: dict) -> bool:
-        """A silent tab is worth a kick only while its job is open (a prompt newer than every report) and no shell it started can wake it."""
+        """A silent tab is worth a kick only while its job is open and no shell it started can wake it. A job opens on a `[coordinator]` dispatch newer than every report; with no dispatch in the transcript it is open only until the first report."""
+        reports = [f.stat().st_mtime for f in manager.glob("result-*.md")]
         prompted = newest_prompt(info.get("session_id"))
-        if prompted is not None and prompted <= max((f.stat().st_mtime for f in manager.glob("result-*.md")), default=0):
+        if reports and (prompted is None or prompted <= max(reports)):
             return False
         try:
             owners = shell_owners(self.procs())

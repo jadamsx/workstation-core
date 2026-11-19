@@ -218,37 +218,46 @@ class StuckTests(ReportsCase):
         shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'gh pr checks --watch' < /dev/null"
         self.rows = [watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {self.folder / 'mcp.json'}"), watch.Proc(20, 10, 100, 1.0, shell)]
 
-    def test_a_prompt_newer_than_the_last_report_with_no_shell_is_kicked(self) -> None:
+    def test_a_coordinator_prompt_after_a_report_with_no_shell_is_kicked(self) -> None:
         self.report(-50)
-        self.convo(self.turn(0, "user", "do the next thing"))
+        self.convo(self.turn(0, "user", "[coordinator] do the next thing"))
         self.at(watch.STALL_SECONDS)
         self.assertEqual(len(self.lines()), 1)
 
-    def test_a_report_newer_than_the_prompt_closes_the_job(self) -> None:
-        self.convo(self.turn(0, "user", [{"type": "text", "text": "go"}]))
+    def test_a_report_newer_than_the_dispatch_closes_the_job(self) -> None:
+        self.convo(self.turn(0, "user", [{"type": "text", "text": "[coordinator] go"}]))
         self.report(100)
         self.at(100 + watch.STALL_SECONDS)
         self.at(100 + 2 * watch.STALL_SECONDS)
         self.assertEqual(self.lines(), [])
 
-    def test_tool_results_and_system_reminders_do_not_reopen_a_job(self) -> None:
+    def test_nothing_but_a_coordinator_dispatch_reopens_a_job(self) -> None:
+        for text in ("what is the status?", "<command-name>/clear</command-name>", "<local-command-stdout></local-command-stdout>",
+                     "<task-notification>done</task-notification>", "This session is being continued from a previous conversation.",
+                     "[watcher] alpha looks stuck", "<system-reminder>hook</system-reminder>"):
+            self.setUp()
+            self.report(100)
+            self.convo(self.turn(0, "user", "[coordinator] go"), self.turn(200, "user", text), self.turn(210, "user", [{"type": "tool_result", "content": "ok"}]))
+            self.at(200 + watch.STALL_SECONDS)
+            self.assertEqual(self.lines(), [], text)
+
+    def test_no_dispatch_in_the_tail_is_closed_by_a_report_and_open_without_one(self) -> None:
+        self.convo(self.turn(0, "user", "hello"))
         self.report(100)
-        self.convo(
-            self.turn(0, "user", "go"),
-            self.turn(200, "user", [{"type": "tool_result", "content": "ok"}]),
-            self.turn(210, "user", [{"type": "text", "text": "<system-reminder>hook</system-reminder>"}]),
-        )
-        self.at(200 + watch.STALL_SECONDS)
+        self.at(100 + watch.STALL_SECONDS)
         self.assertEqual(self.lines(), [])
+        (self.folder / "result-1.md").unlink()
+        self.at(100 + 2 * watch.STALL_SECONDS)
+        self.assertEqual(len(self.lines()), 1)
 
     def test_a_reaped_report_does_not_close_a_job(self) -> None:
-        self.convo(self.turn(0, "user", "go"))
+        self.convo(self.turn(0, "user", "[coordinator] go"))
         self.report(100, "reaped-9.md")
         self.at(100 + watch.STALL_SECONDS)
         self.assertEqual(len(self.lines()), 1)
 
     def test_a_live_child_shell_keeps_a_silent_tab_quiet_even_without_cpu(self) -> None:
-        self.convo(self.turn(0, "user", "go"))
+        self.convo(self.turn(0, "user", "[coordinator] go"))
         self.shell_rows()
         self.at(watch.STALL_SECONDS)
         self.at(2 * watch.STALL_SECONDS)
