@@ -568,11 +568,20 @@ class PayloadTest(unittest.TestCase):
         self.assertEqual(self.ask_code("Edit", {"file_path": "/repo/a.py"}), 2)
 
     def test_other_roles_may_prompt_and_spawn_builders(self) -> None:
-        for env in ({}, {"WORKSTATION_ROLE": "lead"}):
-            self.env.pop("WORKSTATION_ROLE", None)
-            self.env.update(env)
-            self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 0)
-            self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 0)
+        self.env.pop("WORKSTATION_ROLE", None)
+        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 0)
+        self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 0)
+
+    def test_lead_cannot_spawn_builders_but_may_prompt_and_spawn_readers(self) -> None:
+        self.env["WORKSTATION_ROLE"] = "lead"
+        for agent in ("builder", "builder-small", "rebase-resolver"):
+            result = self.run_hook(self.pre("Agent", {"subagent_type": agent}))
+            self.assertEqual(result.returncode, 2, agent)
+            self.assertIn("manager-send work", result.stderr)
+        self.run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "main-thread-ok"})
+        self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 2)
+        self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "run-digest"})).returncode, 0)
+        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "herdr agent prompt w1:p1 hi"})).returncode, 0)
 
     def test_settings_route_agent_spawns_to_the_gate(self) -> None:
         settings = json.loads((HOOK.parent.parent / "settings.base.json").read_text())

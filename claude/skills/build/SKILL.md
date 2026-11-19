@@ -11,7 +11,7 @@ After a plan skill produced a plan and you said go. Anything without an approved
 A plan note, a ticket key with an approved design note, an epic piece, or a plan from this session. Routes: `engines/build.md` "Input".
 
 ## Differs
-- In a coordinator this goes to the work tab (`engines/common.md` Delegation, Handoff).
+- In a coordinator this goes to the work tab (`engines/common.md` Delegation, Handoff). With `WORKSTATION_ROLE=lead` set, refuse to build and answer "hand to work via manager-send"; the gate denies builder, builder-small and rebase-resolver spawns there anyway.
 - Default is the whole ready graph, every node whose needs are done, up to the concurrency cap; `node` builds one node.
 - Notes are written with `notes-write`.
 - Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before a done report.
