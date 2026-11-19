@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,18 @@ class PlanTest(ScratchCase):
             if i.dest.parent == self.home / ".local/bin"
         )
         self.assertEqual(names, sorted(self.ws.BINS))
+
+    def test_zshenv_is_linked_and_sets_null_glob_for_agent_shells(self) -> None:
+        dests = [i.dest for i in self.ws.plan()]
+        self.assertIn(self.home / ".zshenv", dests)
+        probe = "echo *.nomatch-xyz; echo done"
+        env = {"HOME": str(self.home), "ZDOTDIR": str(self.tmp), "PATH": os.environ["PATH"]}
+        (self.tmp / ".zshenv").write_text((REPO / "shell/zshenv").read_text())
+        run = lambda extra: subprocess.run(
+            ["zsh", "-c", probe], env={**env, **extra}, capture_output=True, text=True
+        )
+        self.assertEqual(run({"CLAUDECODE": "1"}).stdout, "\ndone\n")
+        self.assertIn("no matches found", run({}).stderr)
 
     def test_bytecode_directories_are_not_linked(self) -> None:
         dests = [item.dest.name for item in self.ws.claude_links()]
@@ -256,9 +269,12 @@ class BaseSettingsTest(unittest.TestCase):
 
     def test_destructive_git_stays_denied(self) -> None:
         deny = self.base["permissions"]["deny"]
-        for rule in ("Bash(git stash*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
+        for rule in ("Bash(git stash)", "Bash(git stash push*)", "Bash(git stash pop*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
             self.assertIn(rule, deny)
         self.assertIn("Read(~/.ssh/**)", deny)
+        self.assertNotIn("Bash(git stash*)", deny)
+        for rule in ("Bash(git stash list*)", "Bash(git stash show*)"):
+            self.assertIn(rule, self.base["permissions"]["allow"])
         for rule in ("Bash(git push * -f*)", "Bash(git push *+*)", "Bash(git * reset --hard*)", "Bash(git * clean *)", "Bash(git checkout .*)", "Bash(git -c *=*)", "Bash(git config *core.sshCommand*)", "Bash(git push --delete*)", "Bash(git push -f*)", "Bash(gh repo delete*)", "Bash(gh auth *)", "Bash(launchctl submit*)"):
             self.assertIn(rule, deny)
 
