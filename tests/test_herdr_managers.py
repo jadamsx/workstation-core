@@ -1,16 +1,19 @@
 import json
 import os
+import signal
 import stat
 import sys
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
+POLICY = json.loads((REPO / "claude/resource-policy.json").read_text())
 sys.path.insert(0, str(REPO / "lib"))
 import herdr_reports  # noqa: E402
 
@@ -39,7 +42,7 @@ case "$1 $2" in
   "pane process-info")
     n=$(cat "$FAKE_PROCS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_PROCS"
     if [ "$n" -lt "${FAKE_BUSY_POLLS:-0}" ]; then fg='[{"argv0":"zsh"},{"argv0":"tail"}]'; else fg='[{"argv0":"zsh"}]'; fi
-    echo "{\\"result\\":{\\"process_info\\":{\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
+    echo "{\\"result\\":{\\"process_info\\":{\\"shell_pid\\":${FAKE_SHELL_PID:-0},\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
   "pane list") panes="$FAKE_PANES"; [ -e "$FAKE_PANES_NOW" ] && panes=$(cat "$FAKE_PANES_NOW"); echo "{\\"result\\":{\\"panes\\":[$panes]}}" ;;
   "agent prompt") if [ -e "$FAKE_BLOCKED" ]; then echo "agent_blocked" >&2; exit 1; fi ;;
 esac
@@ -82,6 +85,8 @@ class ReportsCase(unittest.TestCase):
             "FAKE_TABS": "",
             "FAKE_CMDLINE": "claude --model sonnet --append-system-prompt-file brief.md",
             "WORKSTATION_REPORTS_ROOT": str(self.root),
+            "USAGE_FILE": str(base / "usage.json"),
+            "USAGE_OVERRIDE_FILE": str(base / "usage-override"),
             "HERDR_WORKSPACE_ID": "w1",
             "HERDR_PANE_ID": "w1:p1",
         }
@@ -169,6 +174,85 @@ class WatcherTests(ReportsCase):
         (self.space / "coordinator").write_text("w1:p9\n")
         watcher.scan(20)
         self.assertEqual(self.prompts(), [f"agent prompt w1:p9 [worker-report] {folder / 'result-1.md'}"])
+
+
+class ParkedResumeTests(ReportsCase):
+    def park(self, *jobs: tuple[str, str, float]) -> None:
+        panes = ['{"pane_id":"w1:p1"}']
+        (self.root / ".parked").mkdir(parents=True, exist_ok=True)
+        for i, (name, text, until) in enumerate(jobs):
+            if name != "ghost":
+                self.manager(name, f"w1:p{4 + len(name)}")
+                panes.append(f'{{"pane_id":"w1:p{4 + len(name)}"}}')
+            (self.root / ".parked" / f"{i:03}.json").write_text(json.dumps({"folder": str(self.space / name), "text": text, "until": until}))
+        os.environ["FAKE_PANES"] = ",".join(panes)
+
+    def left(self) -> list[str]:
+        return [Path(json.loads(f.read_text())["folder"]).name for f in sorted((self.root / ".parked").glob("*.json"))]
+
+    def usage(self, five: float, reset: float) -> None:
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
+
+    def test_resumes_jobs_in_order_with_one_line_per_lead_once_usage_is_under(self) -> None:
+        now = time.time()
+        self.park(("alpha", "/plan-task a", now + 3600), ("beta", "/plan-task b", now + 3600))
+        self.usage(95, now + 3600)
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        self.assertEqual(self.prompts(), [])
+        self.usage(5, now + 9000)
+        watcher.scan(1)
+        watcher.scan(2)
+        self.assertEqual(
+            self.prompts(),
+            [
+                "agent prompt w1:p9 [coordinator] /plan-task a",
+                "agent prompt w1:p8 [coordinator] /plan-task b",
+                "agent prompt w1:p1 [worker-report] resumed parked jobs: alpha, beta",
+            ],
+        )
+        self.assertEqual(self.left(), [])
+
+    def test_an_override_releases_parked_jobs(self) -> None:
+        now = time.time()
+        self.park(("alpha", "/plan-task a", now + 3600))
+        self.usage(95, now + 3600)
+        watcher = watch.Watcher(self.root)
+        watcher.scan(0)
+        self.assertEqual(self.left(), ["alpha"])
+        Path(os.environ["USAGE_OVERRIDE_FILE"]).write_text(str(now + 600))
+        watcher.scan(1)
+        self.assertEqual(self.left(), [])
+
+    def test_a_poison_job_is_dropped_and_the_rest_still_resume(self) -> None:
+        self.park(("ghost", "/plan-task g", 0), ("alpha", "/plan-task a", 0))
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.left(), [])
+        self.assertIn("agent prompt w1:p9 [coordinator] /plan-task a", self.prompts())
+
+    def test_a_malformed_parked_file_is_dropped(self) -> None:
+        (self.root / ".parked").mkdir(parents=True)
+        (self.root / ".parked" / "000.json").write_text("[1]")
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(list((self.root / ".parked").glob("*.json")), [])
+
+    def test_a_busy_standing_manager_keeps_its_job_parked(self) -> None:
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": True}))
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1"},{"pane_id":"w1:p4","agent_status":"working"}'
+        (self.root / ".parked").mkdir()
+        (self.root / ".parked" / "000.json").write_text(json.dumps({"folder": str(folder), "text": "/plan-task a", "until": 0}))
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual((self.left(), self.prompts()), (["alpha"], []))
+
+    def test_a_busy_manager_does_not_block_the_jobs_after_it(self) -> None:
+        self.park(("alpha", "/plan-task a", 0), ("beta", "/plan-task b", 0))
+        folder = self.space / "alpha"
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p9", "tab_id": "w1:t9", "standing": True}))
+        os.environ["FAKE_PANES"] = '{"pane_id":"w1:p1"},{"pane_id":"w1:p9","agent_status":"working"},{"pane_id":"w1:p8"}'
+        watch.Watcher(self.root).scan(0)
+        self.assertEqual(self.left(), ["alpha"])
+        self.assertIn("agent prompt w1:p8 [coordinator] /plan-task b", self.prompts())
 
 
 class DoneReportTests(ReportsCase):
@@ -316,6 +400,98 @@ class ManagerTests(ReportsCase):
         self.assertGreater(len(self.prompts()), 1)
         self.assertEqual(self.prompts()[-1], "agent prompt w1:p4 [coordinator] OK to push")
 
+    def usage(self, five: float, reset: float) -> None:
+        Path(os.environ["USAGE_FILE"]).write_text(json.dumps({"five_hour": {"used_percentage": five, "resets_at": reset}}))
+
+    def test_shell_reap_reports_an_unreadable_process_table_in_one_line(self) -> None:
+        ps = self.log.parent / "bin/ps"
+        ps.write_text("#!/bin/sh\nexit 1\n")
+        ps.chmod(ps.stat().st_mode | stat.S_IXUSR)
+        r = self.bin("shell-reap", "1")
+        self.assertEqual((r.returncode, r.stderr.count("\n"), "Traceback" in r.stderr), (1, 1, False))
+
+    def test_a_build_job_records_its_plan_in_manager_json(self) -> None:
+        folder = self.manager()
+        tree = self.root / "tree"
+        tree.mkdir()
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text("legacy: true\n")
+        r = self.bin("manager-send", "alpha", f"/build {plan} node N1 worktree {tree}")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads((folder / "manager.json").read_text())["plan"], str(plan))
+
+    def test_a_build_job_sends_the_owns_lines_after_the_job_line(self) -> None:
+        self.manager()
+        tree = self.root / "tree"
+        tree.mkdir()
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text("| N1 | first | x | `a.py` | y |\n- Decided: use x\n- Not-building: y\n")
+        job = f"/build {plan} node N1 worktree {tree}"
+        r = self.bin("manager-send", "alpha", job)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        sent = "\n".join(self.calls())
+        self.assertIn(f"agent prompt w1:p4 [coordinator] {job}\nnode: N1\nowns: a.py\nDecided: use x\nNot-building: y", sent)
+        self.assertEqual(sent.count("[coordinator]"), 1)
+
+    def build_job(self, rows: str) -> subprocess.CompletedProcess:
+        self.manager()
+        tree = self.root / "tree"
+        tree.mkdir(exist_ok=True)
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text(f"| Node | Agent | Discipline | Owns | Wave | x |\n|---|---|---|---|---|---|\n{rows}- Decided: x\n- Not-building: y\n")
+        return self.bin("manager-send", "alpha", f"/build {plan} node N3 worktree {tree}")
+
+    def test_a_build_job_needing_a_node_not_in_the_plan_is_refused(self) -> None:
+        r = self.build_job("| N3 t | a | d | `a.py` | 2 (needs N9's output) | x |\n")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("node N3 needs N9, which is not in", r.stderr)
+        self.assertEqual(self.prompts(), [])
+
+    def test_a_build_job_with_a_listed_need_is_accepted_and_a_direct_cycle_refused(self) -> None:
+        ok = "| N1 t | a | d | `b.py` | 1 | x |\n| N3 t | a | d | `a.py` | 2 (needs N1) | x |\n"
+        self.assertEqual(self.build_job(ok).returncode, 0)
+        cycle = "| N1 t | a | d | `b.py` | 1 (needs N3) | x |\n| N3 t | a | d | `a.py` | 2 (needs N1) | x |\n"
+        r = self.build_job(cycle)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("need each other", r.stderr)
+
+    def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
+        folder = self.manager()
+        self.usage(90, time.time() + 3600)
+        r = self.bin("manager-send", "alpha", "/build plan.md node N1 worktree /tmp")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.usage(90, time.time() + 3600)
+        r = self.bin("manager-send", "alpha", "/plan-task x")
+        self.assertEqual((r.returncode, r.stdout.count("\n"), r.stdout.startswith("parked until ")), (0, 1, True))
+        self.assertEqual(self.prompts(), [])
+        parked = [json.loads(f.read_text()) for f in sorted((self.root / ".parked").glob("*.json"))]
+        self.assertEqual([(p["folder"], p["text"]) for p in parked], [(str(folder), "/plan-task x")])
+        self.assertEqual(self.bin("manager-send", "alpha", "OK to push").returncode, 0)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] OK to push"])
+
+    def test_concurrent_parks_keep_every_job(self) -> None:
+        self.manager()
+        self.usage(90, time.time() + 3600)
+        procs = [
+            subprocess.Popen([str(REPO / "bin/manager-send"), "alpha", f"/plan-task {n}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            for n in range(12)
+        ]
+        results = [(p.wait(), p.stderr.read()) for p in procs]
+        self.assertEqual(results, [(0, "")] * 12)
+        texts = {json.loads(f.read_text())["text"] for f in (self.root / ".parked").glob("*.json")}
+        self.assertEqual(texts, {f"/plan-task {n}" for n in range(12)})
+
+    def test_the_override_lifts_the_park(self) -> None:
+        self.manager()
+        self.usage(90, time.time() + 3600)
+        os.environ["USAGE_GATE"] = "off"
+        self.addCleanup(os.environ.pop, "USAGE_GATE", None)
+        self.assertEqual(self.bin("manager-send", "alpha", "/plan-task x").returncode, 0)
+        self.assertEqual(self.prompts(), ["agent prompt w1:p4 [coordinator] /plan-task x"])
+
     def standing_send(self, status: str, keep: bool = False, standing: bool = True) -> Path:
         folder = self.manager()
         (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "standing": standing, **({"keep": True} if keep else {})}))
@@ -394,6 +570,21 @@ class ManagerTests(ReportsCase):
         self.assertTrue(info["keep"] and info["standing"])
         self.assertNotIn("closed", info)
 
+    def test_restart_of_a_kept_manager_resumes_its_stored_session_or_says_it_starts_fresh(self) -> None:
+        folder = self.space / "alpha"
+        folder.mkdir(parents=True)
+        session = "0a1b2c3d-0000-4000-8000-000000000002"
+        base = {"pane_id": "w1:p9", "tab_id": "w1:t9", "closed": True, "keep": True}
+        (folder / "manager.json").write_text(json.dumps({**base, "session_id": session}))
+        r = self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"--model sonnet --resume {session}", next(c for c in self.calls() if c.startswith("agent start")))
+        self.assertEqual(json.loads((folder / "manager.json").read_text())["session_id"], session)
+        (folder / "manager.json").write_text(json.dumps(base))
+        r = self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        self.assertIn("starting a fresh session", r.stderr)
+        self.assertNotIn("--resume", [c for c in self.calls() if c.startswith("agent start")][-1])
+
     def test_keep_sets_and_off_clears_the_flag(self) -> None:
         folder = self.manager()
         self.assertEqual(self.bin("herdr-manager", "keep", "alpha").returncode, 0)
@@ -418,12 +609,24 @@ class ManagerTests(ReportsCase):
         self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
         work, ask = self.creates()
         self.assertIn(f"--cwd {self.root.parent.resolve()} --label ▸ work --env WORKSTATION_REPORTS={self.space / 'work'}", work)
-        self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true", ask)
+        self.assertIn("--label ? ask --env WORKSTATION_ROLE=ask --env DISABLE_AUTO_UPDATE=true --env DISABLE_UPDATE_PROMPT=true", ask)
         starts = [c for c in self.calls() if c.startswith("agent start")]
-        self.assertIn("-- --model sonnet --append-system-prompt-file", starts[0])
-        self.assertIn("-- --model haiku --append-system-prompt-file", starts[1])
+        self.assertIn("-- --model sonnet --strict-mcp-config --mcp-config", starts[0])
+        self.assertIn("-- --model haiku --strict-mcp-config --mcp-config", starts[1])
+        self.assertIn("--append-system-prompt-file", starts[1])
+        self.assertEqual(self.started_servers(starts[1]), set(POLICY["roles"]["ask"]))
         self.assertTrue(starts[1].endswith("ask-brief.md"))
         self.assertTrue(json.loads((self.space / "work/manager.json").read_text())["standing"])
+
+    def test_ask_role_refuses_any_mcp_server(self) -> None:
+        manager = SourceFileLoader("herdr_manager_under_test", str(REPO / "bin/herdr-manager")).load_module()
+        self.root.mkdir(parents=True, exist_ok=True)
+        policy, catalog = self.root / "policy.json", self.root / "mcp.json"
+        policy.write_text(json.dumps({"roles": {"ask": ["x"]}}))
+        catalog.write_text(json.dumps({"mcpServers": {"x": {}}}))
+        with mock.patch.object(manager, "POLICY", policy), mock.patch.object(manager, "MCP_SERVERS", catalog):
+            with self.assertRaises(herdr_reports.ReportsError):
+                manager.mcp_args("ask", self.root / "ask")
 
     def test_setup_in_two_spaces_passes_distinct_agent_names(self) -> None:
         self.setup_run()
@@ -475,12 +678,41 @@ class ManagerTests(ReportsCase):
         (self.space / "setup.json").write_text("{")
         self.assertEqual(self.setup_run().returncode, 2)
 
+    def started_servers(self, start: str) -> set[str]:
+        return set(json.loads(Path(start.split("--mcp-config ")[1].split()[0]).read_text())["mcpServers"])
+
+    def test_work_and_named_managers_start_only_their_policy_servers(self) -> None:
+        self.setup_run()
+        self.bin("herdr-manager", "start", "alpha", "--dir", "/tmp")
+        work, _, alpha = [c for c in self.calls() if c.startswith("agent start")]
+        self.assertEqual(self.started_servers(work), set(POLICY["roles"]["work"]))
+        self.assertEqual(self.started_servers(alpha), set(POLICY["roles"]["manager"]))
+
+    def start_with_policy(self, text: str | None) -> subprocess.CompletedProcess:
+        loader = SourceFileLoader("herdr_manager_policy", str(REPO / "bin/herdr-manager"))
+        module = loader.load_module()
+        policy = self.root / "policy.json"
+        if text is not None:
+            policy.write_text(text)
+        with mock.patch.object(module, "POLICY", policy):
+            return module.main(["start", "alpha", "--dir", "/tmp"])
+
+    def test_start_fails_naming_file_and_role_for_a_bad_policy(self) -> None:
+        for text in (None, "{", '{"roles": {}}'):
+            with self.subTest(text=text), mock.patch("sys.stderr") as err:
+                self.assertEqual(self.start_with_policy(text), 2)
+                shown = "".join(c.args[0] for c in err.write.call_args_list)
+                self.assertIn("policy.json", shown)
+                self.assertIn("'manager'", shown)
+
     def test_start_opens_a_sonnet_tab_with_the_brief_and_records_it(self) -> None:
         r = self.bin("herdr-manager", "start", "alpha", "--resume", "0a1b2c3d-0000-4000-8000-000000000001", "--dir", "/tmp")
         self.assertEqual(r.returncode, 0, r.stderr)
         tab = next(c for c in self.calls() if c.startswith("tab create"))
         self.assertIn(f"--label ▸ alpha --env WORKSTATION_REPORTS={self.space / 'alpha'}", tab)
         self.assertIn("--env DISABLE_AUTO_UPDATE=true", tab)
+        for item in herdr_reports.NO_STDIN_ENV:
+            self.assertIn(f"--env {item}", tab)
         start = next(c for c in self.calls() if c.startswith("agent start"))
         self.assertIn("agent start alpha-space-one --kind claude --pane w1:p4 -- --model sonnet --resume 0a1b2c3d", start)
         self.assertIn("--append-system-prompt-file", start)
@@ -581,6 +813,12 @@ class ManagerTests(ReportsCase):
         self.assertNotIn("agent send-keys", " ".join(self.calls()))
         self.assertIn("tab close w1:t4", self.calls())
         self.assertFalse((self.space / "beta/manager.json").exists())
+
+    def test_input_box_matches_both_prompt_glyphs(self) -> None:
+        for text in ("> \n", "│ > \n", "❯ \n", "❯\xa0Try \"x\"\n", "  ? for shortcuts"):
+            self.assertTrue(herdr_reports.INPUT_BOX.search(text), text)
+        for text in ("loading\n", "❯Try\n", "echo > file\n"):
+            self.assertFalse(herdr_reports.INPUT_BOX.search(text), text)
 
     def test_trust_accepted_but_no_input_box_raises(self) -> None:
         self.trust_dialog()
@@ -737,6 +975,199 @@ class IdleTests(ReportsCase):
         w.scan(0)
         w.scan(5000)
         self.assertEqual(self.idle_lines(), [])
+
+
+class NoStdinEnvTests(unittest.TestCase):
+    def test_settings_env_carries_the_same_five_keys(self) -> None:
+        env = json.loads((REPO / "claude/settings.base.json").read_text())["env"]
+        self.assertEqual({f"{k}={v}" for k, v in env.items() if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}, set(herdr_reports.NO_STDIN_ENV))
+
+
+class ReaperTests(ReportsCase):
+    CLAUDE = "claude --model sonnet --mcp-config {mcp}"
+    SHELL = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval '{cmd}' < /dev/null"
+
+    def setUp(self) -> None:
+        super().setUp()
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ alpha"}'
+        os.environ["FAKE_SHELL_PID"] = "5"
+
+    def table(self, cmd: str = "make serve", cpu: float = 0.0, age: float = 900, parent: int = 10, child_cpu: float = 0.0, pane_shell: int = 5) -> list:
+        mcp = self.manager() / "mcp.json"
+        P = watch.Proc
+        return [
+            P(10, pane_shell, 5000, 50.0, self.CLAUDE.format(mcp=mcp)),
+            P(20, parent, age, cpu, self.SHELL.format(cmd=cmd)),
+            P(21, 20, age, child_cpu, cmd),
+        ]
+
+    def reaper(self, rows: list) -> tuple[watch.Watcher, list]:
+        kills: list = []
+        watcher = watch.Watcher(self.root, procs=lambda: rows, kill=lambda pid, sig: kills.append((pid, sig)))
+        watcher.scan(0)
+        watcher.scan(601)
+        return watcher, kills
+
+    def test_idle_descendant_shell_is_killed_and_a_decision_report_written(self) -> None:
+        watcher, kills = self.reaper(self.table())
+        self.assertEqual(kills, [(21, signal.SIGTERM), (20, signal.SIGTERM)])
+        report = (self.manager() / "reaped-20.md").read_text()
+        self.assertEqual(report.split("\n")[0], "Status: decision")
+        self.assertIn("pid 20", report)
+        self.assertIn("make serve", report)
+        self.assertIn("foreground with a timeout", report)
+        self.assertNotIn("run_in_background", report)
+        self.assertIn(f"[worker-report] {self.manager() / 'reaped-20.md'}", " ".join(self.prompts()))
+        watcher.scan(603)
+        self.assertEqual(len(kills), 2)
+        self.assertEqual(len([p for p in self.prompts() if "reaped-20.md" in p]), 1)
+        watcher.scan(607)
+        self.assertEqual(kills[2], (20, signal.SIGKILL))
+
+    def test_keep_listed_busy_and_unrelated_shells_survive(self) -> None:
+        for rows in (
+            self.table(cmd="docker compose up"),
+            self.table(cmd="tail -f log"),
+            self.table(age=500),
+            [r for r in self.table() if r.pid != 10],
+            self.table(parent=99),
+        ):
+            self.assertEqual(self.reaper(rows)[1], [])
+        kills: list = []
+        rows = [self.table(child_cpu=1.0), self.table(child_cpu=2.0)]
+        watcher = watch.Watcher(self.root, procs=lambda: rows[0], kill=lambda pid, sig: kills.append(pid))
+        watcher.scan(0)
+        watcher.procs = lambda: rows[1]
+        watcher.scan(601)
+        self.assertEqual(kills, [])
+
+    def test_shell_under_a_claude_outside_a_managed_pane_survives(self) -> None:
+        self.assertEqual(self.reaper(self.table(pane_shell=77))[1], [])
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"? ask"}'
+        self.assertEqual(self.reaper(self.table())[1], [])
+
+    def test_shells_under_lead_and_work_tabs_are_reaped_without_a_manager_report(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"◆ lead"}'
+        rows = [r._replace(command="claude --resume x") if r.pid == 10 else r for r in self.table()]
+        self.assertEqual(self.reaper(rows)[1], [(21, signal.SIGTERM), (20, signal.SIGTERM)])
+
+    def test_reaper_does_nothing_when_herdr_cannot_be_asked(self) -> None:
+        os.environ["PATH"] = "/usr/bin:/bin"
+        self.assertEqual(self.reaper(self.table())[1], [])
+
+    def test_stop_shell_accepts_only_a_shell_under_claude(self) -> None:
+        rows = self.table() + [watch.Proc(30, 1, 900, 0.0, "/bin/zsh -c orphan"), watch.Proc(40, 20, 900, 0.0, "python3 x")]
+        sent: list = []
+
+        def stop(pid: int, caller: int = 999) -> None:
+            herdr_reports.stop_shell(pid, lambda: rows, lambda p, sig: sent.append((p, sig)), caller)
+
+        for pid in (40, 30, 10, 1):
+            with self.assertRaises(herdr_reports.ReportsError):
+                stop(pid)
+        with self.assertRaises(herdr_reports.ReportsError):
+            stop(20, caller=21)
+        self.assertEqual(sent, [])
+        stop(20)
+        self.assertEqual(sent, [(40, signal.SIGTERM), (21, signal.SIGTERM), (20, signal.SIGTERM)])
+
+    def test_sigkill_is_skipped_when_the_pid_was_reused(self) -> None:
+        kills: list = []
+        watcher, _ = self.reaper(self.table())
+        watcher.kill = lambda pid, sig: kills.append((pid, sig))
+        reused = [watch.Proc(20, 1, 3, 0.0, "other thing")]
+        watcher.procs = lambda: self.table()[:1] + reused
+        watcher.scan(607)
+        self.assertEqual(kills, [])
+
+    def test_shell_that_only_mentions_the_snapshot_mark_is_not_reaped(self) -> None:
+        rows = self.table()
+        rows[1] = rows[1]._replace(command="/bin/zsh -c echo shell-snapshots/")
+        self.assertEqual(self.reaper(rows)[1], [])
+
+    def test_ps_fields_parse(self) -> None:
+        self.assertEqual(watch.clock_seconds("1-02:03:04"), 93784)
+        self.assertEqual(watch.clock_seconds("35:36"), 2136)
+        self.assertEqual(watch.clock_seconds("0:05.11"), 5.11)
+
+
+class PlanAlertTests(ReportsCase):
+    PLAN = "## Node table\n| Node | Wave |\n|---|---|\n| N1 first | 1 |\n| N2 second | 2 (needs N1) |\n| N3 third | 3 (needs N2) |\n\n## Progress\n{progress}\n"
+
+    def setup_plan(self, progress: str, owns: str | None = None) -> tuple[Path, Path]:
+        plan = self.root.parent / "plan.md"
+        plan.write_text(self.PLAN.format(progress=progress))
+        os.utime(plan, (1000, 1000))
+        tree = self.root.parent / "tree"
+        tree.mkdir(exist_ok=True)
+        if owns:
+            (tree / ".owns").write_text(f"node: {owns}\n")
+        folder = self.manager()
+        (folder / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "dir": str(tree), "plan": str(plan)}))
+        return folder, tree
+
+    def watcher(self, wall: list, rows: list | None = None) -> watch.Watcher:
+        return watch.Watcher(self.root, procs=lambda: rows or [], wall=lambda: wall[0])
+
+    def alerts(self) -> list[str]:
+        return [p for p in self.prompts() if "[watcher]" in p]
+
+    def test_ready_node_prompts_once_after_two_minutes(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second")
+        wall = [1119.0]
+        watcher = self.watcher(wall)
+        watcher.scan(0)
+        self.assertEqual(self.alerts(), [])
+        wall[0] = 1121.0
+        watcher.scan(1)
+        watcher.scan(2)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready for 2 min and not started", self.alerts()[0])
+        self.assertIn("w1:p1", self.alerts()[0])
+        self.watcher(wall).scan(3)
+        self.assertEqual(len(self.alerts()), 1)
+
+    def test_needs_wording_with_possessive_still_reads_the_node_id(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second")
+        plan = self.root.parent / "plan.md"
+        plan.write_text(plan.read_text().replace("(needs N1)", "(needs N1's owns file)"))
+        os.utime(plan, (1000, 1000))
+        watcher = self.watcher([1121.0])
+        watcher.scan(0)
+        watcher.scan(1)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready", self.alerts()[0])
+
+    def test_node_with_a_trailer_commit_counts_as_done(self) -> None:
+        _, tree = self.setup_plan("- [ ] N1 first\n- [ ] N2 second")
+        git = ["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x\n\nNode: N1"], check=True)
+        watcher = self.watcher([time.time() + 121])
+        watcher.scan(0)
+        self.assertEqual(len(self.alerts()), 1)
+        self.assertIn("[watcher] N2 ready", self.alerts()[0])
+
+    def test_running_blocked_and_done_nodes_never_prompt(self) -> None:
+        self.setup_plan("- [x] N1 first\n- [~] N2 second\n- [ ] N3 third")
+        self.watcher([5000.0]).scan(0)
+        self.setup_plan("- [x] N1 first\n- [x] N2 second\n- [x] N3 third")
+        self.watcher([5000.0]).scan(0)
+        self.setup_plan("- [x] N1 first\n- [ ] N2 second", owns="N2")
+        self.watcher([5000.0]).scan(0)
+        self.assertEqual(self.alerts(), [])
+
+    def test_node_waiting_on_a_shell_prompts_once_after_ten_minutes(self) -> None:
+        folder, tree = self.setup_plan("- [x] N1 first\n- [~] N2 second", owns="N2")
+        os.environ.update(FAKE_TABS='{"tab_id":"w1:t4","label":"▸ alpha"}', FAKE_SHELL_PID="5")
+        claude = watch.Proc(10, 5, 5000, 50.0, f"claude --mcp-config {folder}/mcp.json")
+        shell = "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make serve' < /dev/null"
+        for age, expected in ((599, 0), (700, 1)):
+            watcher = self.watcher([1000.0], [claude, watch.Proc(20, 10, age, 5.0, shell)])
+            watcher.scan(0)
+            watcher.scan(1)
+            self.assertEqual(len(self.alerts()), expected)
+        self.assertIn("[watcher] N2 waiting on a shell for 11 min", self.alerts()[0])
 
 
 if __name__ == "__main__":

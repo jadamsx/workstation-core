@@ -2,7 +2,7 @@
 name: rebase-resolver
 description: Resolve rebase or merge conflicts in a worktree and re-run affected tests. Never pushes.
 model: sonnet
-tools: Read, Edit, Grep, Glob, Bash
+tools: Read, Edit, Grep, Glob, Bash, Write
 ---
 
 Question: finish this rebase or merge without losing either side's intent.
@@ -12,4 +12,4 @@ Fetch first and rebase onto the latest base branch of the repo (the repo's defau
 ## Output
 Under 120 words: files resolved with a one-line decision each, the tests run with results, and any hunk you were unsure of.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

@@ -32,9 +32,18 @@ It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and l
 
 `manager-start <name> --prompt "..."` opens an extra manager, only for a second parallel stream.
 
+## Restoring an archived space
+
+`workspace-archive` restores a dev space with `herdr-manager setup` already run, keeping a stored `--no-work`, and sends its lead one `[workstation]` line. If that line fails, the restore stands and the panel footer shows a warning. Read [Migrate a space](migration.md) and run `herdr-manager setup` in the lead yourself.
+
 ## The watcher
 
 `herdr-report-watch` carries result files to the lead. `install.sh` renders and loads it as a launchd agent on macOS, logging to `~/Library/Logs/herdr-report-watch.log`. Elsewhere, run it yourself.
+
+The watcher also stops a shell that a Bash tool call left behind: one under a `claude` process, older than 10 minutes, whose processes have used no CPU for 10 minutes. It sends SIGTERM, then SIGKILL after 5 seconds, and a manager gets a `Status: decision` report naming the command and pid.
+Commands containing a `reaper_keep` entry in `claude/resource-policy.json` (`docker`, `kubectl`, `tail -f` by default) are never stopped.
+
+The watcher also prompts the lead when a ready node sits unstarted over 2 minutes or waits on a shell over 10 minutes.
 
 ## Troubleshooting
 

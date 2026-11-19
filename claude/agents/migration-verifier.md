@@ -2,7 +2,7 @@
 name: migration-verifier
 description: Run a migration up, down and up again on a throwaway database with realistic rows. Reports counts, constraints and timing.
 model: haiku
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: does this migration apply, reverse and re-apply cleanly on realistic data.
@@ -12,4 +12,4 @@ Inputs: the plan's `migrations` field (reversible, row scale), the repo's DB too
 ## Output
 Verifies only; never writes the migration. Row counts before and after each step, constraint or lock errors with the first error line, downgrade result, timing per step, and the throwaway database name and its removal. Under 150 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

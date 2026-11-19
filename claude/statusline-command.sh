@@ -19,6 +19,12 @@ five_hour_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // em
 seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 seven_day_resets=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
 
+if [ -n "$five_hour_pct$seven_day_pct" ]; then
+  usage_file=${USAGE_FILE:-$HOME/.claude/usage.json}
+  echo "$input" | jq -c '{five_hour: .rate_limits.five_hour, seven_day: .rate_limits.seven_day}' 2>/dev/null > "$usage_file.$$" \
+    && mv "$usage_file.$$" "$usage_file" 2>/dev/null
+fi
+
 c() { printf '\033[38;2;%sm' "$1"; }
 R=$'\033[0m'
 G="$(c 184\;184\;184)"
@@ -111,8 +117,4 @@ printf '%s' "$parts"
 grp() { printf '%s%s%s ' "$(c "$1")" "$2" "$R"; shift 2; local x; for x in "$@"; do printf '%s%s%s ' "$(c 128\;128\;128)" "$x" "$R"; done; }
 dot() { printf '%s·%s ' "$(c 74\;74\;74)" "$R"; }
 printf '\n'
-grp "187;154;247" plan /plan-epic /plan-story /plan-task /plan-bug /plan-spike; dot
-grp "158;206;106" act /build; dot
-grp "122;162;247" ship /babysit /change-write /ticket-write; printf '\n'
-grp "255;158;100" verify /verify-self /verify-change /verify-epic /verify-comments /verify-plan; printf '\n'
-grp "125;207;255" docs /handoff-write /handoff-read-in /diagrams /reflect
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/statusline-groups.sh"

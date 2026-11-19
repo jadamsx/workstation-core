@@ -13,4 +13,6 @@ Anything bigger, riskier, unclear or destructive: `too-big. hand back to builder
 
 Report one line per edit as `path:line-range - change`, then the check you ran and its result.
 
-Common rules: `~/.claude/engines/common.md`.
+Commit messages start with a gitmoji, an emoji or `:shortcode:`. They carry no ticket key. Given a node id, end the message with the trailer `Node: <id>`.
+
+Common rules: `~/.claude/engines/agent-core.md`.

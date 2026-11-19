@@ -21,13 +21,13 @@ related_adrs: []
 # Title as a claim
 
 ## Context and scope
-What exists today, with `file:line`, and what this covers. Say what is out of scope.
+What exists today, with `file:line`, and what this covers. Say what is out of scope. Assumptions, each stated so the owner can say yes or no.
 
 ## Goals and non-goals
-Goals as outcomes. Non-goals are things that could reasonably have been goals.
+Goals as outcomes. Non-goals are things that could reasonably have been goals; they are the Not-building list.
 
 ## Design
-The verdict, the chosen approach, diagrams and the trade-offs that matter. Length follows importance; no pasted schemas.
+The verdict, the chosen approach, diagrams and the trade-offs that matter. Shape: the design after the change, with lines removed against added. A proposal for readers who will not build it stays `status: proposed` and ends with the decision needed: what, from whom, by when. Length follows importance; no pasted schemas.
 
 ## Alternatives considered
 Each option and what made it lose.
@@ -72,7 +72,7 @@ Measurable and technology-agnostic.
 One field per line: size, repos, plan skill, `vault`, then the plan fields the work touches (`risk_flows`, `roles`, `hot_path`, `migrations`, `frames`, `flags`, `signals`, `deps_added`). Empty means skipped.
 
 ## Node table
-One row per node. `covers` lists the FR ids the node delivers; every FR is covered by at least one node and every node covers at least one FR.
+One row per node. `Owns` lists the paths it may touch. `covers` lists the FR ids the node delivers; every FR is covered by at least one node and every node covers at least one FR.
 
 | Node | Agent | Discipline | Owns | Wave | Intensity | Review | Acceptance | Covers |
 |---|---|---|---|---|---|---|---|---|

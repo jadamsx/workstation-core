@@ -3,18 +3,24 @@
 
 The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
 `herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
-manager is blocked. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
-`Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state.
+manager is blocked. A `/build` job (`/build <plan.md> node <id> worktree <path>`) first writes `<path>/.owns` from the plan. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
+`Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state. A slash-command job
+(a new start) while `usage-gate` is parked is not sent: it is saved under `.parked/` in the watcher state folder, which resumes
+it once the gate opens, and one line `parked until <time>` is printed.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import IDLE_STATES, ReportsError, is_done, manager_folder, pane_states, read_manager, reports_root, write_atomic  # noqa: E402
+
+usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent / "usage-gate")).load_module()
 
 GIVE_UP_SECONDS = 600
 
@@ -52,6 +58,95 @@ def settle_standing(folder: Path, pane: str, deadline: float, interval: float) -
         wait_idle(pane, deadline, interval)
 
 
+def exclude_owns(tree: Path) -> None:
+    """Keep `.owns` out of `git add -A`: it is untracked state, not part of the node's commit."""
+    path = subprocess.run(["git", "-C", str(tree), "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], capture_output=True, text=True).stdout.strip()
+    exclude = Path(path)
+    present = exclude.read_text().splitlines() if exclude.exists() else []
+    missing = [name for name in ("/.owns", "/.owns.tmp") if name not in present]
+    if missing:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("".join(f"{line}\n" for line in [*present, *missing]))
+
+
+def row_needs(note: str, node: str) -> list[str] | None:
+    row = re.search(rf"^\|\s*[`*]*{re.escape(node)}\b[^\n]*", note, re.M)
+    if not row:
+        return None
+    cells = row.group(0).split("|")
+    needs = re.search(r"needs\s+([^)]*)", cells[5] if len(cells) > 5 else "")
+    return re.findall(r"\bN\d+\b", needs[1]) if needs else []
+
+
+def write_owns(text: str) -> str | None:
+    """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided and Not-building lines and any Standing line."""
+    if not re.match(r"/build(\s|$)", text):
+        return None
+    fields = {
+        "plan": re.search(r"\S+\.md\b", text),
+        "node": re.search(r"\bnode[: ]\s*(\w+)", text),
+        "worktree": re.search(r"\bworktree[: ]\s*(\S+)", text),
+    }
+    missing = [name for name, found in fields.items() if not found]
+    if missing:
+        raise ReportsError(f"/build job names no {', '.join(missing)}")
+    plan = Path(fields["plan"].group(0)).expanduser()
+    tree = Path(fields["worktree"].group(1)).expanduser()
+    node = fields["node"].group(1)
+    if not plan.is_file():
+        raise ReportsError(f"plan {plan} does not exist")
+    top = subprocess.run(["git", "-C", str(tree), "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    if not top or Path(top).resolve() != tree.resolve():
+        raise ReportsError(f"{tree} is not the top level of a git worktree")
+    exclude_owns(tree)
+    note = plan.read_text()
+    if re.search(r"^legacy: true\s*$|^- size:.*\blegacy: true", note, re.M):
+        write_atomic(tree / ".owns", f"node: {node}\nlegacy: true\n")
+        return None
+    row = re.search(rf"^\|\s*{re.escape(node)}\b[^\n]*", note, re.M)
+    if not row:
+        raise ReportsError(f"node {node} is not in {plan}")
+    for need in row_needs(note, node):
+        back = row_needs(note, need)
+        if back is None:
+            raise ReportsError(f"node {node} needs {need}, which is not in {plan}")
+        if node in back:
+            raise ReportsError(f"node {node} and {need} need each other")
+    cells = row.group(0).split("|")
+    owns = re.findall(r"`([^`]+)`", re.split(r"lives:|preflight:", cells[4] if len(cells) > 4 else "")[0])
+    lines = re.findall(r"^- ((?:Decided|Standing|Not-building): .+)$", note, re.M)
+    kinds = {line.split(":", 1)[0] for line in lines}
+    absent = {"Decided", "Not-building"} - kinds
+    if not owns:
+        raise ReportsError(f"{plan} lists no Owns for {node}")
+    if absent:
+        raise ReportsError(f"{plan} has no {', '.join(sorted(absent))} line")
+    body = "\n".join([f"node: {node}", f"owns: {', '.join(owns)}", *lines])
+    write_atomic(tree / ".owns", body + "\n")
+    return body
+
+
+def park(folder: Path, text: str, until: float) -> None:
+    """Save the job as its own file so concurrent parks never share a write."""
+    path = reports_root() / ".parked" / f"{time.time_ns()}-{os.getpid()}.json"
+    write_atomic(path, json.dumps({"folder": str(folder), "text": text, "until": until}))
+    print(f"parked until {time.strftime('%Y-%m-%d %H:%M', time.localtime(until))}")
+
+
+def send(folder: Path, info: dict, text: str, deadline: float, interval: float) -> None:
+    """Settle a standing manager, then submit the job, retrying until the deadline."""
+    if info.get("standing") and not info.get("keep"):
+        settle_standing(folder, info["pane_id"], deadline, interval)
+    while True:
+        done = subprocess.run(["herdr", "agent", "prompt", info["pane_id"], f"[coordinator] {text}"], capture_output=True, text=True)
+        if done.returncode == 0:
+            return
+        error = (done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0]
+        if time.monotonic() + interval > deadline:
+            raise ReportsError(error)
+        time.sleep(interval)
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -63,25 +158,24 @@ def main(argv: list[str]) -> int:
         info = read_manager(folder)
         if info.get("closed"):
             raise ReportsError(f"manager {name!r} is closed")
+        owns = write_owns(text)
+        plan = re.match(r"/build\s.*?(\S+\.md)\b", text)
+        if plan and info.get("plan") != str(Path(plan.group(1)).expanduser()):
+            write_atomic(folder / "manager.json", json.dumps({**info, "plan": str(Path(plan.group(1)).expanduser())}))
     except ReportsError as err:
         print(f"manager-send: {err}", file=sys.stderr)
         return 2
-    deadline = time.monotonic() + GIVE_UP_SECONDS
-    if info.get("standing") and not info.get("keep"):
-        try:
-            settle_standing(folder, info["pane_id"], deadline, interval)
-        except ReportsError as err:
-            print(f"manager-send: {name}: {err}", file=sys.stderr)
-            return 1
-    while True:
-        done = subprocess.run(["herdr", "agent", "prompt", info["pane_id"], f"[coordinator] {text}"], capture_output=True, text=True)
-        if done.returncode == 0:
-            return 0
-        error = (done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0]
-        if time.monotonic() + interval > deadline:
-            print(f"manager-send: gave up on {name}: {error}", file=sys.stderr)
-            return 1
-        time.sleep(interval)
+    sent = f"{text}\n{owns}" if owns else text
+    until = usage_gate.parked_until() if text.startswith("/") else None
+    if until is not None:
+        park(folder, text, until)
+        return 0
+    try:
+        send(folder, info, sent, time.monotonic() + GIVE_UP_SECONDS, interval)
+    except ReportsError as err:
+        print(f"manager-send: gave up on {name}: {err}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

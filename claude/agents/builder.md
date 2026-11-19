@@ -7,7 +7,7 @@ tools: Read, Edit, Write, Grep, Glob, Bash
 
 Question: deliver this one edit or node.
 
-The caller passes `scope: one-file | node`. Reuse before writing. Spec unclear: `ambiguous. ask: <one question>.` Destructive step needed: `needs-confirm. op: <command>.`
+The caller passes `scope: one-file | node`. Reuse before writing: `grepai search "<question>"` first for concepts (on error, `rg` once), then `rg`. The bar in the brief is the whole bar: add no checks, gates or rounds the plan did not set, and report older problems in one line. Spec unclear: `ambiguous. ask: <one question>.` Destructive step needed: `needs-confirm. op: <command>.`
 
 ## Scope one-file
 Three or more files: `too-big. split: <n one-line tasks>.` Edit existing files only (a new file only if asked). No new abstractions, no drive-by refactors, no added comments, no deletion. Read each target before editing. Make the smallest diff that does the job, re-read to verify, then run at most one focused check. A check that fails and cannot be fixed in scope: `regressed. revert path:line. cause: <fragment>.`
@@ -19,4 +19,6 @@ Inputs: the node spec (acceptance, files, discipline name, checklists), the work
 Scope one-file: `path:line-range - change in 10 words or fewer`, one per edit, then `verified: re-read OK` or `mismatch @ path:line`.
 Scope node: under 120 words: files changed (`path`, one line each), the proof commands with results, what you did not change though you could have, and any omission with its trigger.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Commit messages start with a gitmoji, an emoji or `:shortcode:`. They carry no ticket key. When the node spec names a node, add the trailer `Node: <id>`.
+
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

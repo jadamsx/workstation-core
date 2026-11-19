@@ -1,6 +1,6 @@
 # Design checklist
 
-The single list of design and pre-build rules: what to check before code exists. Used by `engines/plan.md` and `engines/review.md` plan mode. It is the design-side twin of `~/.claude/checklists/review-core.md`.
+The single list of design and pre-build rules: what to check before code exists. Used by `engines/plan.md`, `engines/plan-epic.md` and `engines/review.md` plan mode (process and round shapes there). It is the design-side twin of `~/.claude/checklists/review-core.md`.
 
 Design §6-12 (data, API, security, failure modes, capacity, observability, rollout) are shared with review and live in `design-review-shared.md`.
 
@@ -19,11 +19,10 @@ Quote the numbers you checked in the report.
 5. The deliverable is validated before the inputs that feed it get built, and every event's consumer ships with or before its producer (§17).
 6. Deploy order and rollback are stated for each step (shared Rollout).
 7. UI follows the design frame; states the frame omits go to the designer (§18).
-8. The report separates what was verified from what was reasoned, and has no strengths section.
-
-## Reference
-
-Process: `engines/review.md` plan mode.
+8. Every need names the data or file a node reads from the other; a need nothing reads is false and is cut (§13).
+9. Each node has Owns, where X lives and who owns it, and a preflight answer (§13); the plan shows Shape with lines removed against added (§3).
+10. Assumptions and the Not-building list exist and are ticked at approval; the past-corrections check ran (§1).
+11. The report separates what was verified from what was reasoned, and has no strengths section.
 
 ## Reviewer conduct
 
@@ -55,6 +54,8 @@ Before any plan is approved, including a plan of Claude's own, answer these. One
 - Is the problem confirmed in the codebase or real user feedback, not assumed from intuition?
 - What decision does this inform, and who makes it? A ticket informing no decision is the one to cut.
 - Would a busy senior engineer quietly never pick this up? If so, decide whether that is the ticket's fault or the priority's.
+- Did the interview fix in and out per scope word, what done looks like and what comes next, and are they written as Assumptions and Not-building?
+- Did the memory feedback files matching the topic get checked, and does the plan obey each or name the `Decided:` line that overrides it?
 
 ## 2. Premises and mechanism
 
@@ -68,6 +69,7 @@ Before any plan is approved, including a plan of Claude's own, answer these. One
 - Does a helper, service, sibling repo or platform feature already do this?
 - Does an already-installed dependency solve it, or is a new one justified, maintained, and licence-compatible? (the build ladder in CLAUDE.md)
 - Is this speculative work, or does it unblock a concrete next ticket?
+- Does the Shape show the design after the change and the lines removed against added? A plan that only adds says why nothing goes.
 
 ## 4. Alternatives considered
 
@@ -85,7 +87,8 @@ Before any plan is approved, including a plan of Claude's own, answer these. One
 
 ## 13. Dependencies
 
-- What tickets or changes must land before this one, and in what order?
+- What tickets or changes must land before this one, and in what order? Each need reads `needs X's <data or file>`; if the dependent node never reads that output, the need is false: stub, draft or run in parallel.
+- Does each node say what it owns, where the thing it changes lives and who owns it, and whether the resources it needs (service, port, credentials, data) are available?
 - For cross-repo or published-artifact changes: are consumers named as pinned or unpinned, with counts per unpinned consumer measured off `origin/<base>`?
 - Have collisions been checked: tickets in the set that touch the same files, which lands first, what breaks if not?
 - Are other in-flight changes touching the same files accounted for?

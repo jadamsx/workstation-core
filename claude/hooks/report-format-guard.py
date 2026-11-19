@@ -2,7 +2,8 @@
 """Block malformed manager reports. Active only when WORKSTATION_REPORTS is set (a manager session).
 
 A file written into that folder must be named `result-*.md`, or be the `.draft` that is moved to such a name,
-and its first line must be `Status: decision` or `Status: done`. Checked on Write, and on Bash commands that
+and its first line must be `Status: decision` or `Status: done`. A done report carries a `Done-check:` line and
+no report names a review round above 3. Checked on Write, and on Bash commands that
 redirect, tee, move or copy into the folder. Content is read from the Write input, a here-document, an
 `echo` or `printf` argument, or the draft file a `mv` or `cp` moves. Content that cannot be seen up front passes.
 
@@ -21,6 +22,8 @@ from pathlib import Path
 STATUS_LINES = {"Status: decision", "Status: done"}
 PATH_CHARS = r"(?:\$\([^)]*\)|[^\s\"';|&<>)])*"
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*)", re.S)
+DONE_CHECK = re.compile(r"^Done-check: (pass|deviation [0-9a-f]{7,40})\s*$", re.M)
+ROUND = re.compile(r"^[\s>*_-]*Round\**(?:\s*:\**\s*(\d+)(?:\s+of\s+\d+)?|\s+(\d+)\s+of\s+\d+)", re.I | re.M)
 INLINE = re.compile(r"\b(?:echo|printf)\s+(?:-\w+\s+)*([\"'])(.*?)\1", re.S)
 
 
@@ -45,7 +48,12 @@ def name_problem(name: str) -> str:
 
 def first_line_problem(text: str) -> str:
     first = text.lstrip("\n").split("\n", 1)[0].strip()
-    return "" if first in STATUS_LINES else f"The first line is `{first}`, not a Status line."
+    if first not in STATUS_LINES:
+        return f"The first line is `{first}`, not a Status line."
+    if first == "Status: done" and not DONE_CHECK.search(text):
+        return "A done report needs a `Done-check: pass` or `Done-check: deviation <sha>` line."
+    late = [m.group(0) for m in ROUND.finditer(text) if int(m.group(1) or m.group(2)) > 3]
+    return f"`{late[0]}`: a review stops by round 3, escalate an open Blocker." if late else ""
 
 
 def write_targets(command: str, folder: str) -> list[str]:

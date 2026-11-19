@@ -14,7 +14,7 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | `main-thread-gate.py` | Before Edit, Write, NotebookEdit, Bash, Agent, and on prompt submit | The main thread editing files or running tests, builds, linters and formatters. Put `main-thread-ok` in a prompt to lift it for that turn. With `WORKSTATION_ROLE=ask` it is an allowlist: no file edits, only read-only agents (`code-locator`, `researcher`, `change-reader`, `release-state-reader`, `run-digest`, `web-fetch`, `Explore`), and Bash may not name `herdr` or `manager-` except `herdr pane read|list`, `herdr tab list`, `herdr workspace list|get`, `herdr agent list`; `main-thread-ok` does not lift that |
 | `notes-lint-guard.py` | After Edit, Write | Nothing. It runs `notes-lint` on a note you just wrote and hands failures back to Claude |
 | `report-format-guard.py` | Before Write and Bash, manager sessions only | A manager report that is not `result-*.md` with a `Status: decision` or `Status: done` first line |
-| `manager-brief-inject.py` | Session start after compact or clear, manager sessions only | Nothing. It hands the manager brief back as context |
+| `manager-brief-inject.py` | Session start after compact or clear, manager sessions only | Stores `session_id` in manager.json. It hands the manager brief back as context |
 | `project-context.py` | Session start | Nothing. It loads the project's index note into the session, capped at 4000 characters |
 
 ## Permission rules

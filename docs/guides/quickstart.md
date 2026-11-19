@@ -59,7 +59,7 @@ Read the table. Say `go` to approve it, or say what to change. Nothing is built 
 /build <the plan note>
 ```
 
-`build` refuses a plan that is not approved. It makes a worktree at fresh `origin/<base>`, runs the nodes wave by wave through `builder`, reviews each node with a `cold-reviewer`, runs the formatter, linter, types and tests once on the whole tree, and says what it ran. Nodes that own disjoint files run in parallel.
+`build` refuses a plan that is not approved. It makes a worktree at fresh `origin/<base>`, runs the ready nodes through `builder`, reviews each node with a `cold-reviewer`, runs the formatter, linter, types and tests once on the whole tree, and says what it ran. Nodes that own disjoint files run in parallel.
 
 ## Verify
 

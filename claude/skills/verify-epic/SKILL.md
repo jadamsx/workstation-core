@@ -1,19 +1,16 @@
 ---
 name: verify-epic
-description: Review every change of an epic through the review engine, then check the seams: merge order, shared contracts and schemas, epic coverage. Use for /verify-epic <epic key or change list>.
-engine: review
-params: {mode: epic, intensity: medium, target: epic-key}
+description: Alias for verify-change in epic mode, kept for one release. Use verify-change instead.
+disable-model-invocation: true
 ---
 ## When
-An epic with several open changes, before any merges; the post-completion step runs again once they have merged. One change is `verify-change`. A plan with no changes yet is `verify-plan`.
+Old name for `verify-change` in epic mode.
 
 ## Inputs
-The epic key (its changes are found through the tickets) or the list of change URLs, plus the epic's design note if one exists.
+As `verify-change`.
 
 ## Differs
-- A coordinator hands the epic review to the work tab per Handoff in `engines/common.md`.
-- Nothing is posted before the owner's go; per-change posting follows the `change` rules.
-- Load `house-style` before writing drafts.
+Run `verify-change` with mode epic.
 
 ## Output
-Engine report for `epic`: one line per change with its verdict, then the epic table.
+As `verify-change`.

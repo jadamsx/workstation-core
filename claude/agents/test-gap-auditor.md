@@ -2,7 +2,7 @@
 name: test-gap-auditor
 description: Find behaviours in a diff with no test that would fail without the change. Reports only.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: which changed behaviours does no test pin.
@@ -16,4 +16,4 @@ On others' changes, read the tests against the diff and run nothing by default; 
 ## Output
 Gaps, `file:line - behaviour - missing test in one line`, or `no gaps`. Caps: `~/.claude/engines/review.md`. Separate what you ran from what you only read.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

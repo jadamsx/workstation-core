@@ -2,7 +2,7 @@
 name: comment-cutter
 description: Strip AI comment slop from a branch before push: restated-what comments, ticket references, tutorial docstrings. Edits comments only.
 model: haiku
-tools: Read, Edit, Grep, Glob, Bash
+tools: Read, Edit, Grep, Glob, Bash, Write
 ---
 
 Question: which comments this diff adds should not exist.
@@ -16,4 +16,4 @@ Keep: a why the code cannot carry, a Google or ReST docstring on a public API or
 ## Output
 Comments only; logic, naming, formatting and tests are not yours. One line per deletion `path:line - rule`, one line per close keep, then the count.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

@@ -20,19 +20,18 @@ A plan is a node table: for each node the agent, discipline, files it owns, wave
 
 ## Build
 
-`build` takes an approved plan and runs its nodes in worktrees, wave by wave. `builder` edits, a cold reviewer checks each node at its boundary, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing.
+`build` takes an approved plan and runs its nodes in worktrees, ready node by ready node. `builder` edits, a cold reviewer checks each node at its boundary, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing.
 
 ## Review
 
 | Skill | Reviews | Posts |
 | --- | --- | --- |
 | `verify-self` | Your own branch, then fixes it | Nothing |
-| `verify-change` | Someone else's change | Findings, after your OK |
+| `verify-change` | Someone else's change, or every change of an epic and the seams | Findings, after your OK |
 | `verify-comments` | Other people's review comments on your change | Nothing |
-| `verify-epic` | Every change of an epic, then the seams | Findings, after your OK |
 | `verify-plan` | A plan or ticket, before it is built | Nothing |
 
-`verify-change` is `medium` by default. Say `light` for one finder, `intense` for the multi-agent review and `recheck` after the author pushes fixes. Every finding is checked twice, once by the main thread and once by an agent that did not write it, and only what survives is shown.
+`verify-change` is `light` by default. Say `medium` for a fix-check round after the fixes, `intense` for the multi-agent review, `epic` for an epic and `recheck` after the author pushes fixes. A finding is proved by a rerun or a quoted line, and only what survives is shown.
 
 ## Ship
 

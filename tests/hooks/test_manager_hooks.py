@@ -40,9 +40,9 @@ class ReportFormatGuardTest(ReportsCase):
         return run_hook("report-format-guard.py", {"tool_name": "Bash", "tool_input": {"command": command}}, self.reports)
 
     def test_write_of_a_well_formed_report_passes(self) -> None:
-        self.assertEqual(self.write("result-20250101-120000.md", "Status: done\nbody").returncode, 0)
+        self.assertEqual(self.write("result-20250101-120000.md", "Status: done\nbody\nDone-check: pass").returncode, 0)
         self.assertEqual(self.write("result-1.md", "Status: decision\nq").returncode, 0)
-        self.assertEqual(self.write(".draft", "Status: done\nbody").returncode, 0)
+        self.assertEqual(self.write(".draft", "Status: done\nbody\nDone-check: pass").returncode, 0)
 
     def test_write_with_a_wrong_name_is_blocked_with_the_exact_command(self) -> None:
         result = self.write("report.md", "Status: done\n")
@@ -65,11 +65,11 @@ class ReportFormatGuardTest(ReportsCase):
         self.assertEqual(self.write("report.md", "x", reports=None).returncode, 0)
 
     def test_bash_heredoc_and_inline_content_are_checked(self) -> None:
-        good = f"cat > \"$WORKSTATION_REPORTS/result-1.md\" <<'EOF'\nStatus: done\nbody\nEOF"
+        good = f"cat > \"$WORKSTATION_REPORTS/result-1.md\" <<'EOF'\nStatus: done\nbody\nDone-check: pass\nEOF"
         bad = f"cat > {self.reports}/result-1.md <<'EOF'\nSummary\nEOF"
         self.assertEqual(self.bash(good).returncode, 0)
         self.assertEqual(self.bash(bad).returncode, 2)
-        self.assertEqual(self.bash(f"printf 'Status: done\\nx' > {self.reports}/result-1.md").returncode, 0)
+        self.assertEqual(self.bash(f"printf 'Status: done\\nDone-check: pass' > {self.reports}/result-1.md").returncode, 0)
         self.assertEqual(self.bash(f"echo 'all fine' > {self.reports}/result-1.md").returncode, 2)
 
     def test_bash_wrong_names_are_blocked_for_each_way_of_writing(self) -> None:
@@ -86,7 +86,7 @@ class ReportFormatGuardTest(ReportsCase):
         move = 'mv "$WORKSTATION_REPORTS/.draft" "$WORKSTATION_REPORTS/result-$(date +%Y%m%d-%H%M%S).md"'
         (self.reports / ".draft").write_text("notes\n")
         self.assertEqual(self.bash(move).returncode, 2)
-        (self.reports / ".draft").write_text("Status: done\nbody\n")
+        (self.reports / ".draft").write_text("Status: done\nbody\nDone-check: pass\n")
         self.assertEqual(self.bash(move).returncode, 0)
         self.assertEqual(self.bash(f'mv "$WORKSTATION_REPORTS/.draft" "$WORKSTATION_REPORTS/final.md"').returncode, 2)
 
@@ -122,6 +122,11 @@ class ManagerBriefInjectTest(ReportsCase):
         self.assertEqual(self.start("startup", self.reports).stdout, "")
         self.assertEqual(self.start("resume", self.reports).stdout, "")
         self.assertEqual(self.start("compact", None).stdout, "")
+
+    def test_every_source_records_the_session_id_in_manager_json(self) -> None:
+        (self.reports / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "keep": True}))
+        run_hook("manager-brief-inject.py", {"source": "startup", "session_id": "abc"}, self.reports)
+        self.assertEqual(json.loads((self.reports / "manager.json").read_text()), {"pane_id": "w1:p4", "keep": True, "session_id": "abc"})
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 ---
 name: build
-description: Execute an approved plan's node graph in a worktree, wave by wave, then hand to verify-self. Use for /build <plan note or ticket>. Refuses without an approved plan.
+description: Execute an approved plan's node graph in a worktrees, dependency-driven, then hand to verify-self. Use for /build <plan note or ticket>. Refuses without an approved plan.
 engine: build
-params: {scope: wave}
+params: {}
 ---
 ## When
 After a plan skill produced a plan and you said go. Anything without an approved plan goes to the matching `plan-*` skill first. Review of the result: `verify-self`.
@@ -12,9 +12,9 @@ A plan note, a ticket key with an approved design note, an epic piece, or a plan
 
 ## Differs
 - In a coordinator this goes to the work tab (`engines/common.md` Delegation, Handoff).
-- Next unbuilt wave unless a node or piece is named; say which.
+- Default is the whole ready graph, every node whose needs are done, up to the concurrency cap; `node` builds one node.
 - Notes are written with `notes-write`.
-- Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts".
+- Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before a done report.
 
 ## Output
 The engine's node report, then `/verify-self`.

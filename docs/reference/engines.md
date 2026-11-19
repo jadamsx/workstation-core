@@ -6,7 +6,7 @@ An engine is the full procedure for one stage of work, in `claude/engines/<name>
 | --- | --- | --- |
 | `common` | Git and worktree safety, gates, delegation, the model rule, agent refusals, report skeleton, glossary. Every engine and agent loads it | none |
 | `plan` | Sizing, the five design questions, the plan note, the node table, epic mode | `kind`: `task`, `bug`, `spike`, `story`, `epic`, `fix`. `intensity`: `light`, `medium`, `intense` |
-| `build` | Running an approved plan's nodes in worktrees, wave by wave, then the whole-repo gates and proof | `scope`: `node`, `wave`, `plan` |
+| `build` | Running an approved plan's nodes in worktrees, ready node by ready node, then the whole-repo gates and proof | `scope`: `node`, `wave`, `plan`; default the whole ready graph |
 | `review` | Review of your own branch, someone else's change, comments, an epic or a plan: pinning a checkout, reviewers, verification of findings, posting rules, the intensity scale | `mode`: `self`, `change`, `epic`, `comments`, `plan`. `intensity`: `light`, `medium`, `intense`; `recheck` is a flag on `change`. `target` |
 | `write` | Process for anything a colleague reads: change descriptions, tickets, comments, commits, notes | `target`: `change`, `ticket`, `comment`, `reply`, `commit`, `note`, `chat` |
 | `ship` | The source control adapter, the tracker, automated reviewers, the push gate, the CI loop, conflicts | `target`: a change URL, `<project> #<number>` or empty. `phase`: `open`, `loop` |
@@ -27,12 +27,12 @@ The full text is `claude/engines/common.md`.
 
 ## Review intensity
 
-Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how hard any review is. Default `medium` everywhere.
+Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how hard any review is. Default `light` everywhere; auth, input, secrets or permissions raise it to `medium`.
 
 | Level | What runs |
 | --- | --- |
-| `light` | One finder, one round, no refuter |
-| `medium` | `cold-reviewer`, then `finding-refuter`; up to 3 rounds, stopping early on a clean round |
-| `intense` | All finders in parallel, then `finding-refuter`; up to 3 rounds; `security-reviewer` where it applies |
+| `light` | One finder; a fix-check only if round 1 found a Blocker |
+| `medium` | `cold-reviewer`; round 2 a `finding-refuter` fix-check; round 3 a quick confirmation |
+| `intense` | `cold-reviewer`, `clean-code`, `test-gap-auditor` in parallel, `security-reviewer` where it applies; rounds 2 and 3 as `medium` |
 
-A plan's node table has an `intensity` column per node. The exact rules are in `claude/engines/review.md`, section "Intensity". Name a level in the request to override it.
+A plan's node table has an `intensity` column per node. The exact rules are in `claude/engines/review.md`, section "Round shapes". Name a level in the request to override it.

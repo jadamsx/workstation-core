@@ -231,6 +231,46 @@ class SettingsApplyTest(ScratchCase):
         )
 
 
+class BaseSettingsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.base = json.loads((REPO / "claude" / "settings.base.json").read_text())
+
+    def test_only_git_network_commands_skip_the_sandbox(self) -> None:
+        excluded = self.base["sandbox"]["excludedCommands"]
+        for cmd in ("ps *", "shell-reap *", "gh *", "launchctl *", "git fetch*", "git push*", "git pull*", "git clone*", "git ls-remote*"):
+            self.assertIn(cmd, excluded)
+        self.assertNotIn("git *", excluded)
+        self.assertNotIn("kill *", excluded)
+
+    def test_git_state_and_caches_are_writable_in_the_sandbox(self) -> None:
+        writable = self.base["sandbox"]["filesystem"]["allowWrite"]
+        for path in ("**/.git", "~/.gitconfig", "~/.config/git", "~/.local/share/uv"):
+            self.assertIn(path, writable)
+
+    def test_allow_is_narrow_and_has_no_blanket_git(self) -> None:
+        allow = self.base["permissions"]["allow"]
+        self.assertNotIn("Bash(git *)", allow)
+        self.assertNotIn("Bash(kill *)", allow)
+        for rule in ("Bash(gh *)", "Bash(launchctl *)", "Bash(git fetch*)", "Bash(git push*)", "Bash(git worktree*)", "Bash(herdr *)", "Bash(ps *)", "Bash(shell-reap *)", "Bash(docker ps*)", "Bash(docker logs*)", "Bash(docker inspect*)"):
+            self.assertIn(rule, allow)
+
+    def test_destructive_git_stays_denied(self) -> None:
+        deny = self.base["permissions"]["deny"]
+        for rule in ("Bash(git stash*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
+            self.assertIn(rule, deny)
+        self.assertIn("Read(~/.ssh/**)", deny)
+        for rule in ("Bash(git push * -f*)", "Bash(git push *+*)", "Bash(git * reset --hard*)", "Bash(git * clean *)", "Bash(git checkout .*)", "Bash(git -c *=*)", "Bash(git config *core.sshCommand*)", "Bash(git push --delete*)", "Bash(git push -f*)", "Bash(gh repo delete*)", "Bash(gh auth *)", "Bash(launchctl submit*)"):
+            self.assertIn(rule, deny)
+
+    def test_remote_branch_pushes_and_api_deletes_ask(self) -> None:
+        ask = self.base["permissions"]["ask"]
+        for rule in ("Bash(git push *:main*)", "Bash(git push *:master*)", "Bash(git push *:develop*)", "Bash(gh api * -X DELETE*)"):
+            self.assertIn(rule, ask)
+
+    def test_git_hooks_are_not_writable_in_the_sandbox(self) -> None:
+        self.assertIn("**/.git/hooks", self.base["sandbox"]["filesystem"]["denyWrite"])
+
+
 class McpAndPluginsTest(ScratchCase):
     def test_install_writes_core_mcp_servers_to_claude_json(self) -> None:
         run_quiet(self.ws.cmd_install, False)

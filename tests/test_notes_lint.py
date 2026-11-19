@@ -47,15 +47,6 @@ V2_HEADS = [
     "Out",
     "Links",
 ]
-PROPOSAL_HEADS = [
-    "Summary",
-    "Problem",
-    "Proposal",
-    "Alternatives",
-    "Costs and risks",
-    "Ask and decision needed",
-    "Links",
-]
 TEMPLATES = {
     "decision": (
         [
@@ -95,29 +86,6 @@ TEMPLATES = {
             "related_adrs",
         ],
         V2_HEADS,
-    ),
-    "proposal": (
-        [
-            "title",
-            "aliases",
-            "type",
-            "status",
-            "format",
-            "ticket",
-            "project",
-            "date",
-            "superseded_by",
-            "mr",
-            "area",
-            "updated",
-            "verified",
-            "sources",
-            "decided_by",
-            "implements",
-            "supersedes",
-            "related_adrs",
-        ],
-        PROPOSAL_HEADS,
     ),
     "howto": (
         [
@@ -430,7 +398,8 @@ class ReviewNoteTest(LintCase):
                 "review", "Reviewed under [[projects/p/index|P]], whose rules apply."
             ),
         )
-        self.assertIn("structure", self.rules())
+        with mock.patch.dict("os.environ", {"NOTES_EXTRA_SUBS": ""}):
+            self.assertIn("structure", self.rules())
         with mock.patch.dict("os.environ", {"NOTES_EXTRA_SUBS": "mrs:review"}):
             self.assertEqual(self.lint(), (0, []))
 
@@ -516,25 +485,6 @@ class V2Test(LintCase):
     def test_unknown_format_is_flagged(self) -> None:
         self.assertIn("format-invalid", self.v2(format="v3"))
 
-    def test_proposal_format_uses_the_proposal_headings(self) -> None:
-        write(
-            self.root,
-            "projects/p/designs/ABC-3-prop.md",
-            frontmatter("design", project="p", format="proposal")
-            + body(
-                "design",
-                "Detailed in [[projects/p/designs/ABC-1-thing]].",
-                heads=PROPOSAL_HEADS,
-            ),
-        )
-        sub(
-            self.root,
-            "projects/p/index.md",
-            "[[projects/p/research/q]] is the evidence.",
-            "[[projects/p/research/q]] is the evidence and [[projects/p/designs/ABC-3-prop]] the proposal.",
-        )
-        self.assertEqual(self.lint(), (0, []))
-
     def test_fr_without_node_is_flagged(self) -> None:
         self.assertEqual(self.v2(nodes=NODES.replace("FR-002, ", "")), {"fr-uncovered"})
 
@@ -585,6 +535,20 @@ class V2Test(LintCase):
 class BaselineTest(LintCase):
     def test_good_vault_is_clean(self) -> None:
         self.assertEqual(self.lint(), (0, []))
+
+    def test_legacy_frontmatter_key_is_known(self) -> None:
+        replace("reference/ref.md", "ticket: []", "ticket: []\nlegacy: true")(self.root)
+        self.assertEqual(self.lint(), (0, []))
+
+    def test_legacy_design_in_old_key_order_is_clean(self) -> None:
+        design = "projects/p/designs/ABC-1-thing.md"
+        sub(self.root, design, "type: design\nstatus: proposed\n", "legacy: true\nstatus: proposed\ntype: design\n")
+        self.assertEqual(self.lint(), (0, []))
+
+    def test_design_in_old_key_order_without_legacy_fails(self) -> None:
+        design = "projects/p/designs/ABC-1-thing.md"
+        sub(self.root, design, "type: design\nstatus: proposed\n", "status: proposed\ntype: design\n")
+        self.assertIn("key-order", self.rules())
 
     def test_progress_checklist_with_in_progress_marks_is_clean(self) -> None:
         sub(

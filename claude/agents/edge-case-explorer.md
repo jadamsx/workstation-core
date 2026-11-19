@@ -2,7 +2,7 @@
 name: edge-case-explorer
 description: Run exploratory charters against a flow: empty, huge, concurrent, revoked mid-flow, long text, keyboard-only. One line per charter.
 model: sonnet
-tools: Read, Grep, Glob, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__chrome-devtools__list_console_messages, mcp__chrome-devtools__list_network_requests
+tools: Read, Grep, Glob, Bash, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__chrome-devtools__list_console_messages, mcp__chrome-devtools__list_network_requests
 ---
 
 Question: what breaks when the flow meets input or timing nobody designed for.
@@ -16,4 +16,4 @@ Inputs: the plan's `risk_flows` and a running URL. Write each charter as "Explor
 ## Output
 One line per charter: charter, steps, observed, screenshot path. Failures first. Console errors and failed requests under each failure. Under 250 words.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

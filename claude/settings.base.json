@@ -1,12 +1,50 @@
 {
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CI": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PAGER": "cat",
+    "GIT_PAGER": "cat",
+    "GIT_EDITOR": "true"
   },
   "attribution": {
     "commit": "",
     "pr": ""
   },
   "permissions": {
+    "allow": [
+      "Bash(gh *)",
+      "Bash(launchctl *)",
+      "Bash(git fetch*)",
+      "Bash(git push*)",
+      "Bash(git worktree*)",
+      "Bash(herdr *)",
+      "Bash(ps *)",
+      "Bash(shell-reap *)",
+      "Bash(docker ps*)",
+      "Bash(docker logs*)",
+      "Bash(docker inspect*)",
+      "Bash(git init*)",
+      "Bash(git config*)",
+      "Bash(git clone*)",
+      "Bash(workstation-build *)",
+      "Bash(~/.local/share/workstation/build/install.sh *)",
+      "Bash(git -C * worktree*)",
+      "Bash(git -C * fetch*)",
+      "Bash(git -C * pull*)",
+      "Bash(git -C * push*)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * add*)",
+      "Bash(git -C * commit*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)"
+    ],
     "deny": [
       "Bash(git commit --no-verify*)",
       "Bash(git commit -n *)",
@@ -20,6 +58,23 @@
       "Bash(git restore *)",
       "Bash(git checkout -- *)",
       "Bash(git branch -D main*)",
+      "Bash(git push * -f*)",
+      "Bash(git push *+*)",
+      "Bash(git * reset --hard*)",
+      "Bash(git * clean *)",
+      "Bash(git checkout .*)",
+      "Bash(git -c *=*)",
+      "Bash(git config *core.sshCommand*)",
+      "Bash(git config *core.hooksPath*)",
+      "Bash(git config *alias.*)",
+      "Bash(git push --delete*)",
+      "Bash(git push * --delete*)",
+      "Bash(git push * -d *)",
+      "Bash(git push -f*)",
+      "Bash(git push -uf*)",
+      "Bash(gh repo delete*)",
+      "Bash(gh auth *)",
+      "Bash(launchctl submit*)",
       "Bash(docker volume rm *)",
       "Bash(docker system prune -a*)",
       "Bash(docker volume prune*)",
@@ -35,9 +90,13 @@
       "Bash(git push *--tags*)",
       "Bash(git push *refs/tags/*)",
       "Bash(git push * v*)",
-      "Bash(git push origin main*)",
-      "Bash(git push origin master*)",
-      "Bash(git push origin develop*)"
+      "Bash(git push *main*)",
+      "Bash(git push *master*)",
+      "Bash(git push *develop*)",
+      "Bash(git push *:main*)",
+      "Bash(git push *:master*)",
+      "Bash(git push *:develop*)",
+      "Bash(gh api * -X DELETE*)"
     ]
   },
   "hooks": {
@@ -87,6 +146,10 @@
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/agent-model-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 __HOME__/.claude/hooks/usage-gate-hook.py"
           }
         ]
       },
@@ -166,7 +229,29 @@
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
     "excludedCommands": [
-      "herdr *"
+      "herdr *",
+      "ps *",
+      "shell-reap *",
+      "gh *",
+      "launchctl *",
+      "git fetch*",
+      "git push*",
+      "git pull*",
+      "git clone*",
+      "git ls-remote*",
+      "git init*",
+      "git config*",
+      "git worktree*",
+      "workstation-build *",
+      "~/.local/share/workstation/build/install.sh *",
+      "git -C * worktree*",
+      "git -C * fetch*",
+      "git -C * pull*",
+      "git -C * push*",
+      "git -C * ls-remote*",
+      "git -C * clone*",
+      "git -C * init*",
+      "git -C * config*"
     ],
     "filesystem": {
       "allowWrite": [
@@ -175,14 +260,20 @@
         "~/.cache",
         "~/.npm",
         "~/Library/Caches",
-        "~/.local/state"
+        "~/.local/state",
+        "**/.git",
+        "~/.gitconfig",
+        "~/.config/git",
+        "~/.local/share/uv",
+        "~/.local/share/workstation"
       ],
       "denyRead": [
         "~/.ssh",
         "~/.aws"
       ],
       "denyWrite": [
-        "~/.ssh"
+        "~/.ssh",
+        "**/.git/hooks"
       ]
     },
     "network": {

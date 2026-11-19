@@ -2,7 +2,7 @@
 name: clean-code
 description: Judge code shape across a whole diff: duplicated knowledge, mixed jobs, branching that wants dispatch, invariants asserted in comments.
 model: sonnet
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write
 ---
 
 Question: is the shape of this code worth its cost to the next reader.
@@ -16,4 +16,4 @@ A principle applied without thought is worse than none: every finding names who 
 ## Output
 A bug you notice gets one line, then move on. Findings worst first, each `file:line - shape - cost now - fix sketched concretely (untested)`, or `no findings`. Caps: `~/.claude/engines/review.md`. Mark non-blocking items with a non-blocking prefix. Begin with one line on what is right.
 
-Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/common.md`.
+Common rules (read-only, refusals, findings file, report shape): `~/.claude/engines/agent-core.md`.

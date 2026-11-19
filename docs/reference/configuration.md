@@ -10,8 +10,8 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | --- | --- |
 | `sandbox.enabled`, `autoAllowBashIfSandboxed` | on |
 | `sandbox.allowUnsandboxedCommands` | off: a command the sandbox blocks fails instead of retrying outside it |
-| `sandbox.excludedCommands` | `herdr *` only, because herdr talks to its own socket |
-| `sandbox.filesystem.allowWrite` | `~/notes`, `~/drafts`, `~/.cache`, `~/.npm`, `~/Library/Caches`, `~/.local/state` |
+| `sandbox.excludedCommands` | `herdr *`, `gh *`, `launchctl *` and the git network commands (`fetch`, `push`, `pull`, `clone`, `ls-remote`), which need the keychain, `known_hosts` or their own sockets |
+| `sandbox.filesystem.allowWrite` | `~/notes`, `~/drafts`, `~/.cache`, `~/.npm`, `~/Library/Caches`, `~/.local/state`, `**/.git`, `~/.gitconfig`, `~/.config/git`, `~/.local/share/uv` |
 | `sandbox.filesystem.denyRead` | `~/.ssh`, `~/.aws` |
 | `sandbox.network.allowedDomains` | GitHub, GitLab, npm, PyPI, `ghcr.io`, Docker Hub |
 | `permissions.deny`, `permissions.ask` | Listed in [hooks](hooks.md#permission-rules) |
@@ -47,6 +47,15 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `SHARED_ENVS_FILE` | `shared-envs.txt` beside the hook | Hosts `shared-env-guard` protects |
 | `MAIN_THREAD_GATE_STATE` | | Where `main-thread-gate` records `main-thread-ok` |
 | `WORKSTATION_ROLE` | | Set to `ask` by `herdr-manager setup` in the ask tab; `main-thread-gate` then blocks prompting other tabs and editing agents |
+
+## Usage gate
+
+The statusline writes `~/.claude/usage.json` from `rate_limits`. At 5h 80% or 7d 90% `manager-send` parks a slash-command job, `herdr-report-watch` resumes it as soon as the gate opens (reset passed, usage under the limit, override or a stale reading), and the `Agent` hook denies new top-level spawns. Running work is never cut off. `USAGE_GATE=off` or an unexpired `~/.claude/usage-override` (an expiry in epoch seconds) lifts the gate. A missing file, a reading older than 15 minutes or a plan that sends no `rate_limits` (team plans may not) fails open. Leave "Continue automatically at usage limit" on in `/config` as the backstop.
+
+| Variable | Default | Use |
+| --- | --- | --- |
+| `USAGE_GATE_5H`, `USAGE_GATE_7D` | `80`, `90` | Park thresholds in percent |
+| `USAGE_FILE`, `USAGE_OVERRIDE_FILE` | `~/.claude/usage.json`, `~/.claude/usage-override` | Where the gate reads and where the override lives |
 
 Run `grep -rn "environ" bin lib claude/hooks` for the full list.
 

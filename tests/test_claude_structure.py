@@ -12,7 +12,7 @@ LAYER_FILES = [p for d in LAYERS for p in sorted((CLAUDE / d).glob("*.md"))]
 ALL_MD = sorted(p for p in CLAUDE.rglob("*.md") if "hooks" not in p.parts)
 SHIP = CLAUDE / "engines/ship.md"
 SKILL_LINE_CAP = 60
-LONG_STANDALONE = {"diagrams", "handoff-write"}
+LONG_STANDALONE = {"diagrams"}
 HEADINGS = ["## When", "## Inputs", "## Differs", "## Output"]
 ENGINES = {"plan", "build", "review", "write", "ship"}
 FORGE_WORDS = re.compile(r"\bgh\b|glab|GitHub|GitLab|Jira|\bPRs?\b|\bMRs?\b")
@@ -161,6 +161,30 @@ class Intensity(unittest.TestCase):
             for found in value.findall(path.read_text()):
                 with self.subTest(file=str(path), value=found):
                     self.assertIn(found, {"light", "medium", "intense"})
+
+
+TEXT_ONLY_AGENTS = {"comprehension-cutter", "change-reader", "done-check", "code-locator", "caller-mapper", "researcher"}
+UNSANDBOXED = ["git init*", "git config*", "git worktree*", "git clone*", "launchctl *", "workstation-build *", "~/.local/share/workstation/build/install.sh *", "git -C * worktree*", "git -C * fetch*"]
+
+
+class SandboxAndToolsTests(unittest.TestCase):
+    def test_setup_commands_run_unsandboxed_with_no_prompt(self) -> None:
+        import json
+
+        settings = json.loads((CLAUDE / "settings.base.json").read_text())
+        for command in UNSANDBOXED:
+            self.assertIn(command, settings["sandbox"]["excludedCommands"])
+            self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
+        for command in ("git add*", "git commit*", "git status*", "git diff*", "git log*"):
+            self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
+        self.assertIn("~/.local/share/workstation", settings["sandbox"]["filesystem"]["allowWrite"])
+
+    def test_every_agent_that_writes_a_findings_file_has_write(self) -> None:
+        for path in sorted((CLAUDE / "agents").glob("*.md")):
+            tools = frontmatter(path.read_text()).get("tools", "")
+            if path.stem in TEXT_ONLY_AGENTS or "findings file" not in path.read_text():
+                continue
+            self.assertIn("Write", [t.strip() for t in tools.split(",")], path.stem)
 
 
 if __name__ == "__main__":

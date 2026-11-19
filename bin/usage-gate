@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Usage: usage-gate
+
+Exit 0 when new work may start, silently. Exit 1 and print `parked until <time>` when the 5h usage is at or over
+USAGE_GATE_5H (default 80) or the 7d usage at or over USAGE_GATE_7D (default 90). Reads the file the statusline
+writes (USAGE_FILE, default ~/.claude/usage.json), the only place `rate_limits` reach a script. A missing file, one
+older than 15 minutes, or one without rate limits fails open, as do `USAGE_GATE=off` and an unexpired
+~/.claude/usage-override (USAGE_OVERRIDE_FILE) holding an expiry as epoch seconds.
+"""
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+STALE_SECONDS = 900
+
+
+def usage_file() -> Path:
+    return Path(os.environ.get("USAGE_FILE") or Path.home() / ".claude" / "usage.json")
+
+
+def override_file() -> Path:
+    return Path(os.environ.get("USAGE_OVERRIDE_FILE") or Path.home() / ".claude" / "usage-override")
+
+
+def overridden(now: float) -> bool:
+    if os.environ.get("USAGE_GATE") == "off":
+        return True
+    try:
+        return float(override_file().read_text().split()[0]) > now
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def parked_until(now: float | None = None) -> float | None:
+    """Epoch of the latest reset among the windows over their limit, or None when new work may start."""
+    now = time.time() if now is None else now
+    if overridden(now):
+        return None
+    try:
+        path = usage_file()
+        if now - path.stat().st_mtime > STALE_SECONDS:
+            return None
+        data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            return None
+        limits = {"five_hour": float(os.environ.get("USAGE_GATE_5H", 80)), "seven_day": float(os.environ.get("USAGE_GATE_7D", 90))}
+        resets = [
+            float(data[window]["resets_at"])
+            for window, limit in limits.items()
+            if data.get(window) and float(data[window]["used_percentage"]) >= limit
+        ]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    resets = [r for r in resets if r > now]
+    return max(resets) if resets else None
+
+
+def main() -> int:
+    until = parked_until()
+    if until is None:
+        return 0
+    print(f"parked until {time.strftime('%Y-%m-%d %H:%M', time.localtime(until))}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
