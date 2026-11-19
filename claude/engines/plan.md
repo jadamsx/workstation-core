@@ -19,7 +19,7 @@ Planning: sizing, interview, the plan note, the node table. Epic mode: `engines/
 6. Shape and node table (below). Quick plans still write the table. Done when the Shape shows lines removed against added, each node has an acceptance sentence, a discipline and named needs, and every acceptance criterion has a verification node.
 7. Review the plan: `engines/review.md` plan mode, at the plan's intensity, with the round shapes in `engines/review.md`. The review also checks every need for a false one. The last round brings yes/no suggestions to the owner; it never rewrites agreed decisions.
 8. Plan note: write it (below), status `proposed`. Done when the note passes `notes-lint` and the owner has the summary.
-9. Approve: the owner ticks Assumptions (yes/no) and the Not-building list, and says go. Only then set `status: approved` and `date:`, write the Progress checklist, stamp the `Decided:`, `Standing:` and `Not-building:` lines, and record the nodes with `node-index` (below). A keyless quick plan has no note; the go in the session is the approval.
+9. Approve: the owner ticks Assumptions (yes/no) and the Not-building list, and says go. Only then set `status: approved` and `date:`, write the Progress checklist, stamp the `Decided:`, `Standing:` and `Not-building:` lines, and record the nodes with `node-index` (below). A keyless quick plan has no note; the go in the session is the approval. After the go, a build runs through `engines/build.md`, quick plans included: never dispatch a builder from the plan run, because the node gates and the review in the table's `review` column live only in the build.
 
 Per kind, beyond what the skill for the kind lists:
 - `bug`: acceptance names the test that fails now and passes after.
