@@ -156,6 +156,7 @@ def argv0(proc: Proc) -> str:
 
 
 SHELLS = {"bash", "zsh", "sh"}
+BASH_TOOL_SHELL = re.compile(r"^\S*(?:bash|zsh|sh) -c (?:-l )?source \S*shell-snapshots/")
 KILL_GRACE_SECONDS = 5
 
 
@@ -184,7 +185,15 @@ def stop_shell(pid: int, procs: Callable[[], list[Proc]] = read_procs, kill: Cal
         raise ReportsError(f"{pid} has no claude process above it")
     if pid in {p.pid for p in chain(os.getpid() if caller is None else caller)}:
         raise ReportsError(f"{pid} is the caller's own shell")
-    kill(pid, signal.SIGTERM)
+    kids: dict[int, list[int]] = {}
+    for p in by_pid.values():
+        kids.setdefault(p.ppid, []).append(p.pid)
+    order, queue = [], [pid]
+    while queue:
+        order.append(queue.pop(0))
+        queue += kids.get(order[-1], [])
+    for victim in reversed(order):
+        kill(victim, signal.SIGTERM)
     if not wait:
         return
     deadline = time.monotonic() + KILL_GRACE_SECONDS
@@ -194,4 +203,11 @@ def stop_shell(pid: int, procs: Callable[[], list[Proc]] = read_procs, kill: Cal
         except OSError:
             return
         time.sleep(0.1)
-    kill(pid, signal.SIGKILL)
+    if same_process(target, procs):
+        kill(pid, signal.SIGKILL)
+
+
+def same_process(was: Proc, procs: Callable[[], list[Proc]]) -> bool:
+    """True when the pid still runs the same command and is no younger, so a reused pid is not mistaken for it."""
+    now = next((p for p in procs() if p.pid == was.pid), None)
+    return now is not None and now.command == was.command and now.age >= was.age

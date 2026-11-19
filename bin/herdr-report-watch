@@ -20,7 +20,7 @@ the limit, past the reset, overridden or failing open) the watcher sends them in
 path, drops a job whose manager is gone, and each coordinator gets one
 `[worker-report] resumed parked jobs: <names>` line.
 
-A shell started by a Bash tool call (its command names `shell-snapshots`) under a `claude` process is reaped when
+A shell started by a Bash tool call (its command starts `<shell> -c source …shell-snapshots/`) under a `claude` process is reaped when
 it and its child processes together have used no CPU for 10 minutes and it is older than 10 minutes: SIGTERM, then
 SIGKILL 5 seconds later if it is still there. Output cannot be watched cheaply, so CPU is the only signal. Jobs
 whose command line contains a `reaper_keep` substring from `claude/resource-policy.json` are left alone. A shell under
@@ -41,7 +41,7 @@ from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import IDLE_STATES, KILL_GRACE_SECONDS, SHELLS, Proc, ReportsError, argv0, clock_seconds, close_manager, is_done, pane_states, pane_text, read_manager, read_procs, reports_root, stop_shell, write_atomic  # noqa: E402
+from herdr_reports import IDLE_STATES, BASH_TOOL_SHELL, KILL_GRACE_SECONDS, SHELLS, Proc, ReportsError, argv0, clock_seconds, close_manager, is_done, pane_states, pane_text, read_manager, read_procs, reports_root, same_process, stop_shell, write_atomic  # noqa: E402
 
 usage_gate = SourceFileLoader("usage_gate", str(Path(__file__).resolve().parent / "usage-gate")).load_module()
 manager_send = SourceFileLoader("manager_send", str(Path(__file__).resolve().parent / "manager-send")).load_module()
@@ -51,7 +51,6 @@ IDLE_SECONDS = 900
 TAIL_LINES = 15
 WAITING = "WAITING:"
 REAP_IDLE_SECONDS = 600
-BASH_TOOL_MARK = "shell-snapshots"
 POLICY = Path(__file__).resolve().parent.parent / "claude/resource-policy.json"
 
 
@@ -67,7 +66,7 @@ class Watcher:
         self.procs = procs
         self.kill = kill
         self.cpu_seen: dict[int, tuple[float, float]] = {}
-        self.terminated: dict[int, float] = {}
+        self.terminated: dict[int, tuple[float, Proc]] = {}
         self.state_file = root / ".watch-state.json"
         self.state = {"sent": [], "exited": [], "idle": [], "cleared": []}
         if self.state_file.exists():
@@ -192,7 +191,7 @@ class Watcher:
                     return proc
             return None
 
-        owners = {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_MARK in p.command and (c := claude_above(p))}
+        owners = {p.pid: c for p in procs if argv0(p) in SHELLS and BASH_TOOL_SHELL.match(p.command) and (c := claude_above(p))}
         seen_cpu: dict[int, tuple[float, float]] = {}
         for pid, claude in owners.items():
             tree, queue = [], [by_pid[pid]]
@@ -209,13 +208,14 @@ class Watcher:
             if any(k in p.command for p in tree for k in keep):
                 continue
             self.stop(shell, claude, procs)
-            self.terminated[pid] = now
+            self.terminated[pid] = (now, shell)
         self.cpu_seen = seen_cpu
-        for pid, since in list(self.terminated.items()):
+        for pid, (since, was) in list(self.terminated.items()):
             if pid not in by_pid:
                 del self.terminated[pid]
             elif now - since >= KILL_GRACE_SECONDS:
-                self.kill(pid, signal.SIGKILL)
+                if same_process(was, lambda: procs):
+                    self.kill(pid, signal.SIGKILL)
                 del self.terminated[pid]
 
     def stop(self, shell: Proc, claude: Proc, procs: list[Proc]) -> None:
@@ -228,7 +228,7 @@ class Watcher:
                     "Status: decision\n"
                     f"Stopped shell pid {shell.pid}: no CPU use for over {REAP_IDLE_SECONDS // 60} minutes.\n"
                     f"Command: {command}\n"
-                    "Rerun it with run_in_background if it should run that long, or add it to reaper_keep in resource-policy.json.\n"
+                    "Rerun it in the foreground with a timeout, or add the command to reaper_keep in claude/resource-policy.json.\n"
                 )
                 write_atomic(info.parent / f"reaped-{shell.pid}.md", body)
 
