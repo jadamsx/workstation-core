@@ -54,12 +54,12 @@ Rules for every round:
 Tick the design note's Progress lines as steps pass. Without a ticket the run stops after the report: no description, no push, no CI loop.
 
 0. For a `format: v2` note, fill each Traceability row's Status from real runs via `run-digest`; flag every FR without a passing test, test with no FR, and node whose diff left its `owns`.
-1. The rounds above over the whole diff, then the merge-time rows of "Post-completion checks" for each plan field that is set. `self` exits with zero Blocker and zero Should-fix, fix-check all FIXED and tests green in that round; at round 3 with open findings, give the owner each with your position and do not push.
+1. The rounds above, the last one a final scan of the whole diff against the base by a fresh reviewer that saw no earlier round; then the merge-time rows of "Post-completion checks" for each plan field that is set. `self` exits with zero Blocker and zero Should-fix, fix-check all FIXED and tests green in that round; at round 3 with open findings, give the owner each with your position and do not push.
 2. Gates through `run-digest`; `comment-cutter` at `medium` and above.
 3. Out: change description (`engines/write.md`), open it, CI loop; ticket drafts are one list, asked once.
 4. Record the design note (`status: shipped`, change link, Decisions as built) and project index; report each FR's Status for a v2 note.
 
-Any source change after the final pass goes back through this mode before the push.
+Any source change after the final pass goes back through this mode before the push; a pass records its HEAD sha in `verify-self-pass` in the git dir, and `pre-push-guard` checks it.
 
 ### Mode `change`
 
