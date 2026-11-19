@@ -69,6 +69,15 @@ def exclude_owns(tree: Path) -> None:
         exclude.write_text("".join(f"{line}\n" for line in [*present, *missing]))
 
 
+def row_needs(note: str, node: str) -> list[str] | None:
+    row = re.search(rf"^\|\s*[`*]*{re.escape(node)}\b[^\n]*", note, re.M)
+    if not row:
+        return None
+    cells = row.group(0).split("|")
+    needs = re.search(r"needs\s+([^)]*)", cells[5] if len(cells) > 5 else "")
+    return re.findall(r"\bN\d+\b", needs[1]) if needs else []
+
+
 def write_owns(text: str) -> str | None:
     """Write `<worktree>/.owns` for a `/build` job: node id, Owns paths and the plan's Decided and Not-building lines and any Standing line."""
     if not re.match(r"/build(\s|$)", text):
@@ -97,6 +106,12 @@ def write_owns(text: str) -> str | None:
     row = re.search(rf"^\|\s*{re.escape(node)}\b[^\n]*", note, re.M)
     if not row:
         raise ReportsError(f"node {node} is not in {plan}")
+    for need in row_needs(note, node):
+        back = row_needs(note, need)
+        if back is None:
+            raise ReportsError(f"node {node} needs {need}, which is not in {plan}")
+        if node in back:
+            raise ReportsError(f"node {node} and {need} need each other")
     cells = row.group(0).split("|")
     owns = re.findall(r"`([^`]+)`", re.split(r"lives:|preflight:", cells[4] if len(cells) > 4 else "")[0])
     lines = re.findall(r"^- ((?:Decided|Standing|Not-building): .+)$", note, re.M)

@@ -428,6 +428,29 @@ class ManagerTests(ReportsCase):
         self.assertIn(f"agent prompt w1:p4 [coordinator] {job}\nnode: N1\nowns: a.py\nDecided: use x\nNot-building: y", sent)
         self.assertEqual(sent.count("[coordinator]"), 1)
 
+    def build_job(self, rows: str) -> subprocess.CompletedProcess:
+        self.manager()
+        tree = self.root / "tree"
+        tree.mkdir(exist_ok=True)
+        subprocess.run(["git", "init", "-q", str(tree)], check=True)
+        plan = self.root / "plan.md"
+        plan.write_text(f"| Node | Agent | Discipline | Owns | Wave | x |\n|---|---|---|---|---|---|\n{rows}- Decided: x\n- Not-building: y\n")
+        return self.bin("manager-send", "alpha", f"/build {plan} node N3 worktree {tree}")
+
+    def test_a_build_job_needing_a_node_not_in_the_plan_is_refused(self) -> None:
+        r = self.build_job("| N3 t | a | d | `a.py` | 2 (needs N9's output) | x |\n")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("node N3 needs N9, which is not in", r.stderr)
+        self.assertEqual(self.prompts(), [])
+
+    def test_a_build_job_with_a_listed_need_is_accepted_and_a_direct_cycle_refused(self) -> None:
+        ok = "| N1 t | a | d | `b.py` | 1 | x |\n| N3 t | a | d | `a.py` | 2 (needs N1) | x |\n"
+        self.assertEqual(self.build_job(ok).returncode, 0)
+        cycle = "| N1 t | a | d | `b.py` | 1 (needs N3) | x |\n| N3 t | a | d | `a.py` | 2 (needs N1) | x |\n"
+        r = self.build_job(cycle)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("need each other", r.stderr)
+
     def test_a_slash_job_over_the_usage_limit_is_parked_with_one_line_and_not_sent(self) -> None:
         folder = self.manager()
         self.usage(90, time.time() + 3600)
