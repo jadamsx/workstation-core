@@ -46,7 +46,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `HOOKS_CONFIG_DIR` | `claude/hooks/hooks.d` | Folder of hook rule files |
 | `SHARED_ENVS_FILE` | `shared-envs.txt` beside the hook | Hosts `shared-env-guard` protects |
 | `MAIN_THREAD_GATE_STATE` | | Where `main-thread-gate` records `main-thread-ok` |
-| `WORKSTATION_ROLE` | | Set to `ask` by `herdr-manager setup` in the ask tab; `main-thread-gate` then blocks prompting other tabs and editing agents |
+| `WORKSTATION_ROLE` | | Set to `ask` by `herdr-manager setup` in the ask tab; `main-thread-gate` then blocks prompting other tabs and editing agents. Set to `lead` by the launcher of a lead tab; the gate then denies builder spawns |
 
 ## Usage gate
 

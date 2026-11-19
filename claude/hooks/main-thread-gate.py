@@ -8,6 +8,9 @@ edit gate for the main thread this turn: the UserPromptSubmit wiring records it 
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
+With WORKSTATION_ROLE=lead the gate denies spawning builder, builder-small and rebase-resolver, whatever the prompt
+says: a lead hands builds to the work tab with manager-send.
+
 Every role: a Bash polling loop (`until`/`while` with `sleep`) or a `sleep` over 10 seconds is denied in favour
 of run_in_background, and a run_in_background command is rewritten to run under a 20-minute timeout.
 
@@ -39,6 +42,8 @@ UNWRAPPED_HEADS = {"git", "gh", "glab", "launchctl", "rm", "sudo", "docker", "ku
 SLEEP_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 WRAPPED = re.compile(rf"^\s*(gtimeout|timeout)\s+{BACKGROUND_TIMEOUT_SECONDS}\b|^\s*perl -e 'alarm {BACKGROUND_TIMEOUT_SECONDS};")
 POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_background, which notifies when the command finishes."
+LEAD_DENIED_AGENTS = {"builder", "builder-small", "rebase-resolver"}
+LEAD_HANDOFF = 'The lead never builds. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
@@ -326,6 +331,13 @@ def ask_block_reason(payload: dict) -> str | None:
     return None
 
 
+def lead_block_reason(payload: dict) -> str | None:
+    tool_input = payload.get("tool_input") or {}
+    if payload.get("tool_name") == "Agent" and tool_input.get("subagent_type") in LEAD_DENIED_AGENTS:
+        return f"{LEAD_HANDOFF} Spawning {tool_input['subagent_type']} is denied in a lead."
+    return None
+
+
 def polls(text: str) -> bool:
     long_sleep = any(
         not n or float(n) * SLEEP_UNITS[u] > MAX_SLEEP_SECONDS for n, u in SLEEP_ARG.findall(text)
@@ -395,6 +407,11 @@ def main() -> None:
         sys.exit(0)
     if os.environ.get("WORKSTATION_ROLE") == "ask":
         reason = ask_block_reason(payload)
+        if reason:
+            print(reason, file=sys.stderr)
+            sys.exit(2)
+    if os.environ.get("WORKSTATION_ROLE") == "lead":
+        reason = lead_block_reason(payload)
         if reason:
             print(reason, file=sys.stderr)
             sys.exit(2)
