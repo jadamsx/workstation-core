@@ -8,8 +8,8 @@ edit gate for the main thread this turn: the UserPromptSubmit wiring records it 
 PreToolUse reads it. It is not a way to brief agents. Long or open-ended jobs go to a typed
 agent with one bounded task, never a general-purpose agent carrying a whole job.
 
-With WORKSTATION_ROLE=lead the gate denies spawning builder, builder-small and rebase-resolver, whatever the prompt
-says: a lead hands builds to the work tab with manager-send.
+With WORKSTATION_ROLE=lead the gate denies spawning the build and review agents, whatever the prompt
+says: a lead hands builds and reviews to the work tab with manager-send.
 
 Every role: a Bash polling loop (`until`/`while` with `sleep`) or a `sleep` over 10 seconds is denied in favour
 of run_in_background, and a run_in_background command is rewritten to run under a 20-minute timeout.
@@ -42,8 +42,29 @@ UNWRAPPED_HEADS = {"git", "gh", "glab", "launchctl", "rm", "sudo", "docker", "ku
 SLEEP_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 WRAPPED = re.compile(rf"^\s*(gtimeout|timeout)\s+{BACKGROUND_TIMEOUT_SECONDS}\b|^\s*perl -e 'alarm {BACKGROUND_TIMEOUT_SECONDS};")
 POLLING_DENIED = "Do not poll or sleep for more than 10 seconds. Use run_in_background, which notifies when the command finishes."
-LEAD_DENIED_AGENTS = {"builder", "builder-small", "rebase-resolver"}
-LEAD_HANDOFF = 'The lead never builds. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
+LEAD_DENIED_AGENTS = {
+    "builder",
+    "builder-small",
+    "rebase-resolver",
+    "approach-reviewer",
+    "cold-reviewer",
+    "security-reviewer",
+    "finding-refuter",
+    "clean-code",
+    "test-gap-auditor",
+    "premise-attacker",
+    "comment-cutter",
+    "comprehension-cutter",
+    "claim-prover",
+    "a11y-auditor",
+    "edge-case-explorer",
+    "role-tester",
+    "ui-verifier",
+    "ops-readiness-auditor",
+    "perf-tester",
+    "migration-verifier",
+}
+LEAD_HANDOFF = 'The lead never builds or reviews. Hand the job to the work tab: `manager-send work "<the skill and arguments>"`.'
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
 
 
