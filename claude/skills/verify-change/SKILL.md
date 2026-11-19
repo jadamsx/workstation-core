@@ -14,7 +14,7 @@ The change URL (or number and project); a batch or a chain of dependent changes:
 - A coordinator hands this review to the work tab per Handoff in `engines/common.md`.
 - Rounds follow the engine's "Round shapes", `light` by default; auth, input, secrets or permissions raise it to `medium`. Offer `intense` in one line when the diff touches a migration, money or a public contract.
 - Comments follow the engine's "Posting rules".
-- Never approves or merges. Posting never starts before the owner's go.
+- Posting and approving start only on the owner's yes to the engine's post question; it never merges.
 - Ends early at "split first" when the change is too big to review.
 
 ## Output

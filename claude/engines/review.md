@@ -211,7 +211,7 @@ Story columns are UI, permissions, data, perf. Merge-time checks (all but regres
 
 ## Posting rules
 
-`change` and `epic` only. Nothing posts before the owner's OK; never approve or merge. The owner is shown the three lines (`engines/write.md`), the drafts, the anchors and per item: `new thread`, `edit my note`, `reply in my thread`, `react ➕`, `resolve` or `dropped: already raised by <author>`.
+`change` and `epic` only. Nothing posts before the owner's OK. With no Blocker open the ask is "post these comments and approve the change?" and a yes posts, then approves; with a Blocker open it asks only to post and approves nothing. Never merge. The owner is shown the three lines (`engines/write.md`), the drafts, the anchors and per item: `new thread`, `edit my note`, `reply in my thread`, `react ➕`, `resolve` or `dropped: already raised by <author>`.
 
 Anchor on lines the change adds, on the line that causes the finding; every anchor is a post-image line of an added hunk line, checked against:
 

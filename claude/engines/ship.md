@@ -24,6 +24,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Reply in a thread | `.../pulls/<n>/comments/<id>/replies` | `.../discussions/<id>/notes` |
 | React ➕ to a note (agree) | `gh api repos/<o>/<r>/pulls/comments/<id>/reactions -f content=+1` (GitHub has no plus reaction; `+1` is the nearest) | `glab api -X POST projects/<id>/merge_requests/<iid>/notes/<note_id>/award_emoji -f name=heavy_plus_sign`; list the same path first and skip if yours is there |
 | Edit my own note | `PATCH repos/<o>/<r>/pulls/comments/<id>` | `PUT .../discussions/<id>/notes/<note_id>` |
+| Approve a change | `gh pr review <n> --approve` | `glab mr approve <iid> -R <project>` |
 | Resolve a thread | GraphQL `resolveReviewThread` | `PUT .../discussions/<id>` with `resolved=true` |
 | Check status, per job | `gh pr checks <n>`, `gh run list --branch <b>` | `glab ci status`, `glab api projects/<id>/pipelines/<pipeline-id>/jobs` |
 | Failed job log | `gh run view <run-id> --log-failed` | `glab ci trace <job-id>` |
