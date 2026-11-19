@@ -81,7 +81,7 @@ def plan_needs(text: str) -> dict[str, tuple[str, ...]]:
     for row in rows[2:]:
         ident, needs = re.match(r"[`*]*([\w-]+)", row[0]), re.search(r"needs\s+([^)]*)", row[header.index("wave")])
         if ident:
-            nodes[ident[1]] = tuple(x for x in re.findall(r"[\w-]+", needs[1]) if x != "and") if needs else ()
+            nodes[ident[1]] = tuple(re.findall(r"\bN\d+\b", needs[1])) if needs else ()
     return nodes
 
 
@@ -312,10 +312,12 @@ class Watcher:
             except OSError:
                 continue
             needs, marks, running = plan_needs(text), plan_marks(text), owned_nodes(trees)
+            committed = {n: commit_time(trees, n) for n in needs}
+            finished = lambda n: marks.get(n) == "x" or committed[n] is not None
             for node, deps in needs.items():
-                if marks.get(node) in ("x", "~") or node in running or any(marks.get(d) != "x" for d in deps):
+                if finished(node) or marks.get(node) == "~" or node in running or not all(d in needs and finished(d) for d in deps):
                     continue
-                since = max((commit_time(trees, d) or edited for d in deps), default=edited)
+                since = max((committed[d] or edited for d in deps), default=edited)
                 if wall - since > READY_ALERT_SECONDS:
                     self.alert(f"alert:{plan}:{node}:ready", coordinator, f"[watcher] {node} ready for {int((wall - since) // 60)} min and not started", now)
 
