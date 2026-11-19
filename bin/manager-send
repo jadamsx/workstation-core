@@ -2,7 +2,7 @@
 """Usage: manager-send <name> "<text>"
 
 The coordinator's way to message its own manager: submits `[coordinator] <text>` to the manager's pane with
-`herdr agent prompt`, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
+`herdr agent prompt`, records `sent_at` in manager.json on each dispatch, retrying every 15 seconds (MANAGER_SEND_RETRY_SECONDS) for up to 10 minutes while the
 manager is blocked. A `/build` job (`/build <plan.md> node <id> worktree <path>`) first writes `<path>/.owns` from the plan. A standing manager (not kept) is sent to only while its pane is idle; if its newest report is
 `Status: done` and not yet cleared, `/clear` is sent first and recorded in the watcher state. A slash-command job
 (a new start) while `usage-gate` is parked is not sent: it is saved under `.parked/` in the watcher state folder, which resumes
@@ -140,6 +140,7 @@ def send(folder: Path, info: dict, text: str, deadline: float, interval: float) 
     while True:
         done = subprocess.run(["herdr", "agent", "prompt", info["pane_id"], f"[coordinator] {text}"], capture_output=True, text=True)
         if done.returncode == 0:
+            write_atomic(folder / "manager.json", json.dumps({**read_manager(folder), "sent_at": time.time()}))
             return
         error = (done.stderr.strip() or done.stdout.strip() or f"exit {done.returncode}").splitlines()[0]
         if time.monotonic() + interval > deadline:

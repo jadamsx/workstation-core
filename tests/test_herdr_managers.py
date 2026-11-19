@@ -389,6 +389,7 @@ class ManagerTests(ReportsCase):
         wait = calls.index("agent wait w1:p4 --until idle --timeout 120000")
         self.assertGreater(calls.index("agent prompt w1:p4 do the thing"), wait)
         self.assertGreater(wait, next(i for i, c in enumerate(calls) if c.startswith("agent start")))
+        self.assertAlmostEqual(json.loads((self.space / "beta/manager.json").read_text())["sent_at"], time.time(), delta=60)
 
     def test_manager_send_prefixes_the_text_and_retries_while_blocked(self) -> None:
         self.manager()
@@ -398,6 +399,7 @@ class ManagerTests(ReportsCase):
         r = self.bin("manager-send", "alpha", "OK to push")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertGreater(len(self.prompts()), 1)
+        self.assertAlmostEqual(json.loads((self.space / "alpha/manager.json").read_text())["sent_at"], time.time(), delta=60)
         self.assertEqual(self.prompts()[-1], "agent prompt w1:p4 [coordinator] OK to push")
 
     def usage(self, five: float, reset: float) -> None:
@@ -920,6 +922,19 @@ class ReaperTests(ReportsCase):
         watcher.procs = lambda: rows[1]
         watcher.scan(601)
         self.assertEqual(kills, [])
+
+    def test_a_waiting_tabs_shell_survives_until_its_last_message_moves_on(self) -> None:
+        projects = self.root.parent / "projects"
+        (projects / "proj").mkdir(parents=True)
+        rows = self.table()
+        (self.manager() / "manager.json").write_text(json.dumps({"pane_id": "w1:p4", "tab_id": "w1:t4", "session_id": "s1"}))
+        transcript = projects / "proj" / "s1.jsonl"
+        message = lambda text: json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}) + "\n"
+        with mock.patch.object(watch, "PROJECTS", projects):
+            transcript.write_text(message("WAITING: the pipeline"))
+            self.assertEqual(self.reaper(rows)[1], [])
+            transcript.write_text(message("WAITING: the pipeline") + message("Pipeline passed, carrying on."))
+            self.assertEqual(self.reaper(rows)[1], [(21, signal.SIGTERM), (20, signal.SIGTERM)])
 
     def test_shell_under_a_claude_outside_a_managed_pane_survives(self) -> None:
         self.assertEqual(self.reaper(self.table(pane_shell=77))[1], [])

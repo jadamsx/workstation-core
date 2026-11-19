@@ -11,11 +11,12 @@ import json
 import os
 import subprocess
 import sys
+import time
 from contextlib import suppress
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from herdr_reports import INPUT_BOX, ReportsError, close_manager, herdr, pane_text, space_dir  # noqa: E402
+from herdr_reports import INPUT_BOX, ReportsError, close_manager, herdr, pane_text, read_manager, space_dir, write_atomic  # noqa: E402
 
 READY_TIMEOUT_MS = "120000"
 
@@ -56,6 +57,7 @@ def main(argv: list[str]) -> int:
                 if not INPUT_BOX.search(pane_text(pane)):
                     raise
             herdr("agent", "prompt", pane, args.prompt)
+            write_atomic(folder / "manager.json", json.dumps({**read_manager(folder), "sent_at": time.time()}))
         except Exception:
             with suppress(subprocess.CalledProcessError, OSError):
                 close_manager(folder)
