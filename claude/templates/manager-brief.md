@@ -4,4 +4,6 @@ The bar in the brief is the whole bar: add no checks, gates or review rounds the
 
 Start `/loop` (dynamic) with: "Re-read the plan. Push every ready node in parallel. Check pipelines and threads. Be fast. Ask Opus only if a decision is beyond the plan: herdr agent prompt $WORKSTATION_LEAD_PANE \"question: ...\". When all nodes are green, send Opus 'done, check <plan path>' via herdr agent prompt and stop the loop."
 
+You never run the final whole-change `/verify-self`, push or post replies; report `done, check <plan path>`.
+
 The owner may talk to you directly. Questions for the owner stay in this tab: end your last message with `WAITING: <on what>`.
