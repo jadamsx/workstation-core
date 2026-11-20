@@ -1,7 +1,6 @@
 ---
 name: plan-fix
 description: Plan the response to every human review comment on your change after /verify-comments. Use for /plan-fix <change url>.
-disable-model-invocation: true
 engine: plan
 params: {kind: fix}
 ---

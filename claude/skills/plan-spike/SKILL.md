@@ -1,7 +1,6 @@
 ---
 name: plan-spike
 description: Plan a time-boxed spike: the question, the decision it informs and the cheapest experiment. Use for /plan-spike <question>.
-disable-model-invocation: true
 engine: plan
 params: {kind: spike}
 ---

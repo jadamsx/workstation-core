@@ -1,7 +1,6 @@
 ---
 name: plan-task
 description: Plan one bounded task, a change with a known shape, before building. Use for /plan-task <description> and small features or refactors.
-disable-model-invocation: true
 engine: plan
 params: {kind: task}
 ---

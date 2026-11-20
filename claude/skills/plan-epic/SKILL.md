@@ -1,7 +1,6 @@
 ---
 name: plan-epic
 description: Design a whole epic before any ticket is built: premise attack, flow diagram, ticket table. Use for /plan-epic <key or brief> or "plan this whole thing".
-disable-model-invocation: true
 engine: plan
 params: {kind: epic}
 ---
