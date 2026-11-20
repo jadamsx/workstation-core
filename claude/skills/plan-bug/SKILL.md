@@ -1,7 +1,6 @@
 ---
 name: plan-bug
 description: Plan the fix for one defect: reproduce first, find the root cause and every caller, set the proof. Use for /plan-bug <ticket or symptom>.
-disable-model-invocation: true
 engine: plan
 params: {kind: bug}
 ---
