@@ -124,7 +124,6 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
 
 def setup() -> int:
     """Rename this pane's tab to lead and open the work tab unless it is already there."""
-    pane = register()
     directory = Path.cwd()
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
     existing = next((tab for tab in tabs if tab.get("label") == WORK_TAB), None)
@@ -134,9 +133,11 @@ def setup() -> int:
         if work is None or "--append-system-prompt-file" not in json.dumps(herdr("pane", "process-info", "--pane", work)):
             raise ReportsError(
                 f"the {WORK_TAB} tab has no agent started with --append-system-prompt-file (WORKSTATION_ROLE=work and "
-                "WORKSTATION_LEAD_PANE are set at launch and cannot be read back); close the tab and rerun setup"
+                "WORKSTATION_LEAD_PANE are set at launch and cannot be read back: herdr exposes no pane env, so the "
+                "role cannot be verified); close the tab and rerun setup"
             )
-    else:
+    pane = register()
+    if not existing:
         work, _ = launch("work", WORK_TAB, ["WORKSTATION_ROLE=work", f"WORKSTATION_LEAD_PANE={pane}"], directory,
                          ["--model", "sonnet", *mcp_args("work", space_dir() / "work"), "--append-system-prompt-file", str(BRIEF)])
         print(f"work: pane {work}")

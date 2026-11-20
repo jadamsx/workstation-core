@@ -167,4 +167,4 @@ Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 
-Fill `templates/plan-summary.md`: the plan note path, the PDF path (`md-pdf`, per the plan skill), the verdict, Shape, the two lists, the Assumptions to confirm, the node table, and a "For the owner to check" line for every question the plan could not settle. Then ask for the go.
+Fill `templates/plan-summary.md`: the plan note path, the PDF path (after every write or refactor of the note, render it: `md-pdf <note> ${DRAFTS_DIR:-~/drafts}/projects/<slug>/<key-or-slug>/<note-name>.pdf`; a mermaid parse error stops the run until fixed), the verdict, Shape, the two lists, the Assumptions to confirm, the node table, and a "For the owner to check" line for every question the plan could not settle. Then ask for the go.

@@ -1,16 +1,18 @@
 ---
 name: plan-task
-description: Alias for plan-story with kind task, kept for one release. Use plan-story instead.
+description: Plan one bounded task, a change with a known shape, before building. Use for /plan-task <description> and small features or refactors.
 disable-model-invocation: true
+engine: plan
+params: {kind: task}
 ---
 ## When
-Old name for `plan-story` kind task.
+A bounded change that is not a defect. Reviewing a plan someone else wrote is `verify-plan`.
 
 ## Inputs
-As `plan-story`.
+A description or ticket key. A vague input starts the interview in `engines/plan.md`.
 
 ## Differs
-Run `plan-story` with kind task.
+Quick when it sizes quick: a table of one or a few rows. Disciplines `tdd`, `acceptance-first`, `refactor` or `migration` on every node. Minimal v2 note: Requirements, node table with `covers`, Traceability, the back half. Notes use `notes-write`, prose `house-style`. Hand the build off per Delegation in `engines/common.md`.
 
 ## Output
-As `plan-story`.
+Verdict, node table, open questions, the go question.

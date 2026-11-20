@@ -1,15 +1,18 @@
 ---
 name: plan-fix
-description: Alias for plan-story with kind fix, kept for one release. Use plan-story instead.
+description: Plan the response to every human review comment on your change after /verify-comments. Use for /plan-fix <change url>.
+disable-model-invocation: true
+engine: plan
+params: {kind: fix}
 ---
 ## When
-Old name for `plan-story` kind fix.
+Only when the owner asks. Human comments on your change, after `/verify-comments`. Automated comments and pipeline failures are `babysit`.
 
 ## Inputs
-As `plan-story`.
+A change URL or `<project> #<number>`. Verdicts are in `${DRAFTS_DIR:-~/drafts}/reviews/<repo>-<number>/`; none: run `/verify-comments` first.
 
 ## Differs
-Run `plan-story` with kind fix.
+Every open human thread gets one outcome, nits included: fix, follow-up (ticket drafted with `ticket-write`, not created) or decline (one-line reason). Fixes are a quick node table, one node per fix or group, tied to a thread id; build via `/build`, or `/verify-self` for one small fix. One table: thread, author, outcome, node or draft or reason, drafted reply. Nothing is built, created, pushed or posted before the OK. Replies per `checklists/prose.md` §7, after the push: "Fixed in <short sha>: <what>", the follow-up link, or the decline reason. Resolve only fixed threads, one at a time, never one an author is still discussing.
 
 ## Output
-As `plan-story`.
+The thread table, then the go question.

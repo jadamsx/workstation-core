@@ -153,6 +153,8 @@ class SetupTests(ReportsCase):
         r = self.setup_run()
         self.assertEqual(r.returncode, 2)
         self.assertIn("close the tab and rerun setup", r.stderr)
+        self.assertIn("role cannot be verified", r.stderr)
+        self.assertNotIn("tab rename", self.calls())
         self.assertEqual(self.creates(), [])
 
     def test_setup_fails_when_the_work_tab_has_no_pane(self) -> None:
