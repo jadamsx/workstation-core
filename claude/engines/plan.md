@@ -163,7 +163,7 @@ JSON
 | Validation only, last-mile proof | none: a `claim-prover` node |
 | Locate code | none: `code-locator` |
 
-Hand a build to the `work` tab (`engines/common.md` "Delegation").
+Notes and prose follow `engines/write.md`. Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 

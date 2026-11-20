@@ -167,6 +167,12 @@ class SetupTests(ReportsCase):
         self.assertEqual(self.setup_run().returncode, 2)
         self.assertEqual(self.creates(), [])
 
+    def test_setup_without_a_workspace_id_reports_not_inside_herdr(self) -> None:
+        del os.environ["HERDR_WORKSPACE_ID"]
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("not inside herdr", r.stderr)
+
     def test_setup_fails_naming_file_and_role_for_a_bad_policy(self) -> None:
         module = SourceFileLoader("herdr_manager_policy", str(REPO / "bin/herdr-manager")).load_module()
         policy = self.root / "policy.json"

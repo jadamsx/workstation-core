@@ -6,13 +6,10 @@ engine: plan
 params: {kind: task}
 ---
 ## When
-A bounded change that is not a defect. Reviewing a plan someone else wrote is `verify-plan`.
-
+A bounded change that is not a defect.
 ## Inputs
-A description or ticket key. A vague input starts the interview in `engines/plan.md`.
-
+A description or ticket key.
 ## Differs
-Quick when it sizes quick: a table of one or a few rows. Disciplines `tdd`, `acceptance-first`, `refactor` or `migration` on every node. Minimal v2 note: Requirements, node table with `covers`, Traceability, the back half. Notes use `notes-write`, prose `house-style`. Hand the build off per Delegation in `engines/common.md`.
-
+Quick when it sizes quick: a table of one or a few rows. Disciplines `tdd`, `acceptance-first`, `refactor` or `migration` on every node. Minimal v2 note: Requirements, node table with `covers`, Traceability, the back half.
 ## Output
 Verdict, node table, open questions, the go question.

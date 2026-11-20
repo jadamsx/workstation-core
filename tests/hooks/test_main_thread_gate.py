@@ -9,6 +9,31 @@ from pathlib import Path
 HOOK = Path(__file__).resolve().parents[2] / "claude/hooks/main-thread-gate.py"
 
 
+EDIT = ("Edit", {"file_path": "/repo/a.py"})
+COMMIT = ("Bash", {"command": "git commit -m x"})
+MARKER = 'echo "$sha $branch" > $(git rev-parse --git-dir)/verify-self-pass'
+BLOCKED = (
+    "git commit -m x", "cd r && git commit -m x", "uv run pytest -q", "python3 -m unittest discover", "pnpm test",
+    "ruff check .", "/usr/bin/pytest", "bash -c 'git commit -m x'", "sh -c 'echo hi > a.py'", "env git commit -m x",
+    "FOO=1 git commit -m x", "git -c x.y=z commit -m x", "git apply p.diff", "python3 -c 'open(\"a\",\"w\")'",
+    "perl -pi -e s/a/b/ f.py", "cp a b", "mv a b", "echo hi > src/a.py", "echo hi >> /repo/a.txt", "echo hi >| src/a.py",
+    "echo hi > /tmp/../repo/a.py", "cat > a.py <<EOF\nx\nEOF", "sed -i s/a/b/ f.py", "sed -ni p f.py",
+    "echo x | tee out.txt", "ls; touch x", "ls\ntouch x", "gh pr merge 1", "gh api -X POST /x", "touch verify-self-pass",
+    "echo x > $(git rev-parse --git-dir)/verify-self-pass; touch x",
+)
+ALLOWED = (
+    "git status && git diff | head", "git -C /r log --oneline", "git worktree list", "git commit-tree -h",
+    "rg pytest tests", "herdr pane list 2>&1", 'herdr agent prompt "a > b"', "gh pr view 1 --json n --jq '.n>1'",
+    "gh api /x", "FOO=1 ls", "sed -n 5p f", "ls > /dev/null", "echo x > $TMPDIR/a", "echo x > /tmp/a",
+    "echo x > /private/tmp/claude-1/scratchpad/a", "echo x > /home/u/drafts/p/a.md",
+    "cat <<EOF >> /home/u/notes/n.md\nx\nEOF", "echo x | tee /tmp/o",
+)
+ROWS = [(r, c, ok) for ok, cmds in ((False, BLOCKED), (True, ALLOWED)) for c in cmds for r in ("lead", "work")] + [
+    ("lead", "git push origin x", True), ("lead", MARKER, True), ("lead", "git merge x", False),
+    ("work", "git push origin x", False), ("work", MARKER, False), ("work", 'git merge -m "a > b" x', True),
+]
+
+
 class LeadGateTest(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -51,106 +76,34 @@ class LeadGateTest(unittest.TestCase):
 
     def test_other_roles_ungated(self) -> None:
         for role in ("builder", "free", ""):
-            for tool, tin in (("Edit", {"file_path": "/repo/a.py"}), ("Bash", {"command": "git commit -m x"})):
+            for tool, tin in (EDIT, COMMIT):
                 with self.subTest(role=role, tool=tool):
                     self.assertEqual(self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode, 0)
 
     def test_role_matrix(self) -> None:
-        calls = {"edit": ("Edit", {"file_path": "/repo/a.py"}), "bash": ("Bash", {"command": "git commit -m x"})}
         for role in ("lead", "work"):
-            for kind, (tool, tin) in calls.items():
-                with self.subTest(role=role, kind=kind):
+            for tool, tin in (EDIT, COMMIT):
+                with self.subTest(role=role, tool=tool):
                     blocked = self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role)
                     self.assertEqual(blocked.returncode, 2)
                     self.assertIn(f"The {role} ", blocked.stderr)
                     self.assertIn("work tab" if role == "lead" else "builder agent", blocked.stderr)
                     self.assertEqual(self.run_hook(self.pre(tool, tin, agent_id="a1"), WORKSTATION_ROLE=role).returncode, 0)
                     self.run_hook(self.prompt("main-thread-ok"), WORKSTATION_ROLE=role)
-                    lifted = self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode
-                    self.assertEqual(lifted, 0 if role == "lead" else 2)
+                    self.assertEqual(self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode, 0 if role == "lead" else 2)
                     self.run_hook(self.prompt("next"), WORKSTATION_ROLE=role)
 
-    def bash(self, cmd: str, role: str = "lead", **env: str) -> int:
-        return self.run_hook(self.pre("Bash", {"command": cmd}), WORKSTATION_ROLE=role, **env).returncode
-
-    def test_bash_blocked(self) -> None:
-        for cmd in (
-            "git commit -m x",
-            "cd r && git commit -m x",
-            "uv run pytest -q",
-            "python3 -m unittest discover",
-            "pnpm test",
-            "ruff check .",
-            "/usr/bin/pytest",
-            "bash -c 'git commit -m x'",
-            "sh -c 'echo hi > a.py'",
-            "env git commit -m x",
-            "FOO=1 git commit -m x",
-            "git -c x.y=z commit -m x",
-            "git apply p.diff",
-            "python3 -c 'open(\"a\",\"w\")'",
-            "perl -pi -e s/a/b/ f.py",
-            "cp a b",
-            "mv a b",
-            "echo hi > src/a.py",
-            "echo hi >> /repo/a.txt",
-            "echo hi >| src/a.py",
-            "echo hi > /tmp/../repo/a.py",
-            "cat > a.py <<EOF\nx\nEOF",
-            "sed -i s/a/b/ f.py",
-            "sed -ni p f.py",
-            "echo x | tee out.txt",
-            "ls; touch x",
-            "ls\ntouch x",
-            "gh pr merge 1",
-            "gh api -X POST /x",
-            "touch verify-self-pass",
-            "echo x > $(git rev-parse --git-dir)/verify-self-pass; touch x",
-        ):
-            for role in ("lead", "work"):
-                with self.subTest(cmd=cmd, role=role):
-                    self.assertEqual(self.bash(cmd, role), 2)
-
-    def test_bash_allowed(self) -> None:
-        for cmd in (
-            "git status && git diff | head",
-            "git -C /r log --oneline",
-            "git worktree list",
-            "git commit-tree -h",
-            "rg pytest tests",
-            "herdr pane list 2>&1",
-            "herdr agent prompt \"a > b\"",
-            "gh pr view 1 --json n --jq '.n>1'",
-            "gh api /x",
-            "FOO=1 ls",
-            "sed -n 5p f",
-            "ls > /dev/null",
-            "echo x > $TMPDIR/a",
-            "echo x > /tmp/a",
-            "echo x > /private/tmp/claude-1/scratchpad/a",
-            "echo x > /home/u/drafts/p/a.md",
-            "cat <<EOF >> /home/u/notes/n.md\nx\nEOF",
-            "echo x | tee /tmp/o",
-        ):
-            for role in ("lead", "work"):
-                with self.subTest(cmd=cmd, role=role):
-                    self.assertEqual(self.bash(cmd, role), 0)
-
-    def test_role_specific_bash(self) -> None:
-        marker = "echo \"$sha $branch\" > $(git rev-parse --git-dir)/verify-self-pass"
-        self.assertEqual(self.bash("git push origin x"), 0)
-        self.assertEqual(self.bash(marker), 0)
-        self.assertEqual(self.bash("git push origin x", "work"), 2)
-        self.assertEqual(self.bash(marker, "work"), 2)
-        self.assertEqual(self.bash("git merge -m \"a > b\" x", "work"), 0)
-        self.assertEqual(self.bash("git merge x"), 2)
+    def test_bash_rules(self) -> None:
+        for role, cmd, allowed in ROWS:
+            with self.subTest(role=role, cmd=cmd):
+                result = self.run_hook(self.pre("Bash", {"command": cmd}), WORKSTATION_ROLE=role)
+                self.assertEqual(result.returncode, 0 if allowed else 2)
 
     def test_unset_role_in_herdr_fails_closed(self) -> None:
-        blocked = self.run_hook(self.pre("Bash", {"command": "git commit -m x"}), WORKSTATION_ROLE="", HERDR_PANE_ID="1")
+        blocked = self.run_hook(self.pre(*COMMIT), WORKSTATION_ROLE="", HERDR_PANE_ID="1")
         self.assertEqual(blocked.returncode, 2)
         self.assertIn("WORKSTATION_ROLE=lead, work or free", blocked.stderr)
-        self.assertEqual(self.bash("git commit -m x", "free", HERDR_PANE_ID="1"), 0)
-        self.assertEqual(self.bash("git commit -m x", ""), 0)
+        self.assertEqual(self.run_hook(self.pre(*COMMIT), WORKSTATION_ROLE="free", HERDR_PANE_ID="1").returncode, 0)
 
     def test_notes_and_drafts_markdown_allowed(self) -> None:
         for path in ("/home/u/notes/a.md", "/home/u/drafts/p/plan.md"):
