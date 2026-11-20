@@ -86,7 +86,7 @@ def is_coordination_file(path: str) -> bool:
 def is_safe_target(target: str) -> bool:
     target = os.path.expanduser(target.strip("'\""))
     tmp = os.environ.get("TMPDIR", "").rstrip("/")
-    if target.startswith(SAFE_PREFIXES) or "scratchpad" in target or (tmp and target.startswith(tmp + "/")):
+    if target.startswith(SAFE_PREFIXES) or (tmp and target.startswith(tmp + "/")):
         return True
     resolved = os.path.realpath(target)
     return any(resolved.startswith(os.path.realpath(root) + "/") for root in coordination_dirs())

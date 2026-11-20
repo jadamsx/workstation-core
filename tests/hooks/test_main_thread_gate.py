@@ -101,7 +101,7 @@ class LeadGateTest(unittest.TestCase):
             "ls > /dev/null",
             "echo x > $TMPDIR/a",
             "echo x > /tmp/a",
-            "echo x > /x/scratchpad/a",
+            "echo x > /private/tmp/claude-1/scratchpad/a",
             "echo x > /home/u/drafts/p/a.md",
             "cat <<EOF >> /home/u/notes/n.md\nx\nEOF",
             "echo x | tee /tmp/o",
