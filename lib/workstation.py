@@ -38,11 +38,6 @@ BINS = (
     "current-project",
     "node-index",
     "herdr-manager",
-    "manager-start",
-    "manager-send",
-    "manager-close",
-    "herdr-report-watch",
-    "usage-gate",
     "shell-reap",
 )
 OK, MISSING, DIFFERS, DISPLACES, SKIPPED = (
@@ -413,9 +408,6 @@ class Agent(Item):
 
 def agent_items() -> list[Item]:
     if sys.platform != "darwin":
-        return []
-    if not shutil.which("herdr"):
-        print("herdr not on PATH: skipping the report watcher agent")
         return []
     return [
         Agent(

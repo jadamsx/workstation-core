@@ -1,16 +1,15 @@
 # Herdr spaces
 
-A herdr space splits one workspace into three Claude tabs so the expensive model stops re-reading big contexts. That roughly halves the cost.
+A herdr space splits one workspace into two Claude tabs so the expensive model stops re-reading big contexts. That roughly halves the cost.
 
 | Tab | Model | Job |
 | --- | --- | --- |
-| `◆ lead` | Opus | You talk to it. It plans, decides and approves |
-| `▸ work` | Sonnet | Does the work: builds, reviews and babysits, with subagents |
-| `? ask` | Haiku | Quick lookups for you only. Read-only |
+| `◆ lead` | Opus | Plans, answers the work tab's questions, runs the final whole-change check |
+| `▸ work` | Sonnet | Owns the plan: builds nodes in parallel, reviews and babysits. You can talk to it directly |
 
 ## Install
 
-Install [herdr](https://herdr.dev) yourself. It is Apache-2.0 and is not bundled. Then run `./install.sh install`. On macOS that also installs and loads the watcher (below).
+Install [herdr](https://herdr.dev) yourself. It is Apache-2.0 and is not bundled. Then run `./install.sh install`.
 
 ## Set up a space
 
@@ -20,36 +19,16 @@ Once per space, open Claude in the tab you want as lead and run:
 herdr-manager setup
 ```
 
-It registers the tab as `◆ lead`, opens `▸ work` and `? ask` after it, and leaves your own tabs after those. Run it again to repair a missing tab. `herdr-manager setup --no-work` skips `▸ work` in that space and remembers the choice (`--work` undoes it), which suits a space that uses kept, named per-project managers.
+It renames the tab `◆ lead` and opens `▸ work` after it with `WORKSTATION_LEAD_PANE` set to the lead's pane. Run it again to repair a missing `▸ work` tab.
 
 ## Daily use
 
-1. Type your work into the lead.
-2. The lead hands `/build`, reviews and `babysit` to work with `manager-send work "..."`.
-3. When work finishes, the lead gets one `[worker-report] <path>` line and reads the file.
-4. Work is cleared automatically after each done report. `/clear` is safe in any tab.
-5. Use `? ask` yourself. The lead never sends it work.
-
-`manager-start <name> --prompt "..."` opens an extra manager, only for a second parallel stream.
-
-## Restoring an archived space
-
-`workspace-archive` restores a dev space with `herdr-manager setup` already run, keeping a stored `--no-work`, and sends its lead one `[workstation]` line. If that line fails, the restore stands and the panel footer shows a warning. Read [Migrate a space](migration.md) and run `herdr-manager setup` in the lead yourself.
-
-## The watcher
-
-`herdr-report-watch` carries result files to the lead. `install.sh` renders and loads it as a launchd agent on macOS, logging to `~/Library/Logs/herdr-report-watch.log`. Elsewhere, run it yourself.
-
-The watcher also stops a shell that a Bash tool call left behind: one under a `claude` process, older than 10 minutes, whose processes have used no CPU for 10 minutes. It sends SIGTERM, then SIGKILL after 5 seconds, and a manager gets a `Status: decision` report naming the command and pid.
-Commands containing a `reaper_keep` entry in `claude/resource-policy.json` (`docker`, `kubectl`, `tail -f` by default) are never stopped.
-
-The watcher also prompts the lead when a ready node sits unstarted over 2 minutes or waits on a shell over 10 minutes.
+1. Plan with the lead.
+2. To build, the lead clears the work tab and hands it the plan with a plain `herdr agent prompt`.
+3. Work starts a `/loop`, pushes every ready node in parallel and asks the lead only for a decision beyond the plan.
+4. When every node is green, work sends the lead `done, check <plan path>` and the lead runs the final `/verify-self`.
 
 ## Troubleshooting
 
 - Startup prompts are answered for you: folder trust and external `CLAUDE.md` imports, only under the lead's folder. Anywhere else, run `claude` there once to trust it.
-- `herdr-manager keep <name>` marks a manager as a long-lived named worker: its reports still arrive, but the watcher never closes or clears it and you close it yourself.
-- `herdr-manager list` shows each manager, whether its pane is alive, and its newest report.
-- `[watcher] <name> looks stuck: <reason>` means a manager with an open job and no live background shell sat silent for 10 minutes, showed a permission prompt, or kept hitting one guard. Kick it.
-
-[Managers](../reference/managers.md) lists every command.
+- To stop a stuck shell, run `shell-reap <pid>`, never `kill`.

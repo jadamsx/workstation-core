@@ -11,7 +11,7 @@ Any plan before a build. `kind` is story (default), task, bug, epic, fix or spik
 A ticket key, epic brief, description, plan note, symptom, change URL or question. A vague input starts the interview in `engines/plan.md`; ask for a missing key or reproduction once.
 
 ## Differs
-All kinds: notes are written with `notes-write`, prose with `house-style`, and the build is handed off per Handoff in `engines/common.md`.
+All kinds: notes are written with `notes-write`, prose with `house-style`, and the build is handed off per Delegation in `engines/common.md`.
 
 - story: reads the ticket as in `engines/plan-epic.md` "Read what was asked for", scoped to this story, plus design frames if the project has them. "Draw the flow" only when a boundary moves (`diagrams`). The note is v2 in full; domain checklists your team registers join `checklists/design.md`. Sizes quick: follow task.
 - task: a bounded change that is not a defect. Quick when it sizes quick: a table of one or a few rows. Disciplines `tdd`, `acceptance-first`, `refactor` or `migration` on every node. Minimal v2 note: Requirements, node table with `covers`, Traceability, the back half.

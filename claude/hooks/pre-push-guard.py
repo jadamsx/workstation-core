@@ -3,9 +3,10 @@
 
 Pushing a branch or opening a change (`gh pr create`, `glab mr create`) also needs the
 ``verify-self-pass`` marker in the git dir to name the current HEAD; /verify-self writes it.
-Deletes and tag-only pushes are exempt. Then runs pre-commit on the diff, then inspects the branch's open change (`gh` or `glab`): a missing ticket key
-when the hooks.d ``change`` rules ask for one, leftover template placeholder text,
-and a change that is already approved, because pushing resets approval and re-runs review and CI.
+Deletes and tag-only pushes are exempt. Then runs pre-commit on the diff, then inspects the
+branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
+ask for one, leftover template placeholder text, and a change that is already approved,
+because pushing resets approval and re-runs review and CI.
 """
 
 from __future__ import annotations
@@ -32,6 +33,10 @@ PLACEHOLDERS = (
 )
 REOPEN_MARKERS = ("--reopen-review", "REOPEN_REVIEW")
 MARKER = "verify-self-pass"
+HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
+ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
+PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
+GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 
 
 def block(reason: str, fix: str) -> None:
@@ -39,29 +44,73 @@ def block(reason: str, fix: str) -> None:
     sys.exit(2)
 
 
-def is_git_push(command: str) -> bool:
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        parts = command.split()
-    return "git" in parts and "push" in parts
+def command_parts(command: str) -> list[list[str]]:
+    """Token lists of each command in the text, heredoc bodies dropped and quoted text kept whole."""
+    parts, buf, quote, i = [], "", "", 0
+    text = HEREDOC.sub("", command)
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and quote != "'":
+            buf += text[i : i + 2]
+            i += 2
+            continue
+        if quote:
+            quote = "" if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch in ";&|()\n":
+            parts.append(buf)
+            buf = ""
+            i += 1
+            continue
+        buf += ch
+        i += 1
+    parts.append(buf)
+    result = []
+    for part in parts:
+        try:
+            tokens = shlex.split(part)
+        except ValueError:
+            tokens = part.split()
+        while tokens and (ENV_ASSIGN.match(tokens[0]) or tokens[0] in PREFIXES):
+            tokens = tokens[1:]
+        if tokens and os.path.basename(tokens[0]) in ("bash", "sh") and "-c" in tokens[:-1]:
+            result.extend(command_parts(tokens[tokens.index("-c") + 1]))
+        elif tokens:
+            result.append(tokens)
+    return result
+
+
+def git_subcommand(tokens: list[str]) -> tuple[str, list[str]]:
+    if os.path.basename(tokens[0]) != "git":
+        return "", []
+    i = 1
+    while i < len(tokens):
+        if tokens[i] in GIT_OPTIONS_WITH_VALUE:
+            i += 2
+        elif tokens[i].startswith("-"):
+            i += 1
+        else:
+            return tokens[i], tokens[i + 1 :]
+    return "", []
+
+
+def push_args(command: str) -> list[str] | None:
+    for tokens in command_parts(command):
+        sub, args = git_subcommand(tokens)
+        if sub == "push":
+            return args
+    return None
 
 
 def opens_change(command: str) -> bool:
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        parts = command.split()
-    pairs = list(zip(parts, parts[1:], parts[2:]))
-    return ("gh", "pr", "create") in pairs or ("glab", "mr", "create") in pairs
+    return any(
+        tuple(tokens[:3]) in (("gh", "pr", "create"), ("glab", "mr", "create"))
+        for tokens in command_parts(command)
+    )
 
 
-def is_exempt_push(command: str) -> bool:
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        parts = command.split()
-    args = parts[parts.index("push") + 1 :]
+def is_exempt_push(args: list[str]) -> bool:
     return any(
         a in ("--delete", "-d", "--tags", "tag") or a.startswith("refs/tags/")
         for a in args
@@ -215,11 +264,12 @@ def main() -> None:
         sys.exit(0)
 
     command = payload.get("tool_input", {}).get("command", "")
-    pushing = is_git_push(command)
+    args = push_args(command)
+    pushing = args is not None
     if not (pushing or opens_change(command)):
         sys.exit(0)
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
-    if not (pushing and is_exempt_push(command)):
+    if not (pushing and is_exempt_push(args)):
         check_self_verified(cwd)
     if not pushing or any(marker in command for marker in REOPEN_MARKERS):
         sys.exit(0)

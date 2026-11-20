@@ -2,10 +2,6 @@
   "roles": {
     "work": [
       "playwright"
-    ],
-    "ask": [],
-    "manager": [
-      "playwright"
     ]
   },
   "test_workers": {
@@ -18,13 +14,5 @@
     "stacks_per_session": 1,
     "stop_when_done": true
   },
-  "watchers": {
-    "per_space": 1
-  },
-  "reaper_keep": [
-    "docker",
-    "kubectl",
-    "tail -f"
-  ],
   "build_concurrency_cap": 6
 }

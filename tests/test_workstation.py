@@ -139,7 +139,6 @@ class AgentTest(ScratchCase):
             f"case $1 in print) [ -e {loaded} ];; bootstrap) touch {loaded};; "
             f"bootout) rm -f {loaded};; esac\n"
         )
-        (bindir / "herdr").write_text("#!/bin/sh\n")
         for f in bindir.iterdir():
             f.chmod(0o755)
         patcher = mock.patch.dict(
@@ -154,17 +153,23 @@ class AgentTest(ScratchCase):
             self.ws.ROOT,
             ignore=shutil.ignore_patterns(".git", "worktrees", "__pycache__"),
         )
+        (self.ws.ROOT / "launchd").mkdir()
+        (self.ws.ROOT / "launchd/dev.workstation.test-job.plist").write_text(
+            "<plist><dict><key>Label</key><string>dev.workstation.test-job</string>"
+            "<key>ProgramArguments</key><array><string>__ROOT__/bin/shot</string></array>"
+            "<key>StandardOutPath</key><string>__HOME__/test-job.log</string></dict></plist>"
+        )
         self.plist = (
-            self.home / "Library/LaunchAgents/dev.workstation.herdr-report-watch.plist"
+            self.home / "Library/LaunchAgents/dev.workstation.test-job.plist"
         )
 
     def launchctl_calls(self) -> list[str]:
         return self.calls.read_text().splitlines() if self.calls.exists() else []
 
-    def test_install_renders_and_loads_the_watcher(self) -> None:
+    def test_install_renders_and_loads_the_agent(self) -> None:
         run_quiet(self.ws.cmd_install, False)
         text = self.plist.read_text()
-        self.assertIn(f"{self.ws.ROOT}/bin/herdr-report-watch", text)
+        self.assertIn(f"{self.ws.ROOT}/bin/shot", text)
         self.assertIn(str(self.home), text)
         self.assertNotIn("__ROOT__", text)
         self.assertNotIn("__HOME__", text)
@@ -196,12 +201,12 @@ class AgentTest(ScratchCase):
 
     def test_changed_program_is_kickstarted(self) -> None:
         run_quiet(self.ws.cmd_install, False)
-        self.change("bin/herdr-report-watch")
+        self.change("bin/shot")
         out = run_quiet(self.ws.cmd_install, False)
         self.assertIn("restart agent", out)
         self.assertEqual(
             self.kickstarts(),
-            [f"kickstart -k gui/{os.getuid()}/dev.workstation.herdr-report-watch"],
+            [f"kickstart -k gui/{os.getuid()}/dev.workstation.test-job"],
         )
 
     def test_changed_lib_is_kickstarted(self) -> None:
@@ -217,7 +222,7 @@ class AgentTest(ScratchCase):
 
     def test_missing_stamp_is_written_without_restart(self) -> None:
         run_quiet(self.ws.cmd_install, False)
-        stamp = self.home / ".local/state/workstation/dev.workstation.herdr-report-watch.sha256"
+        stamp = self.home / ".local/state/workstation/dev.workstation.test-job.sha256"
         stamp.unlink()
         run_quiet(self.ws.cmd_install, False)
         self.assertTrue(stamp.exists())
@@ -225,7 +230,7 @@ class AgentTest(ScratchCase):
 
     def test_check_mode_does_not_kickstart(self) -> None:
         run_quiet(self.ws.cmd_install, False)
-        self.change("bin/herdr-report-watch")
+        self.change("bin/shot")
         out = run_quiet(self.ws.cmd_install, True)
         self.assertIn("would restart agent", out)
         self.assertEqual(self.kickstarts(), [])
@@ -233,7 +238,7 @@ class AgentTest(ScratchCase):
     def test_uninstall_removes_the_stamp(self) -> None:
         run_quiet(self.ws.cmd_install, False)
         run_quiet(self.ws.cmd_uninstall, False)
-        stamp = self.home / ".local/state/workstation/dev.workstation.herdr-report-watch.sha256"
+        stamp = self.home / ".local/state/workstation/dev.workstation.test-job.sha256"
         self.assertFalse(stamp.exists())
 
     def test_uninstall_boots_out_and_removes_the_plist(self) -> None:
@@ -241,16 +246,9 @@ class AgentTest(ScratchCase):
         run_quiet(self.ws.cmd_uninstall, False)
         self.assertFalse(self.plist.exists())
         self.assertIn(
-            f"bootout gui/{os.getuid()}/dev.workstation.herdr-report-watch",
+            f"bootout gui/{os.getuid()}/dev.workstation.test-job",
             self.launchctl_calls(),
         )
-
-    def test_skipped_when_herdr_is_missing(self) -> None:
-        (self.tmp / "fakebin" / "herdr").unlink()
-        with mock.patch.object(self.ws.shutil, "which", return_value=None):
-            out = run_quiet(self.ws.cmd_install, False)
-        self.assertIn("herdr not on PATH", out)
-        self.assertFalse(self.plist.exists())
 
 
 class SettingsApplyTest(ScratchCase):
@@ -325,19 +323,12 @@ class BaseSettingsTest(unittest.TestCase):
 
     def test_destructive_git_stays_denied(self) -> None:
         deny = self.base["permissions"]["deny"]
-        for rule in ("Bash(git stash)", "Bash(git stash push*)", "Bash(git stash pop*)", "Bash(git restore *)", "Bash(git checkout -- *)"):
+        for rule in ("Bash(git push --force*)", "Bash(git reset --hard*)", "Bash(git clean *)", "Read(~/.ssh/**)", "Read(~/.aws/**)", "Bash(docker system prune*)"):
             self.assertIn(rule, deny)
-        self.assertIn("Read(~/.ssh/**)", deny)
-        self.assertNotIn("Bash(git stash*)", deny)
-        for rule in ("Bash(git stash list*)", "Bash(git stash show*)"):
-            self.assertIn(rule, self.base["permissions"]["allow"])
-        for rule in ("Bash(git push * -f*)", "Bash(git push *+*)", "Bash(git * reset --hard*)", "Bash(git * clean *)", "Bash(git checkout .*)", "Bash(git -c *=*)", "Bash(git config *core.sshCommand*)", "Bash(git push --delete*)", "Bash(git push -f*)", "Bash(gh repo delete*)", "Bash(gh auth *)", "Bash(launchctl submit*)"):
-            self.assertIn(rule, deny)
+        self.assertNotIn("Bash(git -c *=*)", deny)
 
-    def test_remote_branch_pushes_and_api_deletes_ask(self) -> None:
-        ask = self.base["permissions"]["ask"]
-        for rule in ("Bash(git push *:main*)", "Bash(git push *:master*)", "Bash(git push *:develop*)", "Bash(gh api * -X DELETE*)"):
-            self.assertIn(rule, ask)
+    def test_only_mr_merge_asks(self) -> None:
+        self.assertEqual(self.base["permissions"]["ask"], ["Bash(glab mr merge*)"])
 
     def test_git_hooks_are_not_writable_in_the_sandbox(self) -> None:
         self.assertIn("**/.git/hooks", self.base["sandbox"]["filesystem"]["denyWrite"])

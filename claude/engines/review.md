@@ -141,13 +141,13 @@ git -C $WT/head rev-parse HEAD   # MUST equal the head SHA
 
 Hunt lanes follow `checklists/review-core.md` numbers: `cold-reviewer` §0, 1 (not proportional abstraction), 2, 8, 9, 10-15, 17; `clean-code` §3-6; `test-gap-auditor` §7, 16.
 
-On others' changes `test-gap-auditor` trusts a green CI run and runs nothing; mutation only for trust-boundary guards, at most 5 mutants and 10 minutes, on a scratch copy. `finding-refuter` may run one targeted test, capped at 5 minutes; otherwise its ruling is partial. In `self`, mutation and tests stay. One exchange per disagreement, then it goes to the coordinator in the report with both positions.
+On others' changes `test-gap-auditor` trusts a green CI run and runs nothing; mutation only for trust-boundary guards, at most 5 mutants and 10 minutes, on a scratch copy. `finding-refuter` may run one targeted test, capped at 5 minutes; otherwise its ruling is partial. In `self`, mutation and tests stay. One exchange per disagreement, then it goes to the lead with both positions.
 
 ## Briefing
 
 Every agent gets the diff, the full ticket, repo path, its `CLAUDE.md`, any decision record that applies and, on a change, the pinned worktree paths and SHAs, all as files in the scratch dir. Never the author's or main thread's reasoning, the plan, earlier rounds' findings, other agents' findings, or the change's threads. `cold-reviewer`, `clean-code` and `test-gap-auditor` also get the claims ledger and description. `finding-refuter` gets the findings to refute and the ledger; in fix-check mode the previous confirmed findings and the fix delta.
 
-Decisions: code reviewers of our own work (`self`, node review, a change of ours) also get `decisions.md`, the plan's `Decided:` lines only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the coordinator once as "decision X may be wrong because Y". Each ruling the coordinator or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
+Decisions: code reviewers of our own work (`self`, node review, a change of ours) also get `decisions.md`, the plan's `Decided:` lines only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the lead once as "decision X may be wrong because Y". Each ruling the lead or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
 
 ## Scratch dir
 

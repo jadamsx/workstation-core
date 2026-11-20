@@ -1,4 +1,4 @@
-"""Paths and herdr calls shared by herdr-manager, herdr-report-watch and the manager-* commands."""
+"""Paths and herdr calls shared by herdr-manager and shell-reap."""
 import json
 import os
 import re
@@ -8,12 +8,9 @@ import time
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 LEAD_TAB = "◆ lead"
-MANAGER_TAB = "▸ "
-ASK_TAB = "? ask"
+WORK_TAB = "▸ work"
 TRUST_DIALOG = "Is this a project you created or one you trust?"
-IDLE_STATES = {"idle", "done"}
 NO_STDIN_ENV = ("GIT_TERMINAL_PROMPT=0", "PAGER=cat", "GIT_PAGER=cat", "GIT_EDITOR=true")
 INPUT_BOX = re.compile(r"\? for shortcuts|^[│ ]*[>❯]\s", re.M)
 
@@ -69,70 +66,6 @@ def write_atomic(path: Path, text: str) -> None:
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(text)
     os.replace(tmp, path)
-
-
-def work_enabled(space: Path) -> bool:
-    """False only when the space's setup.json says `"work": false`; a missing file means the work tab is on."""
-    path = space / "setup.json"
-    if not path.exists():
-        return True
-    try:
-        return bool(json.loads(path.read_text()).get("work", True))
-    except (ValueError, AttributeError) as err:
-        raise ReportsError(f"corrupt {path}: {err}") from err
-
-
-def pane_states() -> dict[str, str] | None:
-    """Agent status by pane id as herdr reports it now, or None when herdr cannot be asked."""
-    try:
-        return {p["pane_id"]: p.get("agent_status", "unknown") for p in herdr("pane", "list").get("panes", [])}
-    except (subprocess.CalledProcessError, OSError, ValueError, KeyError):
-        return None
-
-
-def live_panes() -> set[str] | None:
-    """Pane ids herdr reports now, or None when herdr cannot be asked."""
-    states = pane_states()
-    return None if states is None else set(states)
-
-
-def managed_shell_pids() -> set[int]:
-    """Pids of the login shells in lead and manager tabs (the work tab included), the only panes whose claude may be reaped."""
-    tabs = {t["tab_id"] for t in herdr("tab", "list").get("tabs", []) if t.get("label", "") == LEAD_TAB or t.get("label", "").startswith(MANAGER_TAB)}
-    panes = [p["pane_id"] for p in herdr("pane", "list").get("panes", []) if p.get("tab_id") in tabs]
-    return {pid for pane in panes if (pid := herdr("pane", "process-info", "--pane", pane).get("process_info", {}).get("shell_pid"))}
-
-
-def manager_folder(name: str) -> Path:
-    folder = space_dir() / name
-    if not (folder / "manager.json").exists():
-        raise ReportsError(f"no manager named {name!r} in this space")
-    return folder
-
-
-def close_manager(folder: Path) -> None:
-    """Close the manager's tab and mark it closed so the watcher and repair leave it alone."""
-    info = json.loads((folder / "manager.json").read_text())
-    if info.get("closed"):
-        return
-    try:
-        herdr("tab", "close", info["tab_id"])
-    except subprocess.CalledProcessError:
-        live = live_panes()
-        if live is None:
-            raise ReportsError(f"herdr is unreachable, {info['pane_id']} not marked closed")
-        if info["pane_id"] in live:
-            raise
-    write_atomic(folder / "manager.json", json.dumps({**info, "closed": True}))
-
-
-def read_manager(folder: Path) -> dict:
-    return json.loads((folder / "manager.json").read_text())
-
-
-def is_done(result: Path) -> bool:
-    """True when the report's first non-blank line is `Status: done`, as the report-format guard reads it."""
-    return result.read_text().lstrip("\n").split("\n", 1)[0].strip() == "Status: done"
 
 
 class Proc(NamedTuple):

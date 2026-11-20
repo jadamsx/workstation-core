@@ -11,7 +11,7 @@ Comments pasted in, or a change whose threads need judging before anything chang
 The comments, or the change URL (its unresolved threads are fetched).
 
 ## Differs
-- A coordinator hands this to the work tab per Handoff in `engines/common.md`.
+- The lead hands this to the work tab as described in `engines/common.md`.
 - Rounds follow `engines/review.md` "Round shapes".
 - Changes nothing and replies to nothing; resolving threads is the owner's call, and only fixed ones.
 - Load `house-style` before writing the report.

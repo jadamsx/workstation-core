@@ -1,5 +1,3 @@
-import importlib.machinery
-import importlib.util
 import json
 import os
 import subprocess
@@ -122,7 +120,9 @@ class CommitGuardTest(unittest.TestCase):
 
 
 class PushGuardTest(unittest.TestCase):
-    def push(self, change_json: str, tool: str = "gh") -> subprocess.CompletedProcess:
+    def push(
+        self, change_json: str, tool: str = "gh", command: str = "git push"
+    ) -> subprocess.CompletedProcess:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -147,7 +147,7 @@ class PushGuardTest(unittest.TestCase):
                 {
                     "tool_name": "Bash",
                     "cwd": str(repo),
-                    "tool_input": {"command": "git push"},
+                    "tool_input": {"command": command},
                 }
             ),
         )
@@ -181,6 +181,29 @@ class PushGuardTest(unittest.TestCase):
 
     def test_no_open_change_allowed(self) -> None:
         self.assertEqual(self.push("{}").returncode, 0)
+
+    def test_heredoc_and_quoted_push_words_allowed(self) -> None:
+        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
+        for command in (
+            "cat > notes.md <<'EOF'\ngit push origin main\nEOF",
+            'git commit -m "docs: explain git push"',
+            "echo 'git push' | wc -c",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.push(approved, command=command).returncode, 0)
+
+    def test_real_push_still_gated_in_a_command_chain(self) -> None:
+        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
+        for command in (
+            "git push",
+            "cd . && git -C . push origin b",
+            "FOO=1 git push; ls",
+            "sudo git push",
+            "env git push",
+            'bash -c "git push"',
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.push(approved, command=command).returncode, 2)
 
 
 class SharedEnvGuardTest(unittest.TestCase):
@@ -325,100 +348,34 @@ class RmGuardTest(unittest.TestCase):
         self.assertEqual(decision["permissionDecision"], "allow")
         self.assertEqual(self.bash(RM_RF + " dist", escape=True).returncode, 2)
 
+    def test_force_push_and_hard_reset_blocked(self) -> None:
+        for cmd in [
+            "git push --force origin b",
+            "git -C repo push -f",
+            "git push origin +b",
+            "git reset --" + "hard HEAD~1",
+            "(git push -f)",
+            'bash -c "git push -f"',
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd).returncode, 2)
+
+    def test_plain_push_and_soft_reset_allowed(self) -> None:
+        quoted = 'git commit -m "fix\ngit reset --' + 'hard is blocked\nok"'
+        for cmd in [
+            "git push origin b",
+            "git reset --soft HEAD~1",
+            "cat <<EOF\ngit push -f\nEOF",
+            quoted,
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd).returncode, 0)
+
     def test_non_bash_tool_ignored(self) -> None:
         result = run_hook(
             "rm-guard.py", {"tool_name": "Read", "tool_input": {"command": RM_RF + " /"}}
         )
         self.assertEqual(result.returncode, 0)
-
-
-class ProtectedWriteTest(unittest.TestCase):
-    def write(self, path: str, tool: str = "Write", **payload: object) -> subprocess.CompletedProcess:
-        key = "notebook_path" if tool == "NotebookEdit" else "file_path"
-        return run_hook(
-            "main-thread-gate.py",
-            {"tool_name": tool, "tool_input": {key: path}, **payload},
-            {"WORKSTATION_ROLE": "manager"},
-        )
-
-    def test_protected_paths_denied_for_every_caller(self) -> None:
-        home = str(Path.home())
-        for path in [
-            "/r/.git/hooks/pre-commit",
-            "/r/.husky/pre-commit",
-            f"{home}/.config/git/ignore",
-            f"{home}/.zshrc",
-            f"{home}/.pre-commit-config.yaml",
-            f"{home}/.npmrc",
-            "/r/.claude/settings.json",
-            f"{home}/.claude/hooks/x.py",
-            "/r/wt/.git",
-        ]:
-            for tool in ("Write", "Edit", "MultiEdit"):
-                for extra in ({}, {"agent_id": "a1"}):
-                    result = self.write(path, tool, **extra)
-                    self.assertEqual(result.returncode, 2, (tool, path))
-                    self.assertIn(path, result.stderr)
-                    self.assertIn("decision report", result.stderr)
-        self.assertEqual(self.write(f"{Path.home()}/.mcp.json", "NotebookEdit").returncode, 2)
-
-    def test_protected_files_only_directly_under_home(self) -> None:
-        for path in ["/r/.pre-commit-config.yaml", "/r/.npmrc", "/r/.envrc", "/r/sub/.zshrc"]:
-            self.assertEqual(self.write(path, agent_id="a1").returncode, 0, path)
-        self.assertEqual(self.write("/r/.husky/pre-commit").returncode, 2)
-
-    def test_case_variants_denied(self) -> None:
-        home = str(Path.home())
-        for path in [f"{home}/.ZSHRC", "/r/.GIT/hooks/x", "/r/.Claude/settings.json", "/r/.CLAUDE/Plans/a/b.md"]:
-            self.assertEqual(self.write(path).returncode, 2, path)
-        self.assertEqual(self.write("/r/.Claude/Worktrees/x/y.py").returncode, 0)
-
-    def test_relative_and_symlinked_paths_resolved(self) -> None:
-        self.assertEqual(self.write(".git/hooks/x", cwd="/r").returncode, 2)
-        self.assertEqual(self.write("settings.json", cwd="/r/.claude").returncode, 2)
-        self.assertEqual(self.write("src/a.py", cwd="/r").returncode, 0)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / ".git").mkdir()
-            (root / "link").symlink_to(root / ".git")
-            worktree = root / ".claude/worktrees/w"
-            worktree.mkdir(parents=True)
-            (worktree / "up").symlink_to(root / ".claude")
-            for path in (root / "link/hooks/x", worktree / "up/settings.json"):
-                self.assertEqual(self.write(str(path)).returncode, 2, path)
-
-    def test_claude_exemptions_are_single_segment(self) -> None:
-        home = str(Path.home())
-        for path in [
-            f"{home}/.claude/plans/a/b.md",
-            f"{home}/.claude/projects/p/q/memory/m.md",
-            f"{home}/.claude/projects/p/memory/s/m.md",
-            f"{home}/.claude/projects/p/memory/m.txt",
-            "/r/.claude/agent-memory/s/a.md",
-            "/r/.claude/worktrees",
-            "/r/.claude/worktrees/x/.git/hooks/y",
-            "/r/.claude/worktrees/x/.claude/settings.json",
-        ]:
-            self.assertEqual(self.write(path, agent_id="a1").returncode, 2, path)
-
-    def test_unexpected_error_fails_closed(self) -> None:
-        result = run_hook(
-            "main-thread-gate.py",
-            {"tool_name": "Write", "tool_input": {"file_path": 5}},
-            {"WORKSTATION_ROLE": "manager"},
-        )
-        self.assertEqual(result.returncode, 2)
-
-    def test_worktrees_and_core_claude_dir_allowed(self) -> None:
-        home = str(Path.home())
-        for path in [
-            "/r/.claude/worktrees/x/claude/hooks/x.py",
-            "/r/claude/hooks/x.py",
-            f"{home}/.claude/plans/p.md",
-            f"{home}/.claude/projects/p/memory/m.md",
-            "/r/.claude/agent-memory/a.md",
-        ]:
-            self.assertEqual(self.write(path, agent_id="a1").returncode, 0, path)
 
 
 class AgentModelGateTest(unittest.TestCase):
@@ -765,304 +722,6 @@ class SelfVerifyGateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class OwnsGuardTest(unittest.TestCase):
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.repo = Path(tmp.name).resolve()
-        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
-        (self.repo / "src").mkdir()
-        (self.repo / "src/a.py").write_text("a = 1\n")
-        (self.repo / "b.py").write_text("b = 1\n")
-        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
-        subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
-            cwd=self.repo,
-            check=True,
-        )
-        self.owns("node: N1\nowns: src\n")
-
-    def owns(self, text: str) -> None:
-        (self.repo / ".owns").write_text(text)
-
-    def run_command(self, command: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-        return run_hook(
-            "pre-commit-guard.py",
-            {"tool_name": "Bash", "cwd": str(cwd or self.repo), "tool_input": {"command": command}},
-        )
-
-    def assert_blocked(self, *commands: str) -> None:
-        for command in commands:
-            self.assertEqual(self.run_command(command).returncode, 2, command)
-
-    def test_staged_path_outside_owns_blocked(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        subprocess.run(["git", "add", "b.py"], cwd=self.repo, check=True)
-        result = self.run_command('git commit -m "x"')
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("b.py", result.stderr)
-
-    def test_quoted_commit_text_is_not_a_commit(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        subprocess.run(["git", "add", "b.py"], cwd=self.repo, check=True)
-        for command in ('echo "run git commit -am x later"', "rg 'git commit' docs", 'gh issue create --body "then git commit"'):
-            self.assertEqual(self.run_command(command).returncode, 0, command)
-        self.assert_blocked('bash -c "git commit -m x"')
-
-    def test_staged_path_inside_owns_allowed(self) -> None:
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        subprocess.run(["git", "add", "src/a.py"], cwd=self.repo, check=True)
-        self.assertEqual(self.run_command('git commit -m "x"').returncode, 0)
-
-    def test_add_in_the_same_call_is_counted(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assertEqual(self.run_command('git add b.py && git commit -m "x"').returncode, 2)
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        self.assertEqual(self.run_command('git add src && git commit -m "x"').returncode, 0)
-
-    def test_commit_all_counts_modified_tracked_files(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assertEqual(self.run_command('git commit -am "x"').returncode, 2)
-        self.assertEqual(self.run_command('git commit -a -m "x"').returncode, 2)
-
-    def test_lockfile_passes(self) -> None:
-        (self.repo / "uv.lock").write_text("x\n")
-        self.assertEqual(self.run_command('git add uv.lock && git commit -m "x"').returncode, 0)
-
-    def test_legacy_passes(self) -> None:
-        self.owns("node: N1\nowns: src\nlegacy: true\n")
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assertEqual(self.run_command('git commit -am "x"').returncode, 0)
-
-    def test_no_owns_file_passes(self) -> None:
-        (self.repo / ".owns").unlink()
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assertEqual(self.run_command('git commit -am "x"').returncode, 0)
-
-    def test_owns_without_owns_line_fails_closed(self) -> None:
-        self.owns("node: N1\n")
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        self.assertEqual(self.run_command('git commit -am "x"').returncode, 2)
-
-    def test_scope_grew_override_logged_in_owns(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        result = self.run_command(': scope-grew; git commit -am "x"')
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("scope-grew: b.py", (self.repo / ".owns").read_text())
-
-    def test_scope_grew_in_message_comment_or_path_does_not_override(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assert_blocked(
-            'git commit -am "scope-grew"',
-            'git commit -am x # scope-grew',
-            "git commit -am x scope-grew",
-        )
-
-    def test_commit_pathspecs_outside_owns_blocked(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assert_blocked(
-            "git commit b.py -m x",
-            "git commit -m x -- b.py",
-            "git commit --only b.py -m x",
-            "git commit --include b.py -m x",
-            "git commit --amend --no-edit b.py",
-            "git commit -m x b.py",
-        )
-
-    def test_other_staging_commands_blocked(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        (self.repo / "p.diff").write_text("")
-        self.assert_blocked(
-            "git rm b.py && git commit -m x",
-            "git mv b.py c.py && git commit -m x",
-            "git stage b.py && git commit -m x",
-            "git update-index --add b.py && git commit -m x",
-            "git apply --cached p.diff && git commit -m x",
-            "git checkout HEAD -- b.py && git commit -m x",
-        )
-
-    def test_index_staged_by_an_earlier_call_blocked(self) -> None:
-        subprocess.run(["git", "rm", "-q", "b.py"], cwd=self.repo, check=True)
-        self.assert_blocked("git commit -m x", "git commit --amend --no-edit")
-
-    def test_unparseable_commit_command_fails_closed(self) -> None:
-        self.assert_blocked('git commit -m "oops', "git commit -m it's", "git commit -m x \\")
-
-    def test_heredoc_commit_inside_owns_passes(self) -> None:
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        command = "git add src && git commit -m \"$(cat <<'EOF'\nit's done\n\nbody\nEOF\n)\""
-        self.assertEqual(self.run_command(command).returncode, 0)
-
-    def test_subshell_and_bash_c_are_followed(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assert_blocked(
-            "(git add b.py && git commit -m x)",
-            "{ git add b.py; git commit -m x; }",
-            'bash -c "git add b.py && git commit -m x"',
-            "bash -lc 'git add b.py && git commit -m x'",
-            "zsh -ic 'git add b.py && git commit -m x'",
-        )
-
-    def test_pathspec_from_file_cannot_be_verified(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        (self.repo / "list").write_text("b.py\n")
-        self.assert_blocked(
-            "git commit -m x --pathspec-from-file=list",
-            "git commit -m x --pathspec-from-file list",
-            "git commit -m x --pathspec-from-file=list --pathspec-file-nul",
-        )
-
-    def test_absent_lockfile_in_add_does_not_block(self) -> None:
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        self.assertEqual(self.run_command("git add uv.lock src; git commit -m x").returncode, 0)
-
-    def test_git_dash_c_and_subdirectory_cwd(self) -> None:
-        (self.repo / "b.py").write_text("b = 2\n")
-        self.assertEqual(
-            self.run_command(f"git -C {self.repo} add b.py && git commit -m x", self.repo / "src").returncode, 2
-        )
-        self.assertEqual(self.run_command("git add ../b.py && git commit -m x", self.repo / "src").returncode, 2)
-
-    def test_redirects_are_ignored_and_owns_file_is_exempt(self) -> None:
-        (self.repo / "src/a.py").write_text("a = 2\n")
-        self.assertEqual(self.run_command("git add -A >/dev/null 2>&1 && git commit -m x").returncode, 0)
-
-
-class ReportDoneCheckTest(unittest.TestCase):
-    def write(self, content: str) -> subprocess.CompletedProcess:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        folder = Path(tmp.name).resolve()
-        return run_hook(
-            "report-format-guard.py",
-            {"tool_name": "Write", "tool_input": {"file_path": str(folder / "result-1.md"), "content": content}},
-            {"WORKSTATION_REPORTS": str(folder)},
-        )
-
-    def test_done_report_needs_done_check(self) -> None:
-        result = self.write("Status: done\nbluf\n")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Done-check:", result.stderr)
-
-    def test_done_check_forms_pass(self) -> None:
-        for line in ("Done-check: pass", "Done-check: deviation 65b0c2d"):
-            self.assertEqual(self.write(f"Status: done\nbluf\n{line}\n").returncode, 0, line)
-
-    def test_done_check_n_a_passes_only_in_its_exact_form(self) -> None:
-        self.assertEqual(self.write("Status: done\nbluf\nDone-check: n/a (no diff)\n").returncode, 0)
-        self.assertEqual(self.write("Status: done\nbluf\nDone-check: n/a\n").returncode, 2)
-
-    def test_done_check_deviation_needs_a_sha(self) -> None:
-        self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation\n").returncode, 2)
-
-    def test_decision_report_needs_no_done_check(self) -> None:
-        self.assertEqual(self.write("Status: decision\nbluf\n").returncode, 0)
-
-    def test_round_cap_forms_and_short_sha_refused(self) -> None:
-        for line in ("Round: 4 of 4", "round: 5", "Round:4 of 3", "Round 4 of 3", "- Round: 4", "**Round:** 4 of 3"):
-            self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 2, line)
-        self.assertEqual(self.write("Status: done\nbluf\nDone-check: deviation abc123\n").returncode, 2)
-
-    def test_round_in_prose_passes(self) -> None:
-        for line in ("bench round 12 ms", "round 4 refused"):
-            self.assertEqual(self.write(f"Status: decision\nbluf\n{line}\n").returncode, 0, line)
-
-    def test_fourth_round_refused(self) -> None:
-        result = self.write("Status: decision\nbluf\nRound: 4 of 3\n")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("round", result.stderr.lower())
-        self.assertEqual(self.write("Status: decision\nbluf\nRound: 3 of 3\n").returncode, 0)
-
-
-class ManagerSendOwnsTest(unittest.TestCase):
-    PLAN = (
-        "- size: full; plan kind: epic{legacy}\n\n"
-        "| Node | Agent | Discipline | Owns | Wave |\n"
-        "| N1 Hooks | builder | tdd | core: `bin/x`, `lib/y.py`; company: `z/w.md` | 4 |\n\n"
-        "- Decided: one thing (sample).\n- Standing: keep it simple.\n{notbuilding}"
-    )
-
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
-        path = Path(__file__).resolve().parents[2] / "bin/manager-send"
-        loader = importlib.machinery.SourceFileLoader("manager_send", str(path))
-        spec = importlib.util.spec_from_loader("manager_send", loader)
-        self.module = importlib.util.module_from_spec(spec)
-        loader.exec_module(self.module)
-
-    def send(self, plan: str, node: str = "N1") -> Path:
-        note = self.root / "plan.md"
-        note.write_text(plan)
-        tree = self.root / "tree"
-        tree.mkdir(exist_ok=True)
-        subprocess.run(["git", "init", "-q"], cwd=tree, check=True)
-        self.module.write_owns(f"/build {note} node {node} worktree {tree}")
-        return tree / ".owns"
-
-    def plan(self, legacy: bool = False, notbuilding: bool = True) -> str:
-        return self.PLAN.format(
-            legacy="; legacy: true" if legacy else "",
-            notbuilding="- Not-building: no registry.\n" if notbuilding else "",
-        )
-
-    def test_owns_file_carries_node_paths_and_lines(self) -> None:
-        lines = self.send(self.plan()).read_text().splitlines()
-        self.assertEqual(lines[0], "node: N1")
-        self.assertEqual(lines[1], "owns: bin/x, lib/y.py, z/w.md")
-        self.assertIn("Decided: one thing (sample).", lines)
-        self.assertIn("Standing: keep it simple.", lines)
-        self.assertIn("Not-building: no registry.", lines)
-
-    def test_legacy_plan_marks_owns(self) -> None:
-        self.assertIn("legacy: true", self.send(self.plan(legacy=True)).read_text().splitlines())
-
-    def test_frontmatter_legacy_plan_without_decided_lines_marks_owns(self) -> None:
-        plan = "---\nstatus: approved\nlegacy: true\n---\n| N1 Old | builder |\n"
-        self.assertEqual(self.send(plan).read_text(), "node: N1\nlegacy: true\n")
-
-    def test_missing_lines_write_nothing(self) -> None:
-        with self.assertRaises(self.module.ReportsError):
-            self.send(self.plan(notbuilding=False))
-        self.assertFalse((self.root / "tree/.owns").exists())
-
-    def test_standing_line_is_optional(self) -> None:
-        plan = self.plan().replace("- Standing: keep it simple.\n", "")
-        self.assertIn("Not-building: no registry.", self.send(plan).read_text())
-
-    def test_owns_ignore_paths_after_lives_and_preflight(self) -> None:
-        plan = self.plan().replace("`z/w.md` |", "`z/w.md`; lives: `a/b`; preflight: `c/d` |")
-        self.assertEqual(self.send(plan).read_text().splitlines()[1], "owns: bin/x, lib/y.py, z/w.md")
-
-    def test_owns_file_is_git_excluded_once(self) -> None:
-        plan = self.plan()
-        tree = self.send(plan).parent
-        self.send(plan)
-        subprocess.run(["git", "add", "-A"], cwd=tree, check=True)
-        staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=tree, capture_output=True, text=True).stdout
-        self.assertEqual(staged, "")
-        exclude = Path(subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], cwd=tree, capture_output=True, text=True).stdout.strip())
-        self.assertEqual(exclude.read_text().splitlines().count("/.owns"), 1)
-
-    def test_unknown_node_writes_nothing(self) -> None:
-        with self.assertRaises(self.module.ReportsError):
-            self.send(self.plan(), node="N9")
-        self.assertFalse((self.root / "tree/.owns").exists())
-
-    def test_build_word_and_git_worktree_are_required(self) -> None:
-        self.module.write_owns(f"/buildx {self.root / 'plan.md'} node N1 worktree {self.root}")
-        (self.root / "plan.md").write_text(self.plan())
-        (self.root / "plain").mkdir()
-        with self.assertRaises(self.module.ReportsError):
-            self.module.write_owns(f"/build {self.root / 'plan.md'} node N1 worktree {self.root / 'plain'}")
-        self.assertFalse((self.root / "plain/.owns").exists())
-
-    def test_non_build_text_writes_nothing(self) -> None:
-        self.module.write_owns("check in please")
-        self.assertEqual(list(self.root.rglob(".owns")), [])
 
 
 class RemotePathTest(unittest.TestCase):
