@@ -1,6 +1,6 @@
 ---
 name: verify-self
-description: Review your own built work with fresh reviewers, fix everything, cut comments, describe the change, push through the gate and babysit it green. Use before pushing. Posts nothing.
+description: Review your own built work with fresh reviewers, fix everything, cut comments, describe the change, push through the gate and babysit it green. Use before pushing. Posts only a fix plan's replies.
 engine: review
 params: {mode: self, intensity: medium, target: branch}
 ---
@@ -14,6 +14,8 @@ The branch, and the design note or ticket it implements. Without a ticket it sto
 - Rounds follow `engines/review.md` "Round shapes": `medium` unless the owner says otherwise; a planned change reviews at the highest node `intensity`.
 - Fixes: grouped by edited file, one builder per group (`engines/build.md` "The graph").
 - Pushing and CI: `engines/ship.md`. Description: `change-write`; diagrams as it asks.
+
+- Fix plan: after a successful push, post each drafted reply from the plan's thread table with the reply verb in `engines/ship.md` ("Fixed in <short sha>: <what>", the follow-up link, or the decline reason), then resolve only fixed threads, one at a time, never one an author is still discussing. The owner's go on the plan is the OK.
 
 - Pass: with no open Blocker, write `<reviewed HEAD sha> <branch>` to `$(git rev-parse --git-dir)/verify-self-pass`; `pre-push-guard` denies a push or change open until that sha is HEAD.
 
