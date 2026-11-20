@@ -18,18 +18,24 @@ BLOCKED = (
     "FOO=1 git commit -m x", "git -c x.y=z commit -m x", "git apply p.diff", "python3 -c 'open(\"a\",\"w\")'",
     "perl -pi -e s/a/b/ f.py", "cp a b", "mv a b", "echo hi > src/a.py", "echo hi >> /repo/a.txt", "echo hi >| src/a.py",
     "echo hi > /tmp/../repo/a.py", "cat > a.py <<EOF\nx\nEOF", "sed -i s/a/b/ f.py", "sed -ni p f.py",
-    "echo x | tee out.txt", "ls; touch x", "ls\ntouch x", "gh pr merge 1", "gh api -X POST /x", "touch verify-self-pass",
+    "echo x | tee out.txt", "ls; touch x", "ls\ntouch x", "gh api -X DELETE /x/notes/1", "touch verify-self-pass",
     "echo x > $(git rev-parse --git-dir)/verify-self-pass; touch x",
 )
 ALLOWED = (
     "git status && git diff | head", "git -C /r log --oneline", "git worktree list", "git commit-tree -h",
     "rg pytest tests", "herdr pane list 2>&1", 'herdr agent prompt "a > b"', "gh pr view 1 --json n --jq '.n>1'",
-    "gh api /x", "FOO=1 ls", "sed -n 5p f", "ls > /dev/null", "echo x > $TMPDIR/a", "echo x > /tmp/a",
+    "gh api /x", "gh api -X GET /x", "glab api --method GET /x --paginate", "gh pr checks 1", "gh pr diff 1", "gh run view 1 --log-failed",
+    "glab ci trace", "glab mr diff 1", "FOO=1 ls", "sed -n 5p f", "ls > /dev/null", "echo x > $TMPDIR/a", "echo x > /tmp/a",
     "echo x > /private/tmp/claude-1/scratchpad/a", "echo x > /home/u/drafts/p/a.md",
     "cat <<EOF >> /home/u/notes/n.md\nx\nEOF", "echo x | tee /tmp/o",
 )
 ROWS = [(r, c, ok) for ok, cmds in ((False, BLOCKED), (True, ALLOWED)) for c in cmds for r in ("lead", "work")] + [
     ("lead", "git push origin x", True), ("lead", MARKER, True), ("lead", "git merge x", False),
+    *((r, c, r == "lead") for r in ("lead", "work") for c in (
+        "gh pr merge 1", "glab mr merge 1", "gh pr comment 1 -b x", "gh pr review 1 -a", "glab mr note 1 -m x", "glab mr approve 1",
+        "gh api -X POST /r/pulls/1/comments/notes", "glab api -f body=x projects/1/merge_requests/1/discussions/2/notes",
+        "gh api -X PUT /repos/x/discussions/1/resolve")),
+    ("lead", "gh api -X POST /repos/x/issues", False), ("work", "gh api -X POST /x", False),
     ("work", "git push origin x", False), ("work", MARKER, False), ("work", 'git merge -m "a > b" x', True),
 ]
 

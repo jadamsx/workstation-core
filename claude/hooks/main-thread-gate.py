@@ -25,6 +25,10 @@ HANDOFF = {"lead": "the work tab", "work": "a builder agent"}
 READS = set("herdr herdr-manager notes-lint md-pdf current-project cd ls cat head tail wc rg grep find date echo printf sleep jq awk sed tee gh glab".split())
 GIT = (*"status log diff show fetch branch rev-parse ls-remote remote commit-tree".split(), "worktree list")
 GIT_ROLE = {"lead": ("push",), "work": ("worktree", "merge", "rebase", "cherry-pick", "checkout -b")}
+CHANGE_READS = {("pr", "checks"), ("pr", "diff"), ("mr", "diff"), ("ci", "status"), ("ci", "trace"), ("ci", "view")}
+CHANGE_WRITES = {(k, v) for k, vs in (("pr", "create edit merge comment review"), ("mr", "create update merge note approve")) for v in vs.split()}
+API_WRITE_PATHS = ("discussions", "notes", "reactions", "resolve")
+API_WRITE_FLAGS = {"-f", "-F", "--field", "--raw-field", "--input"}
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\s*\2[ \t]*(?=\n|$)", re.S)
 MARKER_WRITE = re.compile(r">\s*\"?(?:\$\([^)]*\)|[^\s\"]*)/verify-self-pass\"?")
 
@@ -107,8 +111,12 @@ def command_allowed(role: str, words: list[str]) -> bool:
         return any(rest.startswith(p + " ") for p in GIT + GIT_ROLE[role])
     if name in ("gh", "glab"):
         if args[:1] == ["api"]:
-            return not {"-X", "--method", "-f", "-F", "--field", "--raw-field", "--input"} & set(args)
-        return args[1:2] in (["view"], ["list"]) or " ".join(args[:2]) in {"pr create", "pr edit", "mr create", "mr update"}
+            method = next((a.upper() for f, a in zip(args, args[1:]) if f in ("-X", "--method")), "")
+            if not API_WRITE_FLAGS & set(args) and method in ("", "GET"):
+                return True
+            return role == "lead" and method != "DELETE" and any(k in a for a in args[1:] for k in API_WRITE_PATHS)
+        pair = tuple(args[:2])
+        return args[1:2] in (["view"], ["list"]) or pair in CHANGE_READS or role == "lead" and pair in CHANGE_WRITES
     if name == "sed":
         return not any(re.match(r"-[a-zA-Z]*i|--in-place", a) for a in args)
     if name == "tee":
