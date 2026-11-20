@@ -46,16 +46,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `HOOKS_CONFIG_DIR` | `claude/hooks/hooks.d` | Folder of hook rule files |
 | `SHARED_ENVS_FILE` | `shared-envs.txt` beside the hook | Hosts `shared-env-guard` protects |
 | `MAIN_THREAD_GATE_STATE` | | Where `main-thread-gate` records `main-thread-ok` |
-| `WORKSTATION_ROLE` | | Set to `ask` by `herdr-manager setup` in the ask tab; `main-thread-gate` then blocks prompting other tabs and editing agents. Set to `lead` by the launcher of a lead tab; the gate then denies builder spawns |
-
-## Usage gate
-
-The statusline writes `~/.claude/usage.json` from `rate_limits`. At 5h 98% or 7d 98% `manager-send` parks a slash-command job, `herdr-report-watch` resumes it as soon as the gate opens (reset passed, usage under the limit, override or a stale reading), and the `Agent` hook denies new top-level spawns. Running work is never cut off. `USAGE_GATE=off` or an unexpired `~/.claude/usage-override` (an expiry in epoch seconds) lifts the gate. A missing file, a reading older than 15 minutes or a plan that sends no `rate_limits` (team plans may not) fails open. Leave "Continue automatically at usage limit" on in `/config` as the backstop.
-
-| Variable | Default | Use |
-| --- | --- | --- |
-| `USAGE_GATE_5H`, `USAGE_GATE_7D` | `98`, `98` | Park thresholds in percent |
-| `USAGE_FILE`, `USAGE_OVERRIDE_FILE` | `~/.claude/usage.json`, `~/.claude/usage-override` | Where the gate reads and where the override lives |
+| `WORKSTATION_ROLE` | | Set to `lead` by the launcher of a lead tab; the gate then blocks the lead's file edits. Set to `work` by `herdr-manager setup` in the work tab, together with `WORKSTATION_LEAD_PANE`, the lead's pane id |
 
 Run `grep -rn "environ" bin lib claude/hooks` for the full list.
 

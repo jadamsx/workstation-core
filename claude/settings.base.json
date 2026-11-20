@@ -48,67 +48,22 @@
       "Bash(git stash show*)"
     ],
     "deny": [
-      "Bash(git commit --no-verify*)",
-      "Bash(git commit -n *)",
-      "Bash(git push --no-verify*)",
       "Bash(git push --force*)",
       "Bash(git push -f *)",
       "Bash(git push * --force*)",
       "Bash(git reset --hard*)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit -n *)",
+      "Bash(git push --no-verify*)",
       "Bash(git clean *)",
-      "Bash(git stash)",
-      "Bash(git stash -*)",
-      "Bash(git stash push*)",
-      "Bash(git stash save*)",
-      "Bash(git stash pop*)",
-      "Bash(git stash apply*)",
-      "Bash(git stash drop*)",
-      "Bash(git stash clear*)",
-      "Bash(git stash create*)",
-      "Bash(git stash store*)",
-      "Bash(git stash branch*)",
-      "Bash(git restore *)",
-      "Bash(git checkout -- *)",
-      "Bash(git branch -D main*)",
-      "Bash(git push * -f*)",
-      "Bash(git push *+*)",
-      "Bash(git * reset --hard*)",
-      "Bash(git * clean *)",
-      "Bash(git checkout .*)",
-      "Bash(git -c *=*)",
-      "Bash(git config *core.sshCommand*)",
-      "Bash(git config *core.hooksPath*)",
-      "Bash(git config *alias.*)",
-      "Bash(git push --delete*)",
-      "Bash(git push * --delete*)",
-      "Bash(git push * -d *)",
-      "Bash(git push -f*)",
-      "Bash(git push -uf*)",
-      "Bash(gh repo delete*)",
-      "Bash(gh auth *)",
-      "Bash(launchctl submit*)",
-      "Bash(docker volume rm *)",
-      "Bash(docker system prune -a*)",
-      "Bash(docker volume prune*)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
-      "Edit(~/.ssh/**)",
-      "Edit(**/.env)",
-      "Edit(~/.config/workstation/secrets.env)"
+      "Bash(kubectl --context*prod* *)",
+      "Bash(kubectl * --context*prod*)",
+      "Bash(docker system prune*)"
     ],
     "ask": [
-      "Bash(gh pr merge*)",
-      "Bash(glab mr merge*)",
-      "Bash(git push *--tags*)",
-      "Bash(git push *refs/tags/*)",
-      "Bash(git push * v*)",
-      "Bash(git push *main*)",
-      "Bash(git push *master*)",
-      "Bash(git push *develop*)",
-      "Bash(git push *:main*)",
-      "Bash(git push *:master*)",
-      "Bash(git push *:develop*)",
-      "Bash(gh api * -X DELETE*)"
+      "Bash(glab mr merge*)"
     ]
   },
   "hooks": {
@@ -158,28 +113,15 @@
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/agent-model-gate.py"
-          },
-          {
-            "type": "command",
-            "command": "python3 __HOME__/.claude/hooks/usage-gate-hook.py"
           }
         ]
       },
       {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash|Agent",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 __HOME__/.claude/hooks/report-format-guard.py"
           }
         ]
       }

@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
-"""Usage: herdr-manager register | setup [--no-work | --work] | start <name> [--resume <session-id>] [--dir <path>] | list | keep <name> [--off]
+"""Usage: herdr-manager setup
 
-Three-tier work: the coordinator session registers its pane, each manager runs in its own tab of the same
-herdr space, and herdr-report-watch carries the manager's result files to the coordinator.
-
-register  run in the coordinator's pane and renames its tab `◆ lead`; re-run after a handoff and reports follow
-          the new pane.
-setup     run in the coordinator's pane: registers it, then opens a standing `▸ work` manager and a `? ask` tab
-          (Haiku, read-only helper) unless they are already live. Re-run it to repair a missing tab.
-          `--no-work` stores {"work": false} in the space's setup.json so setup never starts work (the space
-          uses named managers or runs in place); `--work` stores true again. Plain setup keeps the stored choice.
-start     opens a tab named `▸ <name>` running `claude --model sonnet` with the manager brief, and
-          WORKSTATION_REPORTS pointing at the folder the manager writes result-<timestamp>.md into. A kept
-          manager resumes the `session_id` its SessionStart hook stored; without a usable one it starts fresh and says so.
-keep      sets `"keep": true` in the manager's manager.json (`--off` removes it): the watcher then never closes
-          or clears that manager, and the human closes it.
-list      the managers of this space, whether their pane is alive, and their newest result file.
+setup  run in the lead's pane: renames its tab `◆ lead`, then opens a `▸ work` tab running `claude --model sonnet`
+       with the work brief and WORKSTATION_LEAD_PANE set to the lead's pane, unless that tab already exists.
 """
 import argparse
 import json
@@ -29,11 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    ASK_TAB, INPUT_BOX, LEAD_TAB, MANAGER_TAB, NAME, NO_STDIN_ENV, TRUST_DIALOG, ReportsError, herdr, live_panes, manager_folder, pane_text, read_manager, space_dir, wait_for_shell, work_enabled, write_atomic,
+    INPUT_BOX, LEAD_TAB, NO_STDIN_ENV, TRUST_DIALOG, WORK_TAB, ReportsError, herdr, pane_text, space_dir, wait_for_shell, write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
-ASK_BRIEF = BRIEF.with_name("ask-brief.md")
 POLICY = BRIEF.parent.parent / "resource-policy.json"
 MCP_SERVERS = BRIEF.parent.parent / "mcp.json"
 SHELL_TIMEOUT = 20
@@ -41,7 +27,6 @@ STARTUP_TIMEOUT = 20
 START_RETRIES = 3
 IMPORTS_DIALOG = "Allow external CLAUDE.md file imports?"
 STARTUP_DIALOGS = (TRUST_DIALOG, IMPORTS_DIALOG)
-SESSION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def mcp_args(role: str, folder: Path) -> list[str]:
@@ -53,30 +38,25 @@ def mcp_args(role: str, folder: Path) -> list[str]:
         servers = {n: catalog["mcpServers"][n] for n in names}
     except (OSError, ValueError, KeyError) as err:
         raise ReportsError(f"cannot start role {role!r} from {POLICY} and {MCP_SERVERS}: {type(err).__name__}: {err}") from err
-    if role == "ask" and servers:
-        raise ReportsError(f"the ask role must start no MCP servers, got {', '.join(servers)}")
     folder.mkdir(parents=True, exist_ok=True)
     config = folder / "mcp.json"
     write_atomic(config, json.dumps({"mcpServers": servers}))
     return ["--strict-mcp-config", "--mcp-config", str(config)]
 
 
-def register() -> int:
+def register() -> str:
     pane = os.environ.get("HERDR_PANE_ID")
     if not pane:
         raise ReportsError("not inside herdr: HERDR_PANE_ID is unset")
-    path = space_dir() / "coordinator"
-    write_atomic(path, pane + "\n")
     mine = next((p for p in herdr("pane", "list").get("panes", []) if p["pane_id"] == pane), None)
     if mine is None:
         raise ReportsError(f"pane {pane} is not in the herdr pane list")
     herdr("tab", "rename", mine["tab_id"], LEAD_TAB)
-    print(f"coordinator {pane} -> {path}")
-    return 0
+    return pane
 
 
 def accept_trust_dialog(pane: str, directory: Path, blocked: bool = False) -> None:
-    """Answer Claude Code's startup prompts, but only for folders under the coordinator's own directory."""
+    """Answer Claude Code's startup prompts, but only for folders under the caller's own directory."""
     if blocked:
         text = pane_text(pane)
         if not any(dialog in text for dialog in STARTUP_DIALOGS):
@@ -141,118 +121,24 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     return pane, tab["tab"]["tab_id"]
 
 
-def latest_session(reports: Path) -> str | None:
-    """The session id the SessionStart hook has recorded since launch, if any."""
-    with suppress(OSError, ValueError):
-        return read_manager(reports).get("session_id")
-    return None
-
-
-def start(name: str, resume: str | None, directory: str, standing: bool = False) -> int:
-    if not NAME.fullmatch(name):
-        raise ReportsError(f"name must match {NAME.pattern}: {name!r}")
-    if resume and not SESSION_ID.fullmatch(resume):
-        raise ReportsError(f"--resume needs a session id, got {resume!r}")
-    reports = space_dir() / name
-    previous: dict = {}
-    if (reports / "manager.json").exists():
-        previous = read_manager(reports)
-        if not previous.get("closed") and previous.get("pane_id") in (live_panes() or set()):
-            raise ReportsError(f"manager {name!r} is already running in pane {previous['pane_id']}")
-    if previous.get("keep") and not resume:
-        resume = previous.get("session_id")
-        if isinstance(resume, str) and SESSION_ID.fullmatch(resume):
-            print(f"{name}: kept manager, resuming session {resume}")
-        else:
-            resume = None
-            print(f"{name}: kept manager has no usable stored session id, starting a fresh session", file=sys.stderr)
-    reports.mkdir(parents=True, exist_ok=True)
-    directory = Path(directory).resolve()
-    role = name if name == "work" else "manager"
-    claude_args = ["--model", "sonnet", *(["--resume", resume] if resume else []), *mcp_args(role, reports), "--append-system-prompt-file", str(BRIEF)]
-    pane, tab_id = launch(name, MANAGER_TAB + name, [f"WORKSTATION_REPORTS={reports}", "WORKSTATION_ROLE=work"], directory, claude_args)
-    carried = {k: True for k in ("standing", "keep") if previous.get(k)}
-    session = latest_session(reports)
-    session = session if session not in (None, previous.get("session_id")) else resume
-    info = {"pane_id": pane, "tab_id": tab_id, "dir": str(directory), "started": time.time(), **carried, **({"session_id": session} if session else {}), **({"standing": True} if standing else {})}
-    write_atomic(reports / "manager.json", json.dumps(info))
-    print(f"{name}: pane {pane}, reports {reports}")
-    return 0
-
-
-def setup(work: bool | None) -> int:
-    """Register this pane as the lead, then open the standing work (unless the space opted out) and ask tabs that are not already there."""
-    register()
+def setup() -> int:
+    """Rename this pane's tab to lead and open the work tab unless it is already there."""
+    pane = register()
     directory = Path.cwd()
-    space = space_dir()
-    if work is not None:
-        write_atomic(space / "setup.json", json.dumps({"work": work}))
-    manifest = space / "work" / "manager.json"
-    info = json.loads(manifest.read_text()) if manifest.exists() else {}
-    if work_enabled(space) and (info.get("closed") or info.get("pane_id") not in (live_panes() or set())):
-        start("work", None, str(directory), standing=True)
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
-    if not any(tab.get("label") == ASK_TAB for tab in tabs):
-        pane, _ = launch("ask", ASK_TAB, ["WORKSTATION_ROLE=ask"], directory,
-                      ["--model", "haiku", *mcp_args("ask", space / "ask"), "--append-system-prompt-file", str(ASK_BRIEF)])
-        print(f"ask: pane {pane}")
-    return 0
-
-
-def newest_result(folder: Path) -> str:
-    results = sorted(folder.glob("result-*.md"))
-    return results[-1].name if results else "-"
-
-
-def list_managers() -> int:
-    space = space_dir()
-    alive = live_panes()
-    for folder in sorted(p for p in space.glob("*") if (p / "manager.json").exists()):
-        pane = json.loads((folder / "manager.json").read_text())["pane_id"]
-        state = "?" if alive is None else "live" if pane in alive else "gone"
-        print(f"{folder.name}\t{state}\t{newest_result(folder)}")
-    return 0
-
-
-def keep(name: str, off: bool) -> int:
-    folder = manager_folder(name)
-    info = read_manager(folder)
-    if off:
-        info.pop("keep", None)
-    else:
-        info["keep"] = True
-    write_atomic(folder / "manager.json", json.dumps(info))
-    print(f"{name}: {'no longer kept' if off else 'kept'}")
+    if not any(tab.get("label") == WORK_TAB for tab in tabs):
+        work, _ = launch("work", WORK_TAB, ["WORKSTATION_ROLE=work", f"WORKSTATION_LEAD_PANE={pane}"], directory,
+                         ["--model", "sonnet", *mcp_args("work", space_dir() / "work"), "--append-system-prompt-file", str(BRIEF)])
+        print(f"work: pane {work}")
     return 0
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="herdr-manager")
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("register")
-    setup_parser = sub.add_parser("setup")
-    choice = setup_parser.add_mutually_exclusive_group()
-    choice.add_argument("--no-work", dest="work", action="store_false", default=None)
-    choice.add_argument("--work", dest="work", action="store_true")
-    sub.add_parser("list")
-    starter = sub.add_parser("start")
-    starter.add_argument("name")
-    starter.add_argument("--resume")
-    starter.add_argument("--dir", default=os.getcwd())
-    keeper = sub.add_parser("keep")
-    keeper.add_argument("name")
-    keeper.add_argument("--off", action="store_true")
-    args = parser.parse_args(argv)
+    parser.add_subparsers(dest="command", required=True).add_parser("setup")
+    parser.parse_args(argv)
     try:
-        if args.command == "register":
-            return register()
-        if args.command == "setup":
-            return setup(args.work)
-        if args.command == "start":
-            return start(args.name, args.resume, args.dir)
-        if args.command == "keep":
-            return keep(args.name, args.off)
-        return list_managers()
+        return setup()
     except ReportsError as err:
         print(f"herdr-manager: {err}", file=sys.stderr)
         return 2

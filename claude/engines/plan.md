@@ -155,7 +155,7 @@ JSON
 | Validation only, last-mile proof | none: a `claim-prover` node |
 | Locate code | none: `code-locator` |
 
-Hand a build to the standing `work` tab (`engines/common.md` "Delegation"); an extra manager session is for a parallel stream such as a second app. A single node or a short plan needs no manager.
+Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 

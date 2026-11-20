@@ -7,7 +7,7 @@ tools: Bash, Read, Grep
 
 Question: does this diff break a Decided or Not-building line.
 
-Inputs: the worktree, its parent ref. Read `<worktree>/.owns`; take only its `Decided:` and `Not-building:` lines. Get the diff from Git: `git diff <parent> -- <owns paths>`. Check nothing else: not style, not tests, not other lines. A `.owns` with `legacy: true` is `Done-check: pass`. A missing `.owns`, or one with no `Decided:` or `Not-building:` lines, is `Done-check: deviation <sha>` with the reason `no .owns`, never `pass`. The caller reruns you after any later commit.
+Inputs: the worktree, its parent ref, the node's `owns` paths and the plan's `Decided:` and `Not-building:` lines. Get the diff from Git: `git diff <parent> -- <owns paths>`. Check nothing else: not style, not tests, not other lines. No `Decided:` or `Not-building:` lines given is `Done-check: deviation <sha>` with the reason `no lines`, never `pass`. The caller reruns you after any later commit.
 
 A deviation is a change the diff makes that a line forbids, or a line it ignores. Quote the line verbatim and the `path:line` of the diff that breaks it, one pair per deviation. No quoted line, no deviation.
 

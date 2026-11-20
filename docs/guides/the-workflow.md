@@ -2,7 +2,7 @@
 
 Work goes plan, build, review, ship. Each stage has one engine, and each skill is a thin entry point to one of them. [Engines](../reference/engines.md) has the parameters.
 
-In a [herdr space](herdr-spaces.md) the lead plans, answers decisions and approves, and the work tab builds, reviews and babysits. The lead sends it `/build`, change reviews and `babysit` with `manager-send work`, and reads one report back. Without herdr, one session does every step.
+In a [herdr space](herdr-spaces.md) the lead plans and answers questions, and the work tab owns the plan, builds, reviews and babysits. The lead hands it the plan with a plain `herdr agent prompt`, and work sends one line back when every node is green. Without herdr, one session does every step.
 
 ## Plan
 

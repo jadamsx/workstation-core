@@ -32,13 +32,13 @@ claude                   # in any git repo, then:
 
 ## Run it in herdr (recommended)
 
-[herdr](https://herdr.dev) is installed separately. In each workspace, open Claude in a tab and run `herdr-manager setup` there. That tab becomes the lead (`◆ lead`) and gets a `▸ work` tab for builds and reviews and a `? ask` tab for quick lookups. The lead plans and decides, work does the work, and reports come back as one `[worker-report]` line. [Herdr spaces](docs/guides/herdr-spaces.md) has the setup and daily use.
+[herdr](https://herdr.dev) is installed separately. In each workspace, open Claude in a tab and run `herdr-manager setup` there. That tab becomes the lead (`◆ lead`) and gets a `▸ work` tab for builds and reviews. The lead plans and answers questions, work owns the plan and builds it, and sends one `herdr agent prompt` line to the lead when done. [Herdr spaces](docs/guides/herdr-spaces.md) has the setup and daily use.
 
 ## Docs
 
 Guides: [quickstart](docs/guides/quickstart.md), [make it yours](docs/guides/make-it-yours.md), [the workflow](docs/guides/the-workflow.md), [herdr spaces](docs/guides/herdr-spaces.md), [automated reviewers](docs/guides/automated-reviewers.md).
 
-Reference: [engines](docs/reference/engines.md), [skills](docs/reference/skills.md), [agents](docs/reference/agents.md), [hooks](docs/reference/hooks.md), [managers](docs/reference/managers.md), [checklists and disciplines](docs/reference/checklists-and-disciplines.md), [configuration](docs/reference/configuration.md).
+Reference: [engines](docs/reference/engines.md), [skills](docs/reference/skills.md), [agents](docs/reference/agents.md), [hooks](docs/reference/hooks.md), [checklists and disciplines](docs/reference/checklists-and-disciplines.md), [configuration](docs/reference/configuration.md).
 
 ## Configuration
 
@@ -46,7 +46,7 @@ The repo works with defaults. Two things need your input: which source control h
 
 ## Security
 
-Hooks block, before the tool runs: edits to real `.env` files, recursive `rm` outside throwaway folders, `git commit` and `git push` that would fail the repo's checks, browser writes on hosts you list as shared, and file edits or test runs from the main thread. [Hooks](docs/reference/hooks.md) lists each one.
+Hooks block, before the tool runs: edits to real `.env` files, recursive `rm` outside throwaway folders, force pushes and `git reset --hard`, `git commit` and `git push` that would fail the repo's checks, browser writes on hosts you list as shared, and file edits from the lead. [Hooks](docs/reference/hooks.md) lists each one.
 
 The installed settings turn the sandbox on, allow no unsandboxed retry, and deny `--no-verify`, force pushes, hard resets, `git stash`, `git restore`, merging from the command line, and reads of `~/.ssh` and `~/.aws`. Network access is limited to a short list of package registries and code hosts.
 

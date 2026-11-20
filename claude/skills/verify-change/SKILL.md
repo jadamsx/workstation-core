@@ -11,7 +11,7 @@ Someone else's change, or one whose findings should be commented on it. Your own
 The change URL (or number and project); a batch or a chain of dependent changes: all the URLs. An epic key, or a trailing `epic`, sets mode `epic`: every change of the epic through the engine, then the seams and, after merge, the delivery check. A trailing `light`, `medium` or `intense` sets `intensity`; `recheck` is a flag.
 
 ## Differs
-- A coordinator hands this review to the work tab per Handoff in `engines/common.md`.
+- The lead hands this review to the work tab as described in `engines/common.md`.
 - Rounds follow the engine's "Round shapes", `light` by default; auth, input, secrets or permissions raise it to `medium`. Offer `intense` in one line when the diff touches a migration, money or a public contract.
 - Comments follow the engine's "Posting rules".
 - Posting and approving start only on the owner's yes to the engine's post question; it never merges.

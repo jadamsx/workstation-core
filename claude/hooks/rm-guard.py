@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Block recursive `rm` outside throwaway locations and `rm -rf` in any form.
+"""Block destructive commands: recursive `rm` outside throwaway locations, `rm -rf` in any form,
+force pushes and `git reset --hard`.
 
 `rm -rf` in any form in the command text is denied. A Bash call with `dangerouslyDisableSandbox` is
 allowed through this hook once the rm checks pass; settings deny rules still apply.
@@ -22,6 +23,9 @@ RM_PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
 UNSAFE_EXPANSION = re.compile(r"\$\(|`|\$(?!\{?(TMPDIR|HOME)\}?(/|$))")
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|\n]")
 RM_FLAGS = re.compile(r"\brm((?:[ \t]+-{1,2}[\w-]+)+)")
+HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
+GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+GIT_DENIED = "git {} is blocked; do it by hand if it is really meant."
 RM_RF_MESSAGE = "Never write rm -rf, even quoted; move it to ~/.Trash instead."
 FAILED_MESSAGE = "rm-guard failed unexpectedly ({}); the call is denied until the hook is fixed."
 
@@ -166,6 +170,35 @@ def check_rm(command: str, cwd: str) -> None:
             sys.exit(2)
 
 
+def git_destructive(parts: list[str]) -> str:
+    if not parts or os.path.basename(parts[0]) != "git":
+        return ""
+    i = 1
+    while i < len(parts) and parts[i].startswith("-"):
+        i += 2 if parts[i] in GIT_OPTIONS_WITH_VALUE else 1
+    sub, args = (parts[i] if i < len(parts) else ""), parts[i + 1 :]
+    if sub == "reset" and "--hard" in args:
+        return "reset --hard"
+    if sub == "push" and any(
+        a.startswith(("--force", "+")) or re.fullmatch(r"-\w*f\w*", a) for a in args
+    ):
+        return "push --force"
+    return ""
+
+
+def check_git(command: str) -> None:
+    for segment in split_command(HEREDOC.sub("", command)):
+        parts = tokens(segment)
+        while parts and (re.match(r"\w+=", parts[0]) or parts[0] in RM_PREFIXES):
+            parts = parts[1:]
+        if parts and os.path.basename(parts[0]) in ("bash", "sh") and "-c" in parts[:-1]:
+            check_git(parts[parts.index("-c") + 1])
+            continue
+        denied = git_destructive(parts)
+        if denied:
+            deny(GIT_DENIED.format(denied))
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -183,6 +216,7 @@ def main() -> None:
     if rm_rf:
         deny(RM_RF_MESSAGE)
     check_rm(command, payload.get("cwd") or "")
+    check_git(command)
     if escape:
         allow_escape()
     sys.exit(0)
