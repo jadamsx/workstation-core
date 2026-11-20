@@ -93,7 +93,7 @@ class LeadGateTest(unittest.TestCase):
                     blocked = self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role)
                     self.assertEqual(blocked.returncode, 2)
                     self.assertIn(f"The {role} ", blocked.stderr)
-                    self.assertIn("work tab" if role == "lead" else "builder agent", blocked.stderr)
+                    self.assertIn("typed agent" if role == "lead" else "builder agent", blocked.stderr)
                     self.assertEqual(self.run_hook(self.pre(tool, tin, agent_id="a1"), WORKSTATION_ROLE=role).returncode, 0)
                     self.run_hook(self.prompt("main-thread-ok"), WORKSTATION_ROLE=role)
                     self.assertEqual(self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode, 0 if role == "lead" else 2)

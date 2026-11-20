@@ -21,7 +21,7 @@ from pathlib import Path
 ESCAPE_PHRASE = "main-thread-ok"
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
-HANDOFF = {"lead": "the work tab", "work": "a builder agent"}
+HANDOFF = {"lead": "a typed agent (run-digest for a command), or the work tab if it is part of a plan's build", "work": "a builder agent"}
 READS = set("herdr herdr-manager notes-lint md-pdf current-project cd ls cat head tail wc rg grep find date echo printf sleep jq awk sed tee gh glab".split())
 GIT = (*"status log diff show fetch branch rev-parse ls-remote remote commit-tree".split(), "worktree list")
 GIT_ROLE = {"lead": ("push",), "work": ("worktree", "merge", "rebase", "cherry-pick", "checkout -b")}
