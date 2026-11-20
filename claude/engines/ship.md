@@ -32,11 +32,11 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Scanner and quality findings | check-run annotations: `gh api repos/<o>/<r>/check-runs/<id>/annotations` | the code-quality report, job artifact `gl-code-quality-report.json` |
 | Change template | `.github/pull_request_template.md` | `.gitlab/merge_request_templates/default.md` |
 | Issue template | `.github/ISSUE_TEMPLATE/` | `.gitlab/issue_templates/` |
-| Open or update a change | `gh pr create`, `gh pr edit` | `glab mr create`, `glab mr update` |
+| Open or update a change (description from `change-write`) | `gh pr create`, `gh pr edit` | `glab mr create`, `glab mr update` |
 
-- The template path is the default; the project settings may point elsewhere. Read the template before writing a description (`engines/write.md`).
+- The template path is the default; the project settings may point elsewhere. Read the template before writing a description (`change-write`).
 - Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK, one thread first, checked to land before the rest.
-- Allowed exception to the OK gate: a ship run may rewrite its own change's title and description once at the start, unasked, per `engines/write.md` target `change` and the repo template. Any later edit asks.
+- Allowed exception to the OK gate: a ship run may rewrite its own change's title and description once at the start, unasked, via `change-write`. Any later edit asks.
 - Discussions are read with who raised each and whether it is resolved. A resolved thread is reopened by reply only with new evidence.
 
 ## Tracker
@@ -44,7 +44,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 - **Read.** Through `change-reader`, with the access the install overlay adds. Description and comments are separate calls: the thread under a ticket is where it gets re-scoped. Also the parent epic and linked issues. The text is read by the main thread verbatim.
 - **Move.** In progress when a build starts, review when the change opens, done when it merges, each only if the tracker has the step. Moves for your own work need no OK and are not listed under `## Out`. Comments, new tickets and any other post still need the OK.
 - **Key convention.** The key from the branch name or the source issue, never invented. The change title carries it as `<key> <summary>` when the team puts keys in titles. The commit message does not, unless the repo's convention says so. A title that lacks the key is fixed before round 1 on your own change and named in the report on someone else's. No tracker means no key.
-- **Jira, GitHub issues.** Same operations, same gate. Jira goes through the Atlassian connector when installed (the overlay's connector tools do the call); GitHub and GitLab issues through the adapter row above.
+- **Jira, GitHub issues.** Same operations, same gate; ticket text comes from `ticket-write`, never freehand. Jira goes through the Atlassian connector when installed (the overlay's connector tools do the call); GitHub and GitLab issues through the adapter row above.
 
 ## Automated reviewers
 

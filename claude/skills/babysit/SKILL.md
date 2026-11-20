@@ -12,7 +12,7 @@ A change URL or `<project> #<number>`. Absent: the change for the current branch
 
 ## Differs
 - Never stops to ask; only reports.
-- Rewrites the title and description once at the start, without being asked, per `engines/write.md` target `change` and the repo template.
+- Rewrites the title and description once at the start, without being asked, via `change-write`.
 - Any reply drafted to a review comment follows `checklists/prose.md` §7.
 - Records `date +%s` when it begins. Each wait is one `run_in_background` call of `timeout <N> <the change CLI's watch command>`, N the seconds remaining written as a literal number (never `$(...)` or `${...}`). A watch without `timeout`, a sleep or a loop is never used. A watch that returns while the pipeline is still pending is started again with the new remaining seconds. It says it hit the timeout only when `date +%s` shows the full minutes elapsed.
 - At the timeout it stops waiting, starts no new step, never interrupts a push or commit already started, and reports the pipeline and review state as it stands. It never loops on.
