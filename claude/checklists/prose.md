@@ -40,14 +40,14 @@ Quote the numbers you checked. These are the ones that cost credibility when mis
 
 ## 3. Structure and formatting
 
-- No bullet list where two sentences read better; no heading over a two-sentence section.
+- No bullet list where two sentences read better; no heading over a two-sentence section. Plan and design notes are the exception: §7 Note.
 - No emoji in headings, except a team template that already uses them, copied exactly (tracker tickets are one).
-- No bold mid-sentence.
+- No bold mid-sentence. The bold lead-in of a plan or design note bullet is allowed: §7 Note.
 - No title-case headings.
 - No heading that repeats the doc's own title, no heading containing only further headings.
 - No em dashes. Use a colon, full stop or comma.
 - No curly quotes or smart apostrophes in plain text output.
-- No inline-header vertical lists, no unusual table for content that's better as prose.
+- No inline-header vertical lists (plan and design notes excepted, §7 Note), no unusual table for content that's better as prose.
 
 ## 4. AI tells
 
@@ -88,7 +88,7 @@ Hard caps, not guidance. Over the cap means cut, not reformat. The table below i
 | Change description | 120 words |
 | Ticket description | 150 words |
 | Review comment | 3 sentences |
-| Plan / design doc | 40 lines |
+| Plan / design doc | 40 lines; a vault plan or design note is exempt, §7 Note governs it |
 | Chat reply | answer first, no paragraph over 3 lines |
 
 ## 7. Registers
@@ -121,6 +121,8 @@ Follow the repo's commit convention. Command-style summary line. The body gives 
 Explain why, never what. Full rule: `~/.claude/CLAUDE.md` "Comments".
 
 ### Note
+Plan and design notes are scannable: prose sections are short bullets, each opening with a few bold words naming its point, one fact per bullet, `file:line` refs and numbers kept, nothing cut. This overrides §3's no-bold, inline-header and bullet rules for these notes only; §3 applies everywhere else. Requirements, node table, Progress and Traceability keep their exact shape.
+
 One current statement, not an append log: no dated "update:" tails. Links sit in a sentence that says why the target matters.
 
 ## 8. Content

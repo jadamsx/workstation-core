@@ -1,0 +1,183 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["markdown>=3.5"]
+# ///
+"""Render a Markdown note with Mermaid diagrams to an A4 PDF through headless Chrome.
+
+Front matter is stripped. A Mermaid parse error or a missing Chrome exits non-zero.
+Set MD_PDF_CHROME to use a Chrome or Chromium binary other than the default lookup.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import html
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+import markdown
+
+MERMAID_SRC = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"
+MERMAID_SRI = "sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr"
+MERMAID_INIT = 'mermaid.initialize({ startOnLoad: true, theme: "neutral" });'
+MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME_NAMES = ("google-chrome", "chromium", "chromium-browser", "chrome")
+FRONT_MATTER = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*\n", re.S)
+MERMAID_FENCE = re.compile(r"^([ \t]*)```mermaid[ \t]*\n(.*?)^[ \t]*```[ \t]*$", re.S | re.M)
+DRAWN_DIV = '<div class="mermaid" data-processed="true"'
+ERROR_SVG = 'aria-roledescription="error"'
+PAGE_OBJECT = re.compile(rb"/Type\s*/Page\b")
+TIME_BUDGET_MS = 8000
+
+PAGE = """<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
+<style>
+@page {{ size: A4; margin: 14mm; }}
+body {{ font: 10pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; }}
+h1 {{ font-size: 19pt; }} h2 {{ font-size: 14pt; margin-top: 1.4em; }} h3 {{ font-size: 11.5pt; }}
+table {{ border-collapse: collapse; font-size: 7.5pt; width: 100%; page-break-inside: auto; }}
+th, td {{ border: 1px solid #bbb; padding: 3px 5px; vertical-align: top; text-align: left; }}
+th {{ background: #f0f0f0; }}
+code {{ font-size: 0.9em; background: #f3f3f3; padding: 0 2px; }}
+pre {{ background: #f3f3f3; padding: 6px; overflow-wrap: anywhere; white-space: pre-wrap; }}
+.mermaid {{ text-align: center; margin: 10px 0; page-break-inside: avoid; }}
+</style></head><body>
+{body}
+<script src="{src}" integrity="{sri}" crossorigin="anonymous"></script>
+<script>{init}</script>
+</body></html>
+"""
+
+
+class RenderError(Exception):
+    pass
+
+
+def content_security_policy() -> str:
+    """Let only the pinned mermaid script and our init run, so raw HTML in a note stays inert."""
+    init_hash = base64.b64encode(hashlib.sha256(MERMAID_INIT.encode()).digest()).decode()
+    return (
+        "default-src 'none'; "
+        f"script-src {MERMAID_SRC} 'sha256-{init_hash}'; "
+        "style-src 'unsafe-inline'; img-src data:; font-src data:"
+    )
+
+
+def render_html(text: str) -> tuple[str, int]:
+    """Return the page HTML and the number of Mermaid blocks in it."""
+    text = FRONT_MATTER.sub("", text.replace("\r\n", "\n"), count=1)
+    token = secrets.token_hex(8)
+    diagrams: list[str] = []
+
+    def stash(match: re.Match[str]) -> str:
+        indent, source = match.groups()
+        diagrams.append(
+            "\n".join(line.removeprefix(indent) for line in source.splitlines()).strip()
+        )
+        return f"\n\n{indent}MERMAID{token}X{len(diagrams) - 1}X\n\n"
+
+    body = markdown.markdown(
+        MERMAID_FENCE.sub(stash, text), extensions=["fenced_code", "tables", "sane_lists"]
+    )
+    for index, source in enumerate(diagrams):
+        body = re.sub(
+            rf"(<p>)?MERMAID{token}X{index}X(</p>)?",
+            lambda _: f'<div class="mermaid">{html.escape(source)}</div>',
+            body,
+        )
+    page = PAGE.format(
+        body=body,
+        src=MERMAID_SRC,
+        sri=MERMAID_SRI,
+        init=MERMAID_INIT,
+        csp=content_security_policy(),
+    )
+    return page, len(diagrams)
+
+
+def find_chrome() -> str:
+    override = os.environ.get("MD_PDF_CHROME")
+    if override:
+        if not Path(override).exists():
+            raise RenderError(f"Chrome not found at MD_PDF_CHROME={override}")
+        return override
+    if Path(MAC_CHROME).exists():
+        return MAC_CHROME
+    for name in CHROME_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    raise RenderError("Chrome not found: install it or set MD_PDF_CHROME")
+
+
+def chrome(binary: str, profile: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [
+            binary,
+            "--headless",
+            "--disable-gpu",
+            *(["--no-sandbox"] if hasattr(os, "geteuid") and os.geteuid() == 0 else []),
+            f"--user-data-dir={profile}",
+            f"--virtual-time-budget={TIME_BUDGET_MS}",
+            *args,
+        ],
+        capture_output=True,
+        timeout=120,
+    )
+
+
+def check_diagrams(dom: str, expected: int) -> None:
+    if ERROR_SVG in dom:
+        raise RenderError("mermaid parse error: a diagram did not parse")
+    drawn = dom.count(DRAWN_DIV)
+    if drawn != expected:
+        raise RenderError(f"mermaid drew {drawn} of {expected} diagrams (is the CDN reachable?)")
+
+
+def render(note: Path, out: Path) -> int:
+    page, diagrams = render_html(note.read_text(encoding="utf-8"))
+    binary = find_chrome()
+    with tempfile.TemporaryDirectory() as tmp:
+        source = Path(tmp) / "note.html"
+        source.write_text(page, encoding="utf-8")
+        profile = Path(tmp) / "profile"
+        if diagrams:
+            dumped = chrome(binary, profile, "--dump-dom", source.as_uri())
+            if dumped.returncode != 0:
+                raise RenderError(f"Chrome failed to load the page: {dumped.stderr.decode()[-300:]}")
+            check_diagrams(dumped.stdout.decode("utf-8", "replace"), diagrams)
+        built = Path(tmp) / "out.pdf"
+        printed = chrome(
+            binary, profile, "--no-pdf-header-footer", f"--print-to-pdf={built}", source.as_uri()
+        )
+        if printed.returncode != 0 or not built.exists():
+            raise RenderError(f"Chrome did not write the PDF: {printed.stderr.decode()[-300:]}")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(built, out)
+    return len(PAGE_OBJECT.findall(out.read_bytes()))
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: md-pdf <note.md> <out.pdf>", file=sys.stderr)
+        return 2
+    note, out = Path(argv[0]), Path(argv[1])
+    try:
+        pages = render(note, out)
+    except (RenderError, OSError, subprocess.TimeoutExpired) as error:
+        print(f"md-pdf: {error}", file=sys.stderr)
+        return 1
+    print(f"{pages} pages: {out.resolve()}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

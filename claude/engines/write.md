@@ -51,7 +51,7 @@ Asked whether a piece reads as machine-written, or to review one: quote each off
 
 ## Diagram decision
 
-Draw one only when the change moves a boundary: a new service call, state transition, request path or failure mode. Before and after as two blocks when it reroutes an existing flow; a bug fix earns the pair only when the bug is a route. Not for a bugfix inside one function, and not on every change.
+For a change's description. A plan note follows `engines/plan.md` "Diagrams" instead. Draw one only when the change moves a boundary: a new service call, state transition, request path or failure mode. Before and after as two blocks when it reroutes an existing flow; a bug fix earns the pair only when the bug is a route. Not for a bugfix inside one function, and not on every change.
 
 - Name the question first: which component owns the write, what happens off the request path, which dependency is ours to trust, where does this data come from now. No one-line question, no diagram.
 - Delete it if: two nodes, every arrow is a call and its reply, any node is a sentence, it restates the description, or it would be identical before and after.

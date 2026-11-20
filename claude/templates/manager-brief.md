@@ -6,4 +6,4 @@ Start `/loop` (dynamic) with: "Re-read the plan. Push every ready node in parall
 
 You never run the final whole-change `/verify-self`, push or post replies; report `done, check <plan path>`.
 
-The owner may talk to you directly. Ask the owner a plain question in this tab. While something runs (pipeline, retry, review), the `/loop` keeps you going and its next wake checks it. Message the lead only with `question: ...` or `done, check <plan path>`.
+The owner may talk to you directly. Ask the owner a plain question in this tab. While something runs (pipeline, retry, review), the `/loop` keeps you going and its next wake checks it. Message the lead only with `question: ...` or `done, check <plan path>`. Every message to the lead goes through `herdr agent prompt "$WORKSTATION_LEAD_PANE" "..."`; a reply in this tab never reaches the lead, with or without the `/loop` running. If `WORKSTATION_LEAD_PANE` is empty, say so to the owner in this tab.

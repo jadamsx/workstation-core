@@ -20,6 +20,8 @@ related_adrs: []
 ---
 # Title as a claim
 
+Prose sections are short bullets (`checklists/prose.md` §7 Note): each opens with a few bold words naming its point, one fact per bullet, `file:line` refs and numbers kept. The Requirements, Node table, Progress and Traceability sections keep the exact shapes below.
+
 ## Context and scope
 What exists today, with `file:line`, and what this covers. Say what is out of scope. Assumptions, each stated so the owner can say yes or no.
 
@@ -27,7 +29,7 @@ What exists today, with `file:line`, and what this covers. Say what is out of sc
 Goals as outcomes. Non-goals are things that could reasonably have been goals; they are the Not-building list.
 
 ## Design
-The verdict, the chosen approach, diagrams and the trade-offs that matter. Shape: the design after the change, with lines removed against added. A proposal for readers who will not build it stays `status: proposed` and ends with the decision needed: what, from whom, by when. Length follows importance; no pasted schemas.
+The verdict, the chosen approach, diagrams (full plan: shape after, build order, and the main-flow sequence when a flow crosses a boundary; `engines/plan.md` "Diagrams") and the trade-offs that matter. Shape: the design after the change, with lines removed against added. A proposal for readers who will not build it stays `status: proposed` and ends with the decision needed: what, from whom, by when. Length follows importance; no pasted schemas.
 
 ## Alternatives considered
 Each option and what made it lose.
