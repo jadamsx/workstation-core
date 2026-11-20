@@ -1,6 +1,6 @@
 ---
 name: done-check
-description: Check a node's Owns diff against its Decided and Not-building lines before a done report. Use last, before every done report. Never edits.
+description: Check a node's Owns diff against its Decided and Not-building lines before the node counts as done. Use last, before every node is marked done. Never edits.
 model: haiku
 tools: Bash, Read, Grep
 ---

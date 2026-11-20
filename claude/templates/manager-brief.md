@@ -6,4 +6,4 @@ Start `/loop` (dynamic) with: "Re-read the plan. Push every ready node in parall
 
 You never run the final whole-change `/verify-self`, push or post replies; report `done, check <plan path>`.
 
-The owner may talk to you directly. Questions for the owner stay in this tab: end your last message with `WAITING: <on what>`.
+The owner may talk to you directly. Ask the owner a plain question in this tab. While something runs (pipeline, retry, review), the `/loop` keeps you going and its next wake checks it. Message the lead only with `question: ...` or `done, check <plan path>`.

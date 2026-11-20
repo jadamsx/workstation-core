@@ -14,7 +14,7 @@ A plan note, a ticket key with an approved design note, an epic piece, or a plan
 - In a lead this goes to the work tab (`engines/common.md` Delegation). With `WORKSTATION_ROLE=lead` set, refuse to build and answer "hand to work"; the gate only blocks the lead's file edits.
 - Default is the whole ready graph, every node whose needs are done, up to the concurrency cap; `node` builds one node.
 - Notes are written with `notes-write`.
-- Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before a done report.
+- Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before the node counts as done.
 
 ## Output
 The engine's node report, then `/verify-self`.
