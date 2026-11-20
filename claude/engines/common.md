@@ -13,7 +13,7 @@ Two roles:
 - The lead (the strongest model) plans, answers the work tab's questions, and owns the final whole-change self-review. It never polls.
 - The work tab (the mid model) owns the plan, builds it and delegates exactly as main threads do below. It asks the lead only for a decision beyond the plan, with `herdr agent prompt $WORKSTATION_LEAD_PANE "question: ..."`, and sends `done, check <plan path>` when every node is green.
 
-In a lead, a skill that points here (build, change or epic review, comment review, babysit) does not run in place: the lead clears the work tab and hands it the plan with a plain `herdr agent prompt`, and tells the owner in one line that work took it. With `WORKSTATION_ROLE=lead` set the skill refuses; the gate only blocks the lead's file edits. Each space has `◆ lead` and `▸ work`, made by `herdr-manager setup`.
+In a lead, a skill that points here (build, change or epic review, comment review, babysit) does not run in place: the lead clears the work tab and hands it the plan with a plain `herdr agent prompt` that starts with a re-read of the work brief, and tells the owner in one line that work took it. With `WORKSTATION_ROLE=lead` set the skill refuses; the gate only blocks the lead's file edits. Each space has `◆ lead` and `▸ work`, made by `herdr-manager setup`.
 
 Rules for any main thread:
 - The lead does not edit files or run tests, builds, linters or formatters.
