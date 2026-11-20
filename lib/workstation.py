@@ -39,6 +39,7 @@ BINS = (
     "node-index",
     "herdr-manager",
     "shell-reap",
+    "md-pdf",
 )
 OK, MISSING, DIFFERS, DISPLACES, SKIPPED = (
     "ok",

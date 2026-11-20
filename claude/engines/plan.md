@@ -67,6 +67,7 @@ The questions are `checklists/design.md` §0. `premise-attacker` takes the ticke
 One vault note per ticket: `${NOTES_DIR:-~/notes}/projects/<slug>/designs/<KEY>-<slug>.md` (top-level `designs/` when there is no project), linked from `projects/<slug>/index.md`. Copy `templates/design.md` (`format: v2`), fill its sections in order, write it as a refactor, never an append. Review rounds, handoffs and images stay in `${DRAFTS_DIR:-~/drafts}/projects/<slug>/<key-or-slug>/`, linked by path.
 
 - Where the interview goes: Assumptions under Context and scope, the Not-building list under Goals and non-goals, Shape and the verdict in Design, the past-corrections quotes in Decisions. `notes-lint` fixes the headings, so no new section.
+- Format: prose sections are bullets, each opening with a few bold words naming its point, one fact per bullet, `file:line` refs and numbers kept; nothing cut for brevity, same content in a new shape (`checklists/prose.md` §7 Note). Sections and headings stay as the template has them; Requirements, the node table, Progress and Traceability keep their exact shape because agents read them.
 - Shape: the design after the change, with the three lines from `engines/write.md` when a boundary moves, and the expected lines removed against added. A plan that only adds says why nothing goes.
 - Status is the note's frontmatter `status`. New is `proposed`. Building refuses a note that is not `approved`. A change of approach after approval goes back to `proposed`. The `self` review sets `shipped`; a replaced design is `superseded` and linked both ways.
 - `## Progress` is one `- [ ] N1 <title>` line per node, then `- [ ] review`, `- [ ] change`, `- [ ] CI green`.
@@ -110,7 +111,7 @@ One field per line. Empty means the check that reads it is skipped (`engines/rev
 
 ## Node table
 
-A plan is a graph of nodes. A Mermaid graph is drawn when the work crosses more than two repos, changes a schema, or breaks an external contract. The table is always written; the build accepts nothing else. Build it for maximum parallelism. Per node:
+A plan is a graph of nodes. The table is always written; the build accepts nothing else. Build it for maximum parallelism. Diagrams go with it (below). Per node:
 
 | Column | Holds |
 |---|---|
@@ -136,6 +137,13 @@ The plan names what each node must prove (`checklists/design.md` §15); `test-ga
 
 **The table is a contract.** Once the owner says go, every row dispatches to the agent and discipline it names. A row the main thread builds itself is the run failing silently.
 
+### Diagrams
+
+Mermaid blocks in the note's Design section, drawn with `diagrams`:
+- Full plan: (a) shape after, a flowchart of repos and services with what flows between them; (b) build order, a flowchart of the node table with one box per node, grouped by wave, arrows from each `needs`; (c) the main-flow sequence when a flow crosses a boundary.
+- Quick plan: the build-order flowchart only, and only with two or more waves.
+- A diagram never replaces the table; the table stays the contract.
+
 Record the nodes once approved; idempotent per task slug.
 
 ```bash
@@ -159,4 +167,4 @@ Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 
-Fill `templates/plan-summary.md`: the plan note path, the verdict, Shape, the two lists, the Assumptions to confirm, the node table, and a "For the owner to check" line for every question the plan could not settle. Then ask for the go.
+Fill `templates/plan-summary.md`: the plan note path, the PDF path (`md-pdf`, per the plan skill), the verdict, Shape, the two lists, the Assumptions to confirm, the node table, and a "For the owner to check" line for every question the plan could not settle. Then ask for the go.

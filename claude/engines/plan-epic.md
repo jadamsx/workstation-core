@@ -1,6 +1,6 @@
 # Epic mode
 
-Read with `engines/plan.md`: the interview, lookup, five answers, plan note and node table apply here too. The output is a diagram and a table, not a document: an epic design that gets skimmed has failed at its only job.
+Read with `engines/plan.md`: the interview, lookup, five answers, plan note and node table apply here too. The output is diagrams and a table, not a document: an epic design that gets skimmed has failed at its only job.
 
 Done when: every child ticket, link and design page is read; the three questions in "Nothing here is gospel" are answered; the diagrams render; the review converged; the ticket table has acceptance and needs per row; every question the plan could not settle is listed.
 
@@ -40,7 +40,7 @@ A `sequenceDiagram` is almost always the shape. Which type, how to draw it and t
 - `Note over` for the threshold, algorithm or rule, numbers included.
 - Participants are services or processes, never a sentence.
 
-A second diagram, what owns what, when the epic moves a boundary: a component `flowchart TB` with one subgraph per service, the additions styled (an `erDiagram` for a pure schema epic). Never more than two. Render both with `mmdc` and look at the images first. A `;` inside a sequence note or message breaks the parse.
+A second diagram, what owns what, when the epic moves a boundary: a component `flowchart TB` with one subgraph per service, the additions styled (an `erDiagram` for a pure schema epic). Together with the build-order flowchart from `engines/plan.md` "Diagrams" that is the full set: shape after, build order, main flow. Render all with `mmdc` and look at the images first. A `;` inside a sequence note or message breaks the parse.
 
 ## 6. Converge
 
@@ -75,8 +75,8 @@ Create no stories yet: the ticket table stays as drafts in the note, and after a
 
 ## Where the artifact lives
 
-The plan note holds the diagrams as Mermaid blocks and the ticket table. `seq.mmd`, `owners.mmd` and their PNGs sit in `${DRAFTS_DIR:-~/drafts}/projects/<slug>/<epic-key>/`, linked by path. A wiki page only if the team will work from it, and only after the owner says so.
+The plan note holds the diagrams as Mermaid blocks and the ticket table. `seq.mmd`, `owners.mmd`, `order.mmd` (build order) and their PNGs sit in `${DRAFTS_DIR:-~/drafts}/projects/<slug>/<epic-key>/`, linked by path. A wiki page only if the team will work from it, and only after the owner says so.
 
-To show the team, publish one private page with the Artifact tool: where things stand today; both diagrams as native `<pre class="mermaid">` blocks with `<` `>` `&` escaped; the design screens as a click-to-enlarge gallery uploaded through `files`; the build table grouped by tracker story, prerequisites first; the decisions and risks carried forward. Keep the HTML as a template in the same folder with `{{SEQ}}` / `{{OWNERS}}` placeholders and republish with `url` to keep the link. Recover a lost copy with `Artifact read`.
+To show the team, publish one private page with the Artifact tool: where things stand today; all three diagrams as native `<pre class="mermaid">` blocks with `<` `>` `&` escaped; the design screens as a click-to-enlarge gallery uploaded through `files`; the build table grouped by tracker story, prerequisites first; the decisions and risks carried forward. Keep the HTML as a template in the same folder with `{{SEQ}}` / `{{OWNERS}}` / `{{ORDER}}` placeholders and republish with `url` to keep the link. Recover a lost copy with `Artifact read`.
 
-Changes built from the epic carry its two diagrams unchanged in Screenshots: same source, same colours. Render with `mmdc -c ${DRAFTS_DIR:-~/drafts}/projects/<slug>/<epic-key>/artifact-theme.json -b '#f5f7fa'` and put the change's own slice beside them.
+Changes built from the epic carry its sequence and owners diagrams unchanged in Screenshots: same source, same colours. Render with `mmdc -c ${DRAFTS_DIR:-~/drafts}/projects/<slug>/<epic-key>/artifact-theme.json -b '#f5f7fa'` and put the change's own slice beside them.

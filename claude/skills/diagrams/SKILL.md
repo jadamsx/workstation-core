@@ -22,6 +22,7 @@ The type, palette, syntax and render check below. A reviewer given the old arrow
 | A state machine | `stateDiagram-v2` |
 | Tables, columns, relations | `erDiagram` |
 | Which component owns what | C4-style `flowchart` with subgraphs |
+| Build order of a plan's nodes | `flowchart LR`: one subgraph per wave, one box per node, an edge from each need to the node that reads its output |
 
 A request and its response drawn as two flowchart arrows is a sequence diagram written wrong.
 
