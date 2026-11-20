@@ -1,7 +1,7 @@
 ---
 name: test-gap-auditor
 description: Find behaviours in a diff with no test that would fail without the change. Reports only.
-model: sonnet
+model: haiku
 tools: Read, Grep, Glob, Bash, Write
 ---
 

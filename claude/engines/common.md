@@ -9,16 +9,10 @@ Engines and main threads load this file. Agents load `agent-core.md`. The shell 
 - Anything that needs an OK goes under `## Out` in the report. One ask, at the end.
 
 ## Delegation
-Two roles:
-- The lead (the strongest model) plans, answers the work tab's questions, and owns the final whole-change self-review. It never polls.
-- The work tab (the mid model) owns the plan, builds it and delegates exactly as main threads do below. It asks the lead only for a decision beyond the plan, with `herdr agent prompt $WORKSTATION_LEAD_PANE "question: ..."`, and sends `done, check <plan path>` when every node is green.
-
-In a lead, a skill that points here (build, change or epic review, comment review, babysit) does not run in place: the lead clears the work tab and hands it the plan with a plain `herdr agent prompt` that starts with a re-read of the work brief, and tells the owner in one line that work took it. With `WORKSTATION_ROLE=lead` set the skill refuses; the gate only blocks the lead's file edits. Each space has `◆ lead` and `▸ work`, made by `herdr-manager setup`.
+Lead and work roles are defined in `templates/lead-brief.md` and `templates/manager-brief.md`; each space has `◆ lead` and `▸ work`, made by `herdr-manager setup`. A skill that points here and runs in a lead is handed to the work tab as the lead brief says.
 
 Rules for any main thread:
-- The lead does not edit files or run tests, builds, linters or formatters.
-- The work tab may edit files and run tests directly for small and sequential work. It still uses subagents for independent review (`cold-reviewer`) and for parallel ready nodes in a build.
-- Lead edits go to `builder` or `builder-small` (scope `one-file` for 1-2 files, `node` for a plan node; routing in `engines/build.md`). Runs go to `run-digest`. Review goes to `cold-reviewer`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
+- Main-thread edits go to `builder` or `builder-small` (scope `one-file` for 1-2 files, `node` for a plan node; routing in `engines/build.md`). Runs go to `run-digest`. Review goes to `cold-reviewer`. Research and log trawls go to a subagent. Tracker and source control host reads go to `change-reader`.
 - Agents never dispatch other agents.
 - A subagent copies a brief literally and does not expand variables. A brief that names the vault or the drafts dir carries the resolved absolute path (`printenv NOTES_DIR`, empty means `~/notes`; `printenv DRAFTS_DIR`, empty means `~/drafts`), never the `${...:-...}` form.
 - Brief typed agents with one bounded task each; a job too big for one is split, not handed to a general-purpose agent.

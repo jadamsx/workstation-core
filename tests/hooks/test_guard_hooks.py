@@ -384,15 +384,15 @@ class AgentModelGateTest(unittest.TestCase):
             "agent-model-gate.py", {"tool_name": "Agent", "tool_input": tool_input}
         )
 
-    def test_builtins_without_model_get_sonnet_injected(self) -> None:
-        for agent in ["Explore", "Plan", "claude"]:
+    def test_builtins_without_model_get_their_default_injected(self) -> None:
+        for agent, default in [("Explore", "haiku"), ("Plan", "sonnet"), ("claude", "sonnet")]:
             tool_input = {"prompt": "x", "subagent_type": agent}
             result = self.spawn(**tool_input)
             self.assertEqual(result.returncode, 0, agent)
             out = json.loads(result.stdout)["hookSpecificOutput"]
             self.assertEqual(out["permissionDecision"], "allow")
             self.assertEqual(
-                out["updatedInput"], {**tool_input, "model": "sonnet"}, agent
+                out["updatedInput"], {**tool_input, "model": default}, agent
             )
 
     def test_general_purpose_and_omitted_type_blocked(self) -> None:

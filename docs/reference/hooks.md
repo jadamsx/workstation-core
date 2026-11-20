@@ -13,7 +13,6 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | `agent-model-gate.py` | Before Agent | A subagent spawn that would run on the session model or the wrong model for the agent |
 | `main-thread-gate.py` | Before Edit, Write, NotebookEdit, MultiEdit, and on prompt submit | With `WORKSTATION_ROLE=lead`, the lead editing files (markdown under the drafts and notes folders stays editable; subagents are not affected). Put `main-thread-ok` in a prompt to lift it for that turn |
 | `notes-lint-guard.py` | After Edit, Write | Nothing. It runs `notes-lint` on a note you just wrote and hands failures back to Claude |
-| `manager-brief-inject.py` | Session start: every source for a lead (`WORKSTATION_ROLE=lead`), compact or clear for a work tab (`WORKSTATION_ROLE=work`) | Hands the lead or work brief back as context |
 | `project-context.py` | Session start | Nothing. It loads the project's index note into the session, capped at 4000 characters |
 
 ## Permission rules

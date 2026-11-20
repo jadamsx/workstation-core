@@ -11,7 +11,6 @@ After a change is open, or the owner says babysit. Reviewing happens before the 
 A change URL or `<project> #<number>`. Absent: the change for the current branch. Optional `timeout=<minutes>`, default 120 minutes of wall-clock from when babysit begins. A non-numeric or zero value falls back to the default.
 
 ## Differs
-- The lead hands the loop to the work tab as described in `engines/common.md`.
 - Never stops to ask; only reports.
 - Rewrites the title and description once at the start, without being asked, per `engines/write.md` target `change` and the repo template.
 - Any reply drafted to a review comment follows `checklists/prose.md` §7.

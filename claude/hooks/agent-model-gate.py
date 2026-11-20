@@ -5,7 +5,7 @@ Subagents never run on the session model; they burn the usage budget.
 An agent whose definition pins a `model:` may omit `model` (the pin applies) or repeat it.
 Opus is allowed by explicit override only for the agents in MODEL_CONFIG["opus_override"]. Agents without a
 pin must name sonnet or haiku, except the built-ins in BUILTIN_DEFAULT_SONNET: with no `model` the
-hook injects sonnet through updatedInput. Forks always inherit and pass.
+hook injects the mapped model (haiku for explore, else sonnet) through updatedInput. Forks always inherit and pass.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from hook_config import load
 MODEL_CONFIG = {
     "cheap": {"sonnet", "haiku"},
     "opus_override": set(load().get("opus_override", [])),
-    "builtin_default_sonnet": {"explore", "plan", "claude"},
+    "builtin_default_sonnet": {"explore": "haiku", "plan": "sonnet", "claude": "sonnet"},
 }
 CHEAP = MODEL_CONFIG["cheap"]
 OPUS_OVERRIDE = MODEL_CONFIG["opus_override"]
@@ -55,14 +55,14 @@ def block(message: str) -> None:
     sys.exit(2)
 
 
-def allow_with_sonnet(tool_input: dict) -> None:
+def allow_with_default(tool_input: dict, model: str) -> None:
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "updatedInput": {**tool_input, "model": "sonnet"},
+                    "updatedInput": {**tool_input, "model": model},
                 }
             }
         )
@@ -88,7 +88,7 @@ def main() -> None:
     name = agent.split(":")[-1]
 
     if model is None and is_bare_builtin(agent):
-        allow_with_sonnet(tool_input)
+        allow_with_default(tool_input, BUILTIN_DEFAULT_SONNET[agent.lower()])
     if pin and model in (None, pin):
         sys.exit(0)
     if model == "opus" and name in OPUS_OVERRIDE:

@@ -2,7 +2,8 @@
 """Usage: herdr-manager setup
 
 setup  run in the lead's pane: renames its tab `◆ lead`, then opens a `▸ work` tab running `claude --model sonnet`
-       with the work brief and WORKSTATION_LEAD_PANE set to the lead's pane, unless that tab already exists.
+       with the work brief and WORKSTATION_LEAD_PANE set to the lead's pane. An existing work tab is kept only if its
+       agent runs with the brief; otherwise setup fails (herdr does not expose a pane's env, so the flag is the check).
 """
 import argparse
 import json
@@ -126,7 +127,16 @@ def setup() -> int:
     pane = register()
     directory = Path.cwd()
     tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
-    if not any(tab.get("label") == WORK_TAB for tab in tabs):
+    existing = next((tab for tab in tabs if tab.get("label") == WORK_TAB), None)
+    if existing:
+        panes = herdr("pane", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("panes", [])
+        work = next((p["pane_id"] for p in panes if p.get("tab_id") == existing["tab_id"]), None)
+        if work is None or "--append-system-prompt-file" not in json.dumps(herdr("pane", "process-info", "--pane", work)):
+            raise ReportsError(
+                f"the {WORK_TAB} tab has no agent started with --append-system-prompt-file (WORKSTATION_ROLE=work and "
+                "WORKSTATION_LEAD_PANE are set at launch and cannot be read back); close the tab and rerun setup"
+            )
+    else:
         work, _ = launch("work", WORK_TAB, ["WORKSTATION_ROLE=work", f"WORKSTATION_LEAD_PANE={pane}"], directory,
                          ["--model", "sonnet", *mcp_args("work", space_dir() / "work"), "--append-system-prompt-file", str(BRIEF)])
         print(f"work: pane {work}")

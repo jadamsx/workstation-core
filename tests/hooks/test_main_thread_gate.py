@@ -41,17 +41,73 @@ class LeadGateTest(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertEqual(self.run_hook(self.pre(tool, {"file_path": "/repo/a.py"})).returncode, 2)
 
-    def test_lead_bash_and_agents_allowed(self) -> None:
-        self.assertEqual(self.run_hook(self.pre("Bash", {"command": "uv run pytest"})).returncode, 0)
+    def test_agents_allowed(self) -> None:
         self.assertEqual(self.run_hook(self.pre("Agent", {"subagent_type": "builder"})).returncode, 0)
 
     def test_subagent_edit_allowed(self) -> None:
         payload = self.pre("Edit", {"file_path": "/repo/a.py"}, agent_id="a1")
         self.assertEqual(self.run_hook(payload).returncode, 0)
 
-    def test_other_roles_may_edit(self) -> None:
-        payload = self.pre("Edit", {"file_path": "/repo/a.py"})
-        self.assertEqual(self.run_hook(payload, WORKSTATION_ROLE="work").returncode, 0)
+    def test_other_roles_ungated(self) -> None:
+        for role in ("builder", ""):
+            for tool, tin in (("Edit", {"file_path": "/repo/a.py"}), ("Bash", {"command": "git commit -m x"})):
+                with self.subTest(role=role, tool=tool):
+                    self.assertEqual(self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode, 0)
+
+    def test_role_matrix(self) -> None:
+        calls = {"edit": ("Edit", {"file_path": "/repo/a.py"}), "bash": ("Bash", {"command": "git push"})}
+        for role in ("lead", "work"):
+            for kind, (tool, tin) in calls.items():
+                with self.subTest(role=role, kind=kind):
+                    blocked = self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role)
+                    self.assertEqual(blocked.returncode, 2)
+                    self.assertIn(f"The {role} ", blocked.stderr)
+                    self.assertIn("work tab" if role == "lead" else "builder agent", blocked.stderr)
+                    self.assertEqual(self.run_hook(self.pre(tool, tin, agent_id="a1"), WORKSTATION_ROLE=role).returncode, 0)
+                    self.run_hook(self.prompt("main-thread-ok"), WORKSTATION_ROLE=role)
+                    lifted = self.run_hook(self.pre(tool, tin), WORKSTATION_ROLE=role).returncode
+                    self.assertEqual(lifted, 0 if role == "lead" else 2)
+                    self.run_hook(self.prompt("next"), WORKSTATION_ROLE=role)
+
+    def test_bash_blocked(self) -> None:
+        for cmd in (
+            "git commit -m x",
+            "cd r && git push origin main",
+            "uv run pytest -q",
+            "python3 -m unittest discover",
+            "pnpm test",
+            "npm run lint",
+            "ruff check .",
+            "make check",
+            "echo hi > src/a.py",
+            "echo hi >> /repo/a.txt",
+            "cat > a.py <<EOF\nx\nEOF",
+            "sed -i s/a/b/ f.py",
+            "echo x | tee out.txt",
+            "touch verify-self-pass",
+            "REOPEN_REVIEW=1 foo",
+        ):
+            for role in ("lead", "work"):
+                with self.subTest(cmd=cmd, role=role):
+                    self.assertEqual(self.run_hook(self.pre("Bash", {"command": cmd}), WORKSTATION_ROLE=role).returncode, 2)
+
+    def test_bash_allowed(self) -> None:
+        for cmd in (
+            "git status && git diff | head",
+            "git log --oneline",
+            "git worktree list",
+            "rg pytest tests",
+            "herdr pane list 2>&1",
+            "ls > /dev/null",
+            "echo x > $TMPDIR/a",
+            "echo x > /tmp/a",
+            "echo x > /x/scratchpad/a",
+            "echo x > /home/u/drafts/p/a.md",
+            "cat <<EOF >> /home/u/notes/n.md\nx\nEOF",
+            "echo x | tee /tmp/o",
+        ):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.run_hook(self.pre("Bash", {"command": cmd})).returncode, 0)
 
     def test_notes_and_drafts_markdown_allowed(self) -> None:
         for path in ("/home/u/notes/a.md", "/home/u/drafts/p/plan.md"):
