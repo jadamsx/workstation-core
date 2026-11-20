@@ -323,7 +323,7 @@ class BaseSettingsTest(unittest.TestCase):
 
     def test_destructive_git_stays_denied(self) -> None:
         deny = self.base["permissions"]["deny"]
-        for rule in ("Bash(git push --force*)", "Bash(git reset --hard*)", "Bash(git clean *)", "Read(~/.ssh/**)", "Read(~/.aws/**)", "Bash(docker system prune*)"):
+        for rule in ("Bash(git push --force*)", "Bash(git reset --hard*)", "Bash(git commit --no-verify*)", "Bash(git commit -n *)", "Bash(git push --no-verify*)", "Bash(git clean *)", "Read(~/.ssh/**)", "Read(~/.aws/**)", "Bash(docker system prune*)"):
             self.assertIn(rule, deny)
         self.assertNotIn("Bash(git -c *=*)", deny)
 
