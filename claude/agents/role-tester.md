@@ -1,7 +1,7 @@
 ---
 name: role-tester
 description: Test each plan role against each flow and API for permission leaks and dead ends. Reports a role-by-action matrix.
-model: sonnet
+model: haiku
 tools: Read, Grep, Glob, Bash, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate
 ---
 

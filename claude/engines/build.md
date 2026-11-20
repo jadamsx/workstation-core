@@ -10,14 +10,12 @@ Executes an approved plan's node graph in worktrees, dependency-driven. Plan voc
 
 ## Input
 
-The plan is the spec; each form below still ends at an approved plan.
+The plan is the spec. Without an approved plan, refuse and name the plan step.
 
 | Input | Route |
 |---|---|
 | A plan note, or a ticket key whose design note in `${NOTES_DIR:-~/notes}/projects/<slug>/designs/` has `status: approved` | build it |
 | An epic design piece (a row of the epic's design note, or the epic design from this session) | plan a story for that piece, then build |
-| A plan worked out in this session | write it as the design note and wait for the go |
-| A ticket key with no plan, or a bare description | plan it first |
 
 Never ask for a ticket, or for the input in a particular shape, when one of these is in front of you. A named node or piece is what gets built. Where the plan names an epic piece, that piece's "Done when" is its acceptance and every node traces to it. A ticket key anywhere in the plan settles branch naming and the change title; with none the work stays local and uncommitted, and the `self` review skips the change, the push and the CI loop.
 
@@ -36,14 +34,14 @@ A false premise found mid-build, or work outside the plan, stops the run and goe
 
 `EnterWorktree` for every repo the plan touches, local-only work included, after `git fetch origin` in that repo. Base is the repo's default branch (`git symbolic-ref refs/remotes/origin/HEAD`; never assume `main`). Location `<repo>/.claude/worktrees/<key>`, key = the ticket key, or `local-<plan-slug>` with none. Branch `<KEY>/<short-description>`; with no key `local/<plan-slug>`, never pushed. One ticket, one tree per repo: isolation is not permission to start a second ticket.
 
-Every node has its own worktree `<ticket>-<node>` and its own agent, and parallel nodes never share either. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval. A node agent works only in its tree. None runs `git checkout` in the owner's checkout and none pushes; the push is in the `self` review, from the main thread, through the gate.
+Every node has its own worktree `<ticket>-<node>` and its own agent, and parallel nodes never share either. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval.
 
 ## The graph
 
 No wave barriers. Whenever a node's needs are all done, start it in its own worktree and agent, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Review rounds of one node run alongside other nodes' builds. A round's fixes are grouped by the file they edit; each group goes to its own builder in its own worktree, all in one dispatch up to the cap (never one builder carrying several groups), and the group branches merge after. The node report line is `Fix groups: <n>, builders: <n>`.
 
 - The work tab never idle-waits while a ready node exists. When nothing is ready, the `/loop` wakes it to check the running gate, retry or review.
-- Tests and browser gates run in the background, each writing a result file, and are never waited on. The work tab does the next ready work meanwhile. One gate per app runs at a time, never a second suite in another worktree while one runs (`engines/common.md`); the others queue and their nodes keep building. Each app keeps its own worker cap from the resource policy, and no browser gate is shared across apps.
+- One gate per app runs at a time, never a second suite in another worktree while one runs (`engines/common.md`); the others queue and their nodes keep building. Each app keeps its own worker cap from the resource policy, and no browser gate is shared across apps.
 - A wave is only the commit and rebuild grouping. When all its nodes are done the main thread lands their branches onto the plan's ticket branch in node order as one commit group per repo trailed `Wave: Wn`, removes the node worktrees, then rebuilds the stack with the plan's stack file. A conflict means the Owns were wrong: stop, a planning error. Whole-diff rounds belong to the `self` review.
 - Node builders run only their focused proof plus lint and types on touched files, and share the repo's caches so setup stays cheap. The formatter, the suite and `pre-commit` run once, in the final `verify-run` node.
 - Overlapping `owns` is a need, or the node hands a patch to the integration owner the plan names; lockfiles, generated files and shared config sit in exactly one node's `owns`. A node that needs a file outside its `owns` reports `scope-grew` and stops. A merge conflict means the plan's `owns` or needs were wrong: stop and treat it as a planning error.
@@ -58,7 +56,7 @@ Each prompt gives the node spec (acceptance, `owns`, discipline, checklists), th
 - **Plan lines**: the node's `owns` paths and the plan's `Decided:`, `Standing:` and `Not-building:` lines, carried verbatim.
 - **Size routing**: a node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other node to `builder`. If a small agent fails, or its work fails review, rerun on the larger agent without asking.
 - **Open findings**: the work tab lists its open Blocker and Should-fix findings; the lead decides them before a change opens.
-- **Worktree safety**: never `git checkout --`, `restore` or `stash` with uncommitted changes; mutation checks run on a scratch copy; a file an agent says it rebuilt is re-reviewed and re-proven.
+- **Agent rules**: `engines/agent-core.md` applies; a file an agent says it rebuilt is re-reviewed and re-proven.
 - **For a v2 plan**, the FR ids the node delivers (its `covers` cell) with each FR's text. A node that would add, drop or change an FR is a decision node.
 - **What already ran**: the real suite and numbers from the nodes that just finished.
 

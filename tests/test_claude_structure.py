@@ -179,14 +179,6 @@ class SandboxAndToolsTests(unittest.TestCase):
             self.assertIn(f"Bash({command})", settings["permissions"]["allow"])
         self.assertIn("~/.local/share/workstation", settings["sandbox"]["filesystem"]["allowWrite"])
 
-    def test_manager_brief_inject_runs_on_every_session_start_source(self) -> None:
-        import json
-
-        settings = json.loads((CLAUDE / "settings.base.json").read_text())
-        entries = [e for e in settings["hooks"]["SessionStart"] if any("manager-brief-inject.py" in h["command"] for h in e["hooks"])]
-        self.assertEqual(len(entries), 1)
-        self.assertNotIn("matcher", entries[0])
-
     def test_every_agent_that_writes_a_findings_file_has_write(self) -> None:
         for path in sorted((CLAUDE / "agents").glob("*.md")):
             tools = frontmatter(path.read_text()).get("tools", "")

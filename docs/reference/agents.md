@@ -20,7 +20,7 @@ The table is read from the agents' frontmatter. `claude/templates/agent.md` is t
 | `comment-cutter` | sonnet | Strip AI comment slop from a branch before push: restated-what comments, ticket references, tutorial docstrings. Edits comments only. |
 | `comprehension-cutter` | haiku | Cut draft review comments to what the author can act on. Never judges whether a finding is true. |
 | `done-check` | haiku | Check a node's Owns diff against its Decided and Not-building lines before a done report. Use last, before every done report. Never edits. |
-| `edge-case-explorer` | sonnet | Run exploratory charters against a flow: empty, huge, concurrent, revoked mid-flow, long text, keyboard-only. One line per charter. |
+| `edge-case-explorer` | haiku | Run exploratory charters against a flow: empty, huge, concurrent, revoked mid-flow, long text, keyboard-only. One line per charter. |
 | `finding-refuter` | sonnet | Reproduce draft review findings on a pinned checkout, and fix-check them in round 2. Never posts. |
 | `change-reader` | haiku | Read one ticket or one change from the tracker or the source control host, read-only. Ticket text verbatim, change status as a table. |
 | `migration-verifier` | sonnet | Run a migration up, down and up again on a throwaway database with realistic rows. Reports counts, constraints and timing. |
@@ -29,8 +29,8 @@ The table is read from the agents' frontmatter. `claude/templates/agent.md` is t
 | `premise-attacker` | opus | Attack a ticket before it is built: premise, existing work, trivial baselines, sequencing. |
 | `rebase-resolver` | sonnet | Resolve rebase or merge conflicts in a worktree and re-run affected tests. Never pushes. |
 | `researcher` | sonnet | Answer one research question from code, docs and the web, with a source for every claim. Read-only. |
-| `role-tester` | sonnet | Test each plan role against each flow and API for permission leaks and dead ends. Reports a role-by-action matrix. |
+| `role-tester` | haiku | Test each plan role against each flow and API for permission leaks and dead ends. Reports a role-by-action matrix. |
 | `run-digest` | haiku | Run one named test command, or reduce a saved CI job log, and report the first failure. Use before reading raw output. |
 | `security-reviewer` | sonnet | Review a diff for auth, input, secrets and permission flaws, or scan added dependencies and licences. |
-| `test-gap-auditor` | sonnet | Find behaviours in a diff with no test that would fail without the change. Reports only. |
+| `test-gap-auditor` | haiku | Find behaviours in a diff with no test that would fail without the change. Reports only. |
 | `ui-verifier` | sonnet | Drive a changed UI flow in Playwright, diff it against its design frame. No verdict. |

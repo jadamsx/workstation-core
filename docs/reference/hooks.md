@@ -11,9 +11,8 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | `drafts-layout-guard.py` | Before Edit, Write | Writes under the drafts or notes folder whose first path part is not allowed, and writes under retired paths |
 | `shared-env-guard.py` | Before the Playwright navigate, type, fill, evaluate and upload tools | Typing, filling or uploading while the page sits on a host in `shared-envs.txt` |
 | `agent-model-gate.py` | Before Agent | A subagent spawn that would run on the session model or the wrong model for the agent |
-| `main-thread-gate.py` | Before Edit, Write, NotebookEdit, MultiEdit, and on prompt submit | With `WORKSTATION_ROLE=lead`, the lead editing files (markdown under the drafts and notes folders stays editable; subagents are not affected). Put `main-thread-ok` in a prompt to lift it for that turn |
+| `main-thread-gate.py` | Before Edit, Write, NotebookEdit, MultiEdit, Bash, and on prompt submit | A guard rail, not a sandbox. With `WORKSTATION_ROLE=lead` or `work`, blocks file edits (markdown under the drafts and notes folders stays editable) and any Bash command not on that role's allowlist; redirects and `tee` may only write under the temp, drafts and notes folders. Only the lead may `git push` and write `verify-self-pass`. `free` is ungated; an unset role inside herdr gets the lead rules, outside herdr it is ungated. Subagents are not affected. Put `main-thread-ok` in a prompt to lift it for the lead for that turn |
 | `notes-lint-guard.py` | After Edit, Write | Nothing. It runs `notes-lint` on a note you just wrote and hands failures back to Claude |
-| `manager-brief-inject.py` | Session start: every source for a lead (`WORKSTATION_ROLE=lead`), compact or clear for a work tab (`WORKSTATION_ROLE=work`) | Hands the lead or work brief back as context |
 | `project-context.py` | Session start | Nothing. It loads the project's index note into the session, capped at 4000 characters |
 
 ## Permission rules

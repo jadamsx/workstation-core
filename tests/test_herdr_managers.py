@@ -147,10 +147,31 @@ class SetupTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(len(self.creates()), 1)
 
+    def test_setup_fails_when_the_existing_work_agent_lacks_the_brief_flag(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        os.environ["FAKE_CMDLINE"] = "claude --model sonnet"
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("close the tab and rerun setup", r.stderr)
+        self.assertIn("role cannot be verified", r.stderr)
+        self.assertNotIn("tab rename", self.calls())
+        self.assertEqual(self.creates(), [])
+
+    def test_setup_fails_when_the_work_tab_has_no_pane(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t9","label":"▸ work"}'
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 2)
+
     def test_setup_outside_herdr_fails_before_any_tab(self) -> None:
         del os.environ["HERDR_PANE_ID"]
         self.assertEqual(self.setup_run().returncode, 2)
         self.assertEqual(self.creates(), [])
+
+    def test_setup_without_a_workspace_id_reports_not_inside_herdr(self) -> None:
+        del os.environ["HERDR_WORKSPACE_ID"]
+        r = self.setup_run()
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("not inside herdr", r.stderr)
 
     def test_setup_fails_naming_file_and_role_for_a_bad_policy(self) -> None:
         module = SourceFileLoader("herdr_manager_policy", str(REPO / "bin/herdr-manager")).load_module()

@@ -8,10 +8,9 @@ params: {}
 After a plan skill produced a plan and you said go. Anything without an approved plan goes to the matching `plan-*` skill first. Review of the result: `verify-self`.
 
 ## Inputs
-A plan note, a ticket key with an approved design note, an epic piece, or a plan from this session. Routes: `engines/build.md` "Input".
+A plan note, a ticket key with an approved design note, or an epic piece. Routes: `engines/build.md` "Input".
 
 ## Differs
-- In a lead this goes to the work tab (`engines/common.md` Delegation). With `WORKSTATION_ROLE=lead` set, refuse to build and answer "hand to work"; the gate only blocks the lead's file edits.
 - Default is the whole ready graph, every node whose needs are done, up to the concurrency cap; `node` builds one node.
 - Notes are written with `notes-write`.
 - Nodes route to `builder-small` or `builder` by size, per `engines/build.md` "Node prompts"; `done-check` runs last before the node counts as done.

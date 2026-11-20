@@ -24,7 +24,7 @@ It renames the tab `◆ lead` and opens `▸ work` after it with `WORKSTATION_LE
 ## Daily use
 
 1. Plan with the lead.
-2. To build, the lead clears the work tab and hands it the plan with a plain `herdr agent prompt` that first tells it to re-read the work brief, so a brief change applies after `/clear`.
+2. To build, the lead clears the work tab and hands it the plan with `/loop build <plan path>`.
 3. Work starts a `/loop`, pushes every ready node in parallel and asks the lead only for a decision beyond the plan.
 4. When every node is green, work sends the lead `done, check <plan path>` and the lead runs the final `/verify-self`.
 

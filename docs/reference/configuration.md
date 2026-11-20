@@ -46,7 +46,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `HOOKS_CONFIG_DIR` | `claude/hooks/hooks.d` | Folder of hook rule files |
 | `SHARED_ENVS_FILE` | `shared-envs.txt` beside the hook | Hosts `shared-env-guard` protects |
 | `MAIN_THREAD_GATE_STATE` | | Where `main-thread-gate` records `main-thread-ok` |
-| `WORKSTATION_ROLE` | | Set to `lead` by the launcher of a lead tab; the gate then blocks the lead's file edits. Set to `work` by `herdr-manager setup` in the work tab, together with `WORKSTATION_LEAD_PANE`, the lead's pane id |
+| `WORKSTATION_ROLE` | | `lead` for a lead tab, `work` (with `WORKSTATION_LEAD_PANE`, the lead's pane id) for the work tab set by `herdr-manager setup`, `free` for an ungated tab. `main-thread-gate` limits lead and work to file-edit and Bash allowlists; unset inside herdr it applies the lead rules |
 
 Run `grep -rn "environ" bin lib claude/hooks` for the full list.
 

@@ -2,7 +2,7 @@
 
 Work goes plan, build, review, ship. Each stage has one engine, and each skill is a thin entry point to one of them. [Engines](../reference/engines.md) has the parameters.
 
-In a [herdr space](herdr-spaces.md) the lead plans and answers questions, and the work tab owns the plan, builds, reviews and babysits. The lead hands it the plan with a plain `herdr agent prompt`, and work sends one line back when every node is green. Without herdr, one session does every step.
+In a [herdr space](herdr-spaces.md) the lead plans and answers questions, and the work tab owns the plan, builds, reviews and babysits. Roles: `claude/templates/lead-brief.md` and `manager-brief.md`. Without herdr, one session does every step.
 
 ## Plan
 
@@ -39,4 +39,4 @@ A plan is a node table: for each node the agent, discipline, files it owns, wave
 
 ## Around the edges
 
-`notes-write` saves to your notes vault as a refactor of the existing note. `handoff-write` and `handoff-read-in` carry a session across a full context. `reflect` mines a session for reusable procedures and proposes updates without applying them. `debt-ledger`, `diagrams` and `house-style` stand alone. See [skills](../reference/skills.md).
+`notes-write` saves to your notes vault as a refactor of the existing note. `handoff` carries a session across a full context. `reflect` mines a session for reusable procedures and proposes updates without applying them. `debt-ledger`, `diagrams` and `house-style` stand alone. See [skills](../reference/skills.md).

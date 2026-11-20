@@ -32,7 +32,7 @@ claude                   # in any git repo, then:
 
 ## Run it in herdr (recommended)
 
-[herdr](https://herdr.dev) is installed separately. In each workspace, open Claude in a tab and run `herdr-manager setup` there. That tab becomes the lead (`◆ lead`) and gets a `▸ work` tab for builds and reviews. The lead plans and answers questions, work owns the plan and builds it, and sends one `herdr agent prompt` line to the lead when done. [Herdr spaces](docs/guides/herdr-spaces.md) has the setup and daily use.
+[herdr](https://herdr.dev) is installed separately. In each workspace, open Claude in a tab and run `herdr-manager setup` there. That tab becomes the lead (`◆ lead`) and gets a `▸ work` tab for builds and reviews. [Herdr spaces](docs/guides/herdr-spaces.md) has the setup and daily use.
 
 ## Docs
 

@@ -117,7 +117,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
         "hooks": [
           {
             "type": "command",
@@ -153,14 +153,6 @@
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/project-context.py"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 __HOME__/.claude/hooks/manager-brief-inject.py"
           }
         ]
       }
