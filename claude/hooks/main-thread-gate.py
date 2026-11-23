@@ -21,12 +21,37 @@ from pathlib import Path
 ESCAPE_PHRASE = "main-thread-ok"
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 EDIT_EXEMPT_DIRS = ("/.claude/plans/", "/.claude/projects/")
-HANDOFF = {"lead": "a typed agent (run-digest for a command), or the work tab if it is part of a plan's build", "work": "a builder agent"}
-READS = set("herdr herdr-manager notes-lint md-pdf current-project cd ls cat head tail wc rg grep find date echo printf sleep jq awk sed tee gh glab".split())
-GIT = (*"status log diff show fetch branch rev-parse ls-remote remote commit-tree".split(), "worktree list")
-GIT_ROLE = {"lead": ("push",), "work": ("worktree", "merge", "rebase", "cherry-pick", "checkout -b")}
-CHANGE_READS = {("pr", "checks"), ("pr", "diff"), ("mr", "diff"), ("ci", "status"), ("ci", "trace"), ("ci", "view")}
-CHANGE_WRITES = {(k, v) for k, vs in (("pr", "create edit merge comment review"), ("mr", "create update merge note approve")) for v in vs.split()}
+HANDOFF = {
+    "lead": "a typed agent (run-digest for a command), or the work tab if it is part of a plan's build",
+    "work": "a builder agent",
+}
+READS = set(
+    "herdr herdr-manager notes-lint md-pdf current-project cd ls cat head tail wc rg grep find date echo printf sleep jq awk sed tee gh glab".split()
+)
+GIT = (
+    *"status log diff show fetch branch rev-parse ls-remote remote commit-tree".split(),
+    "worktree list",
+)
+GIT_ROLE = {
+    "lead": ("push",),
+    "work": ("worktree", "merge", "rebase", "cherry-pick", "checkout -b"),
+}
+CHANGE_READS = {
+    ("pr", "checks"),
+    ("pr", "diff"),
+    ("mr", "diff"),
+    ("ci", "status"),
+    ("ci", "trace"),
+    ("ci", "view"),
+}
+CHANGE_WRITES = {
+    (k, v)
+    for k, vs in (
+        ("pr", "create edit merge comment review"),
+        ("mr", "create update merge note approve"),
+    )
+    for v in vs.split()
+}
 API_WRITE_PATHS = ("discussions", "notes", "reactions", "resolve")
 API_WRITE_FLAGS = {"-f", "-F", "--field", "--raw-field", "--input"}
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\s*\2[ \t]*(?=\n|$)", re.S)
@@ -36,7 +61,11 @@ MARKER_WRITE = re.compile(r">\s*\"?(?:\$\([^)]*\)|[^\s\"]*)/verify-self-pass\"?"
 def coordination_dirs() -> tuple[str, ...]:
     notes = os.path.expanduser(os.environ.get("NOTES_DIR") or "~/notes")
     drafts = os.path.expanduser(os.environ.get("DRAFTS_DIR") or "~/drafts")
-    extra = tuple(os.path.expanduser(d) for d in os.environ.get("WORKSTATION_EDIT_EXEMPT_DIRS", "").split(":") if d)
+    extra = tuple(
+        os.path.expanduser(d)
+        for d in os.environ.get("WORKSTATION_EDIT_EXEMPT_DIRS", "").split(":")
+        if d
+    )
     return (drafts, notes, *extra)
 
 
@@ -82,7 +111,9 @@ def is_coordination_file(path: str) -> bool:
 def is_safe_target(target: str) -> bool:
     resolved = os.path.realpath(os.path.expandvars(os.path.expanduser(target)))
     roots = (os.environ.get("TMPDIR") or "/tmp", "/tmp", *coordination_dirs())
-    return resolved == "/dev/null" or any(resolved.startswith(os.path.realpath(r).rstrip("/") + "/") for r in roots)
+    return resolved == "/dev/null" or any(
+        resolved.startswith(os.path.realpath(r).rstrip("/") + "/") for r in roots
+    )
 
 
 def segments(command: str) -> tuple[list[list[str]], list[str]]:
@@ -91,7 +122,9 @@ def segments(command: str) -> tuple[list[list[str]], list[str]]:
     segs, targets, redirect = [[]], [], ""
     for tok in lex:
         if redirect:
-            if ">" in redirect and not (redirect.endswith("&") and re.fullmatch(r"\d+|-", tok)):
+            if ">" in redirect and not (
+                redirect.endswith("&") and re.fullmatch(r"\d+|-", tok)
+            ):
                 targets.append(tok)
             redirect = ""
         elif tok and set(tok) <= set("();<>|&"):
@@ -111,12 +144,24 @@ def command_allowed(role: str, words: list[str]) -> bool:
         return any(rest.startswith(p + " ") for p in GIT + GIT_ROLE[role])
     if name in ("gh", "glab"):
         if args[:1] == ["api"]:
-            method = next((a.upper() for f, a in zip(args, args[1:]) if f in ("-X", "--method")), "")
+            method = next(
+                (a.upper() for f, a in zip(args, args[1:]) if f in ("-X", "--method")),
+                "",
+            )
             if not API_WRITE_FLAGS & set(args) and method in ("", "GET"):
                 return True
-            return role == "lead" and method != "DELETE" and any(k in a for a in args[1:] for k in API_WRITE_PATHS)
+            return (
+                role == "lead"
+                and method != "DELETE"
+                and any(k in a for a in args[1:] for k in API_WRITE_PATHS)
+            )
         pair = tuple(args[:2])
-        return args[1:2] in (["view"], ["list"]) or pair in CHANGE_READS or role == "lead" and pair in CHANGE_WRITES
+        return (
+            args[1:2] in (["view"], ["list"])
+            or pair in CHANGE_READS
+            or role == "lead"
+            and pair in CHANGE_WRITES
+        )
     if name == "sed":
         return not any(re.match(r"-[a-zA-Z]*i|--in-place", a) for a in args)
     if name == "tee":
@@ -129,13 +174,25 @@ def block_reason(payload: dict, role: str) -> str | None:
     if payload.get("tool_name") == "Bash":
         command = HEREDOC.sub(r"\3", tool_input.get("command") or "")
         try:
-            segs, targets = segments(MARKER_WRITE.sub("", command) if role == "lead" else command)
+            segs, targets = segments(
+                MARKER_WRITE.sub("", command) if role == "lead" else command
+            )
         except ValueError:
             return f"The {role} may not run a command that cannot be parsed. Hand it to {HANDOFF[role]}."
         bad = next((" ".join(w[:2]) for w in segs if not command_allowed(role, w)), "")
-        label = bad and f"run `{bad}`" or not all(map(is_safe_target, targets)) and "write outside the tmp, drafts and notes folders"
-        return label and f"The {role} may not {label} from Bash. Hand it to {HANDOFF[role]}."
-    if payload.get("tool_name") in EDIT_TOOLS and not is_coordination_file(tool_input.get("file_path") or tool_input.get("notebook_path") or ""):
+        label = (
+            bad
+            and f"run `{bad}`"
+            or not all(map(is_safe_target, targets))
+            and "write outside the tmp, drafts and notes folders"
+        )
+        return (
+            label
+            and f"The {role} may not {label} from Bash. Hand it to {HANDOFF[role]}."
+        )
+    if payload.get("tool_name") in EDIT_TOOLS and not is_coordination_file(
+        tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+    ):
         return f"The {role} does not edit files. Hand the change to {HANDOFF[role]}."
     return None
 
@@ -150,8 +207,14 @@ def main() -> None:
     if payload.get("hook_event_name") == "UserPromptSubmit":
         record_prompt(payload)
         sys.exit(0)
-    role = os.environ.get("WORKSTATION_ROLE") or ("lead" if os.environ.get("HERDR_PANE_ID") else "")
-    if role not in HANDOFF or is_subagent(payload) or (role == "lead" and escaped(payload)):
+    role = os.environ.get("WORKSTATION_ROLE") or (
+        "lead" if os.environ.get("HERDR_PANE_ID") else ""
+    )
+    if (
+        role not in HANDOFF
+        or is_subagent(payload)
+        or (role == "lead" and escaped(payload))
+    ):
         sys.exit(0)
     reason = block_reason(payload, role)
     if reason:

@@ -96,10 +96,17 @@ class ReportsCase(unittest.TestCase):
         return self.log.read_text().splitlines() if self.log.exists() else []
 
     def bin(self, script: str, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([str(REPO / "bin" / script), *args], capture_output=True, text=True)
+        return subprocess.run(
+            [str(REPO / "bin" / script), *args], capture_output=True, text=True
+        )
 
     def setup_run(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
-        return subprocess.run([str(REPO / "bin/herdr-manager"), "setup"], capture_output=True, text=True, cwd=cwd or self.root.parent)
+        return subprocess.run(
+            [str(REPO / "bin/herdr-manager"), "setup"],
+            capture_output=True,
+            text=True,
+            cwd=cwd or self.root.parent,
+        )
 
     def creates(self) -> list[str]:
         return [c for c in self.calls() if c.startswith("tab create")]
@@ -108,10 +115,16 @@ class ReportsCase(unittest.TestCase):
         return [c for c in self.calls() if c.startswith("agent start")]
 
     def started_servers(self, start: str) -> set[str]:
-        return set(json.loads(Path(start.split("--mcp-config ")[1].split()[0]).read_text())["mcpServers"])
+        return set(
+            json.loads(Path(start.split("--mcp-config ")[1].split()[0]).read_text())[
+                "mcpServers"
+            ]
+        )
 
     def trust_dialog(self) -> None:
-        self.pane.write_text(f"Quick safety check\n{herdr_reports.TRUST_DIALOG}\n❯ 1. Yes, I trust this folder\n  2. No, exit\n")
+        self.pane.write_text(
+            f"Quick safety check\n{herdr_reports.TRUST_DIALOG}\n❯ 1. Yes, I trust this folder\n  2. No, exit\n"
+        )
 
     def real_trust_dialog(self) -> None:
         self.pane.write_text(
@@ -123,20 +136,30 @@ class ReportsCase(unittest.TestCase):
         ps.write_text("#!/bin/sh\nexit 1\n")
         ps.chmod(ps.stat().st_mode | stat.S_IXUSR)
         r = self.bin("shell-reap", "1")
-        self.assertEqual((r.returncode, r.stderr.count("\n"), "Traceback" in r.stderr), (1, 1, False))
+        self.assertEqual(
+            (r.returncode, r.stderr.count("\n"), "Traceback" in r.stderr), (1, 1, False)
+        )
 
 
 class SetupTests(ReportsCase):
-    def test_setup_renames_the_lead_tab_and_opens_one_sonnet_work_tab_that_knows_the_lead_pane(self) -> None:
+    def test_setup_renames_the_lead_tab_and_opens_one_sonnet_work_tab_that_knows_the_lead_pane(
+        self,
+    ) -> None:
         r = self.setup_run()
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("tab rename w1:t1 ◆ lead", self.calls())
         (work,) = self.creates()
-        self.assertIn("--label ▸ work --env WORKSTATION_ROLE=work --env WORKSTATION_LEAD_PANE=w1:p1 --env DISABLE_AUTO_UPDATE=true", work)
+        self.assertIn(
+            "--label ▸ work --env WORKSTATION_ROLE=work --env WORKSTATION_LEAD_PANE=w1:p1 --env DISABLE_AUTO_UPDATE=true",
+            work,
+        )
         for item in herdr_reports.NO_STDIN_ENV:
             self.assertIn(f"--env {item}", work)
         (start,) = self.starts()
-        self.assertIn("agent start work-space-one --kind claude --pane w1:p4 -- --model sonnet --strict-mcp-config", start)
+        self.assertIn(
+            "agent start work-space-one --kind claude --pane w1:p4 -- --model sonnet --strict-mcp-config",
+            start,
+        )
         self.assertTrue(start.endswith("manager-brief.md"))
         self.assertEqual(self.started_servers(start), set(POLICY["roles"]["work"]))
 
@@ -147,7 +170,9 @@ class SetupTests(ReportsCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(len(self.creates()), 1)
 
-    def test_setup_fails_when_the_existing_work_agent_lacks_the_brief_flag(self) -> None:
+    def test_setup_fails_when_the_existing_work_agent_lacks_the_brief_flag(
+        self,
+    ) -> None:
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
         os.environ["FAKE_CMDLINE"] = "claude --model sonnet"
         r = self.setup_run()
@@ -174,14 +199,20 @@ class SetupTests(ReportsCase):
         self.assertIn("not inside herdr", r.stderr)
 
     def test_setup_fails_naming_file_and_role_for_a_bad_policy(self) -> None:
-        module = SourceFileLoader("herdr_manager_policy", str(REPO / "bin/herdr-manager")).load_module()
+        module = SourceFileLoader(
+            "herdr_manager_policy", str(REPO / "bin/herdr-manager")
+        ).load_module()
         policy = self.root / "policy.json"
         self.root.mkdir(parents=True, exist_ok=True)
         for text in (None, "{", '{"roles": {}}'):
             policy.unlink(missing_ok=True)
             if text is not None:
                 policy.write_text(text)
-            with self.subTest(text=text), mock.patch.object(module, "POLICY", policy), mock.patch("sys.stderr") as err:
+            with (
+                self.subTest(text=text),
+                mock.patch.object(module, "POLICY", policy),
+                mock.patch("sys.stderr") as err,
+            ):
                 self.assertEqual(module.main(["setup"]), 2)
                 shown = "".join(c.args[0] for c in err.write.call_args_list)
                 self.assertIn("policy.json", shown)
@@ -195,8 +226,13 @@ class SetupTests(ReportsCase):
         os.environ["FAKE_BUSY_POLLS"] = "3"
         self.assertEqual(self.setup_run().returncode, 0)
         calls = self.calls()
-        first_start = next(i for i, c in enumerate(calls) if c.startswith("agent start"))
-        self.assertEqual(len([c for c in calls[:first_start] if c.startswith("pane process-info")]), 4)
+        first_start = next(
+            i for i, c in enumerate(calls) if c.startswith("agent start")
+        )
+        self.assertEqual(
+            len([c for c in calls[:first_start] if c.startswith("pane process-info")]),
+            4,
+        )
 
     def test_agent_start_is_retried_while_the_pane_is_busy(self) -> None:
         os.environ["FAKE_START_BUSY"] = "3"
@@ -231,9 +267,13 @@ class SetupTests(ReportsCase):
         r = self.setup_run()
         self.assertEqual(r.returncode, 0, r.stderr)
         sent = [c for c in self.calls() if c.startswith("agent send-keys")]
-        self.assertEqual(sent, ["agent send-keys w1:p4 Enter", "agent send-keys w1:p4 Down Enter"])
+        self.assertEqual(
+            sent, ["agent send-keys w1:p4 Enter", "agent send-keys w1:p4 Down Enter"]
+        )
 
-    def test_blocked_start_without_a_trust_dialog_fails_with_the_pane_tail_and_closes_the_tab(self) -> None:
+    def test_blocked_start_without_a_trust_dialog_fails_with_the_pane_tail_and_closes_the_tab(
+        self,
+    ) -> None:
         (self.root.parent / "not-ready").write_text("")
         self.pane.write_text("something else\n")
         r = self.setup_run()
@@ -245,40 +285,61 @@ class SetupTests(ReportsCase):
     def test_trust_accepted_but_no_input_box_raises(self) -> None:
         self.trust_dialog()
         self.ready.write_text("still loading\n")
-        manager = SourceFileLoader("herdr_manager_under_test", str(REPO / "bin/herdr-manager")).load_module()
-        with mock.patch.object(manager, "STARTUP_TIMEOUT", 0.3), self.assertRaises(herdr_reports.ReportsError):
+        manager = SourceFileLoader(
+            "herdr_manager_under_test", str(REPO / "bin/herdr-manager")
+        ).load_module()
+        with (
+            mock.patch.object(manager, "STARTUP_TIMEOUT", 0.3),
+            self.assertRaises(herdr_reports.ReportsError),
+        ):
             manager.accept_trust_dialog("w1:p4", Path.cwd().resolve())
 
     def test_input_box_matches_both_prompt_glyphs(self) -> None:
-        for text in ("> \n", "│ > \n", "❯ \n", "❯\xa0Try \"x\"\n", "  ? for shortcuts"):
+        for text in ("> \n", "│ > \n", "❯ \n", '❯\xa0Try "x"\n', "  ? for shortcuts"):
             self.assertTrue(herdr_reports.INPUT_BOX.search(text), text)
         for text in ("loading\n", "❯Try\n", "echo > file\n"):
             self.assertFalse(herdr_reports.INPUT_BOX.search(text), text)
 
 
 class NoStdinEnvTests(unittest.TestCase):
-    def test_settings_env_adds_only_ci_to_the_tab_env_because_ci_strips_claude_colours(self) -> None:
+    def test_settings_env_adds_only_ci_to_the_tab_env_because_ci_strips_claude_colours(
+        self,
+    ) -> None:
         env = json.loads((REPO / "claude/settings.base.json").read_text())["env"]
-        settings = {f"{k}={v}" for k, v in env.items() if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
+        settings = {
+            f"{k}={v}"
+            for k, v in env.items()
+            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
+        }
         self.assertEqual(settings, {"CI=1", *herdr_reports.NO_STDIN_ENV})
         self.assertNotIn("CI=1", herdr_reports.NO_STDIN_ENV)
-
 
 
 class StopShellTests(unittest.TestCase):
     P = herdr_reports.Proc
     ROWS = [
         P(10, 5, 5000, 50.0, "claude --model sonnet"),
-        P(20, 10, 900, 0.0, "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make serve' < /dev/null"),
+        P(
+            20,
+            10,
+            900,
+            0.0,
+            "/bin/zsh -c source /h/.claude/shell-snapshots/s.sh && eval 'make serve' < /dev/null",
+        ),
         P(21, 20, 900, 0.0, "make serve"),
     ]
 
     def test_stop_shell_accepts_only_a_shell_under_claude(self) -> None:
-        rows = self.ROWS + [self.P(30, 1, 900, 0.0, "/bin/zsh -c orphan"), self.P(40, 20, 900, 0.0, "python3 x")]
+        rows = self.ROWS + [
+            self.P(30, 1, 900, 0.0, "/bin/zsh -c orphan"),
+            self.P(40, 20, 900, 0.0, "python3 x"),
+        ]
         sent: list = []
 
         def stop(pid: int, caller: int = 999) -> None:
-            herdr_reports.stop_shell(pid, lambda: rows, lambda p, sig: sent.append((p, sig)), caller)
+            herdr_reports.stop_shell(
+                pid, lambda: rows, lambda p, sig: sent.append((p, sig)), caller
+            )
 
         for pid in (40, 30, 10, 1):
             with self.assertRaises(herdr_reports.ReportsError):
@@ -287,7 +348,9 @@ class StopShellTests(unittest.TestCase):
             stop(20, caller=21)
         self.assertEqual(sent, [])
         stop(20)
-        self.assertEqual(sent, [(40, signal.SIGTERM), (21, signal.SIGTERM), (20, signal.SIGTERM)])
+        self.assertEqual(
+            sent, [(40, signal.SIGTERM), (21, signal.SIGTERM), (20, signal.SIGTERM)]
+        )
 
     def test_ps_fields_parse(self) -> None:
         self.assertEqual(herdr_reports.clock_seconds("1-02:03:04"), 93784)
