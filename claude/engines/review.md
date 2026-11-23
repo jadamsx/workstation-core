@@ -83,7 +83,7 @@ A reviewer's comment is a claim about the code, checked like a finding. It hunts
 1. Collect the comments, pinned head, description, ticket and linked designs. Write `decisions.md`: the plan's `Decided:` lines, the description, the author's earlier replies.
 2. `finding-refuter` gets the comments as drafts in `comments.md` with `brief.md`, `decisions.md` and `diff.patch`, and no opinion of yours. It also says whether each belongs in this change.
 3. Confirm every verdict in the code yourself; `claim-prover` runs what needs a run. True is not the same as belongs here: scope creep and pre-existing issues become a follow-up ticket; a comment against a decision is declined citing it, unless it brings evidence the decision lacked.
-4. Report per comment: verdict with `file:line`, severity, outcome (fix, follow-up, or decline with a reason) and a drafted reply per `checklists/prose.md` §7.
+4. Report per comment: verdict with `file:line`, severity, outcome (fix, follow-up, or decline with a reason) and a reply per `checklists/prose.md` §7.
 
 ### Mode `plan`
 

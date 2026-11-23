@@ -24,7 +24,7 @@ Planning: sizing, interview, the plan note, the node table. Epic mode: `engines/
 Per kind, beyond what the skill for the kind lists:
 - `bug`: acceptance names the test that fails now and passes after.
 - `spike`: the box (hours or attempts), the cheapest experiment that can say no, and the next step if yes; a spike that informs no decision does not run.
-- `fix`: every open human thread gets exactly one outcome (fix, follow-up or decline); every fix thread is covered by a node with an acceptance sentence; the table shows thread, author, outcome and drafted reply; nothing is built or posted before the owner's go. After the push, post one reply per thread (`checklists/prose.md` §7) via the reply verb in `engines/ship.md`, and resolve only fixed threads.
+- `fix`: every open human thread gets exactly one outcome (fix, follow-up or decline); every fix thread is covered by a node with an acceptance sentence; the table shows thread, author, outcome and reply; nothing is built before the owner's go. After the push, post one reply per thread (`checklists/prose.md` §7) via the reply verb in `engines/ship.md`, and resolve only fixed threads.
 
 Ends early on `don't`, `already exists`, a false premise, or (quick) a second file or interface appearing: re-size to full and say so. A spike also ends when its box runs out or one attempt answers the question.
 

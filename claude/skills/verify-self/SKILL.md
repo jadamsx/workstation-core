@@ -15,7 +15,7 @@ The branch, and the design note or ticket it implements. Without a ticket it sto
 - Fixes: grouped by edited file, one builder per group (`engines/build.md` "The graph").
 - Pushing and CI: `engines/ship.md`. Description: `change-write`; diagrams as it asks.
 
-- Fix plan: after a successful push, post each drafted reply from the plan's thread table with the reply verb in `engines/ship.md` ("Fixed in <short sha>: <what>", the follow-up link, or the decline reason), then resolve only fixed threads, one at a time, never one an author is still discussing. The owner's go on the plan is the OK.
+- Fix plan: after a successful push, the agent that pushed posts each drafted reply with the reply verb in `engines/ship.md` and resolves only fixed threads, one at a time, never one an author is still discussing. No second OK.
 
 - Pass: with no open Blocker, as the final step, have `run-digest` write the marker in `marker` mode, passing the worktree path (the lead's main thread cannot write it; subagents are trusted, not gated); `pre-push-guard` denies a push or change open until that sha is HEAD.
 

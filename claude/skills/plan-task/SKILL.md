@@ -11,4 +11,4 @@ A description or ticket key.
 ## Differs
 Quick when it sizes quick: a table of one or a few rows. Disciplines `tdd`, `acceptance-first`, `refactor` or `migration` on every node. Minimal v2 note: Requirements, node table with `covers`, Traceability, the back half.
 ## Output
-Verdict, node table, open questions, the go question.
+Filled `templates/plan-summary.md`.

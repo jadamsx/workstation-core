@@ -12,9 +12,9 @@ The comments, or the change URL (its unresolved threads are fetched).
 
 ## Differs
 - Rounds follow `engines/review.md` "Round shapes".
-- Changes nothing and replies to nothing; resolving threads is the owner's call, and only fixed ones.
+- Changes nothing and posts nothing; its drafted reply is the text `/plan-fix` posts.
 - Load `house-style` before writing the report.
-- Only if the owner asks to fix: `/plan-fix <change>`; fixes route through `/build` or `/verify-self`.
+- On your own change, fixes follow via `/plan-fix <change>`.
 
 ## Output
 Engine report for `comments`: per comment verdict, severity, status, outcome and drafted reply; then must-change, follow-up, leave.
