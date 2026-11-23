@@ -43,6 +43,31 @@ BLOCKED = (
     "gh api -X DELETE /x/notes/1",
     "touch verify-self-pass",
     "echo x > $(git rev-parse --git-dir)/verify-self-pass; touch x",
+    "sed -n 'w .git/verify-self-pass' f",
+    "awk 'BEGIN{print 1 > \".git/verify-self-pass\"}'",
+    "git diff --output=.git/verify-self-pass",
+    "sed 'w out' f",
+    "sed 'e id' f",
+    "awk 'BEGIN{system(\"id\")}'",
+    "awk '{print | \"sh\"}'",
+    "git log --output=o",
+    "rg --pre ./x a",
+    "find . -delete",
+    "find . -exec rm {} ;",
+    "sed -n -f s.sed f",
+    "sed --expression='w x' f",
+    "sed 'W x' f",
+    "sed 's/a/b/w x' f",
+    "awk -f p.awk f",
+    "awk 'BEGIN{getline x < \"f\"}'",
+    "awk '{print $1 > \"x\"}'",
+    "find . -fprint x",
+    "find . -fls x",
+    "tee x <<EOT\nverify-self-pass\nEOT",
+    "git remote set-url origin y",
+    "git remote add x y",
+    "git branch -D x",
+    "git branch -m a b",
 )
 ALLOWED = (
     "git status && git diff | head",
@@ -63,6 +88,12 @@ ALLOWED = (
     "glab mr diff 1",
     "FOO=1 ls",
     "sed -n 5p f",
+    "sed 's/w /x/' f",
+    "sed 's/ w / /' f",
+    "awk '$1>3' f",
+    "git branch --show-current",
+    "git remote -v",
+    "git -C /r branch -a",
     "ls > /dev/null",
     "echo x > $TMPDIR/a",
     "echo x > /tmp/a",
@@ -78,7 +109,7 @@ ROWS = [
     for r in ("lead", "work")
 ] + [
     ("lead", "git push origin x", True),
-    ("lead", MARKER, True),
+    ("lead", MARKER, False),
     ("lead", "git merge x", False),
     *(
         (r, c, r == "lead")
@@ -100,6 +131,8 @@ ROWS = [
     ("work", "git push origin x", False),
     ("work", MARKER, False),
     ("work", 'git merge -m "a > b" x', True),
+    ("lead", "herdr-manager build p.md", True),
+    ("work", "herdr-manager build p.md", False),
 ]
 
 

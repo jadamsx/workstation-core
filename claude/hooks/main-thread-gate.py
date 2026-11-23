@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Block the lead and work tabs (WORKSTATION_ROLE=lead|work) from editing files or mutating via Bash.
 
-Subagent tool calls carry `agent_id` in the hook payload, the lead's own do not. Markdown notes
-under the drafts and notes folders stay editable. Bash is a per-role allowlist (redirects only under tmp, drafts, notes); `free` is ungated;
-an unset role in herdr gets the lead rules. Putting `main-thread-ok` in a prompt lifts the
-gate for that turn: the UserPromptSubmit wiring records it per session, PreToolUse reads it.
-
+Subagent tool calls carry `agent_id` in the hook payload, the lead's own do not. Markdown notes under the drafts and notes
+folders stay editable. Bash is a per-role allowlist (redirects only under tmp, drafts, notes); `free` is ungated; an unset role
+in herdr gets the lead rules. `main-thread-ok` in a prompt lifts the gate for that turn (recorded per session on UserPromptSubmit).
 Exit 0 = allow, exit 2 = block (stderr goes back to Claude).
 """
 
@@ -54,8 +52,17 @@ CHANGE_WRITES = {
 }
 API_WRITE_PATHS = ("discussions", "notes", "reactions", "resolve")
 API_WRITE_FLAGS = {"-f", "-F", "--field", "--raw-field", "--input"}
+MARKER = "verify-self-pass"
+DENY = {
+    "git": r"(^| )--output|(^| )(branch|remote)( .*)? (-[a-zA-Z]*[dDmM]|--delete|--move|add|set-url|remove|rm|rename)( |$)",
+    "rg": r"(^| )--(pre|hostname-bin)\b",
+    "find": r"(^| )-(exec|execdir|delete|ok|okdir|fprint\w*|fls)( |$)",
+    "sed": r"(^| )(-[a-zA-Z]*f|--file|--expression)",
+    "awk": r"(^| )(-[a-zA-Z]*f|--file)|system\(|getline|\bprintf?\b[^;}]*[>|]",
+}
+SED_SUBST = re.compile(r"(?<!\w)s(.)(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1(\w*)")
+SED_WRITE = re.compile(r"(^|[;{}])\s*([\d$,]*|/[^/]*/)\s*[wWe](\s|$)")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\s*\2[ \t]*(?=\n|$)", re.S)
-MARKER_WRITE = re.compile(r">\s*\"?(?:\$\([^)]*\)|[^\s\"]*)/verify-self-pass\"?")
 
 
 def coordination_dirs() -> tuple[str, ...]:
@@ -69,21 +76,12 @@ def coordination_dirs() -> tuple[str, ...]:
     return (drafts, notes, *extra)
 
 
-def is_subagent(payload: dict) -> bool:
-    return bool(payload.get("agent_id"))
-
-
-def state_dir() -> Path:
-    override = os.environ.get("MAIN_THREAD_GATE_STATE")
-    return (
-        Path(override)
-        if override
-        else Path.home() / ".claude" / "state" / "main-thread-ok"
-    )
-
-
 def flag_path(session_id: str) -> Path:
-    return state_dir() / re.sub(r"[^\w.-]", "_", session_id or "unknown")
+    state = Path(
+        os.environ.get("MAIN_THREAD_GATE_STATE")
+        or Path.home() / ".claude/state/main-thread-ok"
+    )
+    return state / re.sub(r"[^\w.-]", "_", session_id or "unknown")
 
 
 def record_prompt(payload: dict) -> None:
@@ -95,16 +93,13 @@ def record_prompt(payload: dict) -> None:
         flag.unlink(missing_ok=True)
 
 
-def escaped(payload: dict) -> bool:
-    return flag_path(payload.get("session_id", "")).exists()
-
-
 def is_coordination_file(path: str) -> bool:
     resolved = Path(os.path.realpath(path))
-    if resolved.suffix != ".md":
-        return False
-    return any(part in f"{resolved}/" for part in EDIT_EXEMPT_DIRS) or any(
-        resolved.is_relative_to(os.path.realpath(root)) for root in coordination_dirs()
+    return resolved.suffix == ".md" and (
+        any(part in f"{resolved}/" for part in EDIT_EXEMPT_DIRS)
+        or any(
+            resolved.is_relative_to(os.path.realpath(r)) for r in coordination_dirs()
+        )
     )
 
 
@@ -139,6 +134,12 @@ def command_allowed(role: str, words: list[str]) -> bool:
     while words and re.match(r"[A-Za-z_]\w*=", words[0]):
         words = words[1:]
     name, args = (words[:1] or ["true"])[0], words[1:]
+    if (
+        re.search(DENY.get(name, "(?!)"), " ".join(args))
+        or role == "work"
+        and (name, args[:1]) == ("herdr-manager", ["build"])
+    ):
+        return False
     if name == "git":
         rest = " ".join(args[2:] if args[:1] == ["-C"] else args) + " "
         return any(rest.startswith(p + " ") for p in GIT + GIT_ROLE[role])
@@ -163,7 +164,12 @@ def command_allowed(role: str, words: list[str]) -> bool:
             and pair in CHANGE_WRITES
         )
     if name == "sed":
-        return not any(re.match(r"-[a-zA-Z]*i|--in-place", a) for a in args)
+        script = " ".join(a for a in args if not a.startswith("-"))
+        return not (
+            any(re.match(r"-[a-zA-Z]*i|--in-place", a) for a in args)
+            or any(re.search("[we]", m[2]) for m in SED_SUBST.finditer(script))
+            or SED_WRITE.search(SED_SUBST.sub("", script))
+        )
     if name == "tee":
         return all(is_safe_target(a) for a in args if not a.startswith("-"))
     return name in READS or name == "true"
@@ -172,17 +178,18 @@ def command_allowed(role: str, words: list[str]) -> bool:
 def block_reason(payload: dict, role: str) -> str | None:
     tool_input = payload.get("tool_input") or {}
     if payload.get("tool_name") == "Bash":
-        command = HEREDOC.sub(r"\3", tool_input.get("command") or "")
+        raw = tool_input.get("command") or ""
+        command = HEREDOC.sub(r"\3", raw)
         try:
-            segs, targets = segments(
-                MARKER_WRITE.sub("", command) if role == "lead" else command
-            )
+            segs, targets = segments(command)
         except ValueError:
             return f"The {role} may not run a command that cannot be parsed. Hand it to {HANDOFF[role]}."
         bad = next((" ".join(w[:2]) for w in segs if not command_allowed(role, w)), "")
         label = (
             bad
             and f"run `{bad}`"
+            or MARKER in raw
+            and f"mention {MARKER}"
             or not all(map(is_safe_target, targets))
             and "write outside the tmp, drafts and notes folders"
         )
@@ -201,7 +208,7 @@ def main() -> None:
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
-        sys.exit(0)
+        payload = None
     if not isinstance(payload, dict):
         sys.exit(0)
     if payload.get("hook_event_name") == "UserPromptSubmit":
@@ -212,8 +219,8 @@ def main() -> None:
     )
     if (
         role not in HANDOFF
-        or is_subagent(payload)
-        or (role == "lead" and escaped(payload))
+        or payload.get("agent_id")
+        or (role == "lead" and flag_path(payload.get("session_id", "")).exists())
     ):
         sys.exit(0)
     reason = block_reason(payload, role)
@@ -224,7 +231,6 @@ def main() -> None:
             reason += f" `{ESCAPE_PHRASE}` in your prompt lifts this for the turn."
         print(reason, file=sys.stderr)
         sys.exit(2)
-    sys.exit(0)
 
 
 if __name__ == "__main__":

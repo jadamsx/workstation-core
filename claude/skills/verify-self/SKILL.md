@@ -17,7 +17,7 @@ The branch, and the design note or ticket it implements. Without a ticket it sto
 
 - Fix plan: after a successful push, post each drafted reply from the plan's thread table with the reply verb in `engines/ship.md` ("Fixed in <short sha>: <what>", the follow-up link, or the decline reason), then resolve only fixed threads, one at a time, never one an author is still discussing. The owner's go on the plan is the OK.
 
-- Pass: with no open Blocker, write `<reviewed HEAD sha> <branch>` to `$(git rev-parse --git-dir)/verify-self-pass`; `pre-push-guard` denies a push or change open until that sha is HEAD.
+- Pass: with no open Blocker, as the final step, have `run-digest` write the marker in `marker` mode, passing the worktree path (the lead's main thread cannot write it; subagents are trusted, not gated); `pre-push-guard` denies a push or change open until that sha is HEAD.
 
 ## Output
 Engine report shape for `self` per `templates/review.md`, then the three lines for the owner. `/reflect` once if a procedure repeated or a correction came twice.

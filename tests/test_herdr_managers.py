@@ -5,6 +5,7 @@ import stat
 import sys
 import subprocess
 import tempfile
+import time
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -35,13 +36,16 @@ case "$1 $2" in
     n=$(cat "$FAKE_READS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_READS"
     if [ "$n" -ge "${FAKE_EMPTY_READS:-0}" ]; then cat "$FAKE_PANE"; fi ;;
   "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","label":"Space One"}]}}' ;;
-  "tab list") echo "{\\"result\\":{\\"tabs\\":[$FAKE_TABS]}}" ;;
+  "tab list") if [ -e "$FAKE_LIST_FAIL" ]; then echo "no socket" >&2; exit 1; fi; echo "{\\"result\\":{\\"tabs\\":[$FAKE_TABS]}}" ;;
   "pane process-info")
     n=$(cat "$FAKE_PROCS" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_PROCS"
     if [ "$n" -lt "${FAKE_BUSY_POLLS:-0}" ]; then fg='[{"argv0":"zsh"},{"argv0":"tail"}]'; else fg='[{"argv0":"zsh"}]'; fi
     echo "{\\"result\\":{\\"process_info\\":{\\"shell_pid\\":${FAKE_SHELL_PID:-0},\\"cmdline\\":\\"$FAKE_CMDLINE\\",\\"foreground_processes\\":$fg}}}" ;;
   "pane list") panes="$FAKE_PANES"; [ -e "$FAKE_PANES_NOW" ] && panes=$(cat "$FAKE_PANES_NOW"); echo "{\\"result\\":{\\"panes\\":[$panes]}}" ;;
-  "agent prompt") if [ -e "$FAKE_BLOCKED" ]; then echo "agent_blocked" >&2; exit 1; fi ;;
+  "agent prompt")
+    if [ -e "$FAKE_BLOCKED" ]; then echo "agent_blocked" >&2; exit 1; fi
+    if [ -n "$FAKE_FAIL_ON" ] && case "$*" in *"$FAKE_FAIL_ON"*) true ;; *) false ;; esac; then echo "refused" >&2; exit 1; fi
+    case "$*" in *" /clear") printf 'cleared\\n> \\n  ? for shortcuts\\n' > "$FAKE_PANE" ;; esac ;;
 esac
 """
 
@@ -76,6 +80,8 @@ class ReportsCase(unittest.TestCase):
             "SHELL": "/bin/zsh",
             "AGENT_START_RETRY_SECONDS": "0.05",
             "FAKE_WAIT_FAIL": str(base / "wait-fail"),
+            "FAKE_LIST_FAIL": str(base / "list-fail"),
+            "FAKE_FAIL_ON": "",
             "FAKE_NOT_READY": str(base / "not-ready"),
             "FAKE_PANES_NOW": str(base / "panes-now"),
             "FAKE_PANES": '{"pane_id":"w1:p1","tab_id":"w1:t1"},{"pane_id":"w1:p4","tab_id":"w1:t4","agent":"claude"}',
@@ -100,9 +106,11 @@ class ReportsCase(unittest.TestCase):
             [str(REPO / "bin" / script), *args], capture_output=True, text=True
         )
 
-    def setup_run(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    def setup_run(
+        self, *args: str, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [str(REPO / "bin/herdr-manager"), "setup"],
+            [str(REPO / "bin/herdr-manager"), *(args or ("setup",))],
             capture_output=True,
             text=True,
             cwd=cwd or self.root.parent,
@@ -186,6 +194,80 @@ class SetupTests(ReportsCase):
         os.environ["FAKE_TABS"] = '{"tab_id":"w1:t9","label":"▸ work"}'
         r = self.setup_run()
         self.assertEqual(r.returncode, 2)
+
+    def test_build_clears_waits_then_loops_the_absolute_plan(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        r = self.setup_run("build", str(plan))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        steps = [c for c in self.calls() if c.startswith("agent ")]
+        self.assertEqual(steps[0], "agent prompt w1:p4 /clear")
+        self.assertEqual(steps[1], f"agent prompt w1:p4 /loop build {plan.resolve()}")
+
+    def test_build_without_a_work_pane_sends_nothing(self) -> None:
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        r = self.setup_run("build", str(plan))
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual([c for c in self.calls() if c.startswith("agent")], [])
+
+    def test_build_rejects_missing_and_whitespace_plan_paths(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        spaced = self.root.parent / "a b.md"
+        spaced.write_text("x")
+        for plan in ("missing.md", str(spaced), "p\nq.md"):
+            self.assertEqual(self.setup_run("build", plan).returncode, 2, plan)
+        self.assertEqual([c for c in self.calls() if c.startswith("agent")], [])
+
+    def test_build_failure_after_clear_names_the_step_and_exits_1(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        os.environ["FAKE_FAIL_ON"] = "/loop"
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        r = self.setup_run("build", str(plan))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("/loop build failed: refused", r.stderr)
+        self.assertIn("/clear already landed", r.stderr)
+
+    def test_build_on_an_unchanged_fresh_screen_loops_after_the_settle_time(
+        self,
+    ) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        self.pane.write_text("cleared\n> \n  ? for shortcuts\n")
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        started = time.monotonic()
+        r = self.setup_run("build", str(plan))
+        elapsed = time.monotonic() - started
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(1.8 <= elapsed < 6, elapsed)
+        self.assertTrue(any("/loop build" in c for c in self.calls()))
+
+    def test_build_failed_first_clear_sends_no_loop(self) -> None:
+        os.environ["FAKE_TABS"] = '{"tab_id":"w1:t4","label":"▸ work"}'
+        os.environ["FAKE_FAIL_ON"] = "/clear"
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        r = self.setup_run("build", str(plan))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("/clear had not landed", r.stderr)
+        self.assertFalse(any("/loop" in c for c in self.calls()))
+
+    def test_build_without_workspace_id_exits_2(self) -> None:
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        del os.environ["HERDR_WORKSPACE_ID"]
+        r = self.setup_run("build", str(plan))
+        self.assertEqual((r.returncode, "Traceback" in r.stderr), (2, False))
+
+    def test_build_with_a_failing_tab_list_exits_1_without_traceback(self) -> None:
+        Path(os.environ["FAKE_LIST_FAIL"]).touch()
+        plan = self.root.parent / "plan.md"
+        plan.write_text("x")
+        r = self.setup_run("build", str(plan))
+        self.assertEqual((r.returncode, "Traceback" in r.stderr), (1, False))
+        self.assertIn("tab list", r.stderr)
 
     def test_setup_outside_herdr_fails_before_any_tab(self) -> None:
         del os.environ["HERDR_PANE_ID"]
