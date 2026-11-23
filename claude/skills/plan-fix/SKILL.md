@@ -5,10 +5,10 @@ engine: plan
 params: {kind: fix}
 ---
 ## When
-Only when the owner asks. Human comments on your change, after `/verify-comments`. Automated comments and pipeline failures are `babysit`.
+Human comments on your change, after `/verify-comments`; `babysit` runs it unasked. Automated comments and pipeline failures are `babysit`.
 ## Inputs
 A change URL or `<project> #<number>`. Verdicts are in `${DRAFTS_DIR:-~/drafts}/reviews/<repo>-<number>/`; none: run `/verify-comments` first.
 ## Differs
-Every open human thread gets one outcome, nits included: fix, follow-up (ticket drafted with `ticket-write`, not created) or decline (one-line reason). Fixes are a quick node table, one node per fix or group, tied to a thread id; build via `/build`, or `/verify-self` for one small fix. One table: thread, author, outcome, node or draft or reason, drafted reply. Nothing is built, created, pushed or posted before the OK. Replies per `checklists/prose.md` §7, after the push: "Fixed in <short sha>: <what>", the follow-up link, or the decline reason. Resolve only fixed threads, one at a time, never one an author is still discussing.
+Every open human thread gets one outcome, nits included: fix (the default), decline (one-line reason) or, rarely, follow-up: a `ticket-write` draft, not created, only when the fix goes beyond the change's ticket, needs a product or design call, or is too large for the change. Fixes are a quick node table, one node per fix or group, tied to a thread id; build via `/build`, or `/verify-self` for one small fix. After the push, the agent that pushed posts the drafted reply per `checklists/prose.md` §7 ("Fixed in <short sha>: <what>" or the decline reason) and resolves fixed threads one at a time, never one an author is still discussing. No go gate; only follow-up drafts wait for the owner.
 ## Output
-The thread table, then the go question.
+The thread table (thread, author, outcome, node or reason), then any follow-up drafts.

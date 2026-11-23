@@ -67,7 +67,7 @@ Read the table. Say `go` to approve it, or say what to change. Nothing is built 
 /verify-self
 ```
 
-Fresh reviewers read your branch, every finding is fixed, comment slop is cut, and the change description is written from the repo's template. Nothing is posted or pushed without your OK. After you push, `/babysit` watches the pipeline and the [automated reviewers](automated-reviewers.md).
+Fresh reviewers read your branch, every finding is fixed, comment slop is cut, and the change description is written from the repo's template. Nothing is pushed without your OK. After you push, `/babysit` watches the pipeline, the [automated reviewers](automated-reviewers.md) and human threads on your change.
 
 ## Next
 

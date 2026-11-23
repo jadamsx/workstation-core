@@ -11,4 +11,4 @@ The question. A vague one starts the interview, which asks only Task and Extra i
 ## Differs
 Discipline `spike`. The verdict names the decision it informs and who makes it; none, no run. Prior art: notes, then `researcher` and `code-locator`; cite sources for what is known. One to three `spike` nodes; `owns` is a scratch branch or copy; nothing merges. Review is one `premise-attacker` round. Findings go to `projects/<slug>/research/` via `notes-write` (top-level `research/` with no project), linked from the index and the decision.
 ## Output
-Question, decision, box, experiment, node row, the go question.
+Filled `templates/plan-summary.md`.

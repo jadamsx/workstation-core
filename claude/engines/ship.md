@@ -35,7 +35,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Open or update a change (description from `change-write`) | `gh pr create`, `gh pr edit` | `glab mr create`, `glab mr update` |
 
 - The template path is the default; the project settings may point elsewhere. Read the template before writing a description (`change-write`).
-- Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK, one thread first, checked to land before the rest.
+- Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK (thread replies on our own change: `engines/common.md`), one thread first, checked to land before the rest.
 - Allowed exception to the OK gate: a ship run may rewrite its own change's title and description once at the start, unasked, via `change-write`. Any later edit asks.
 - Discussions are read with who raised each and whether it is resolved. A resolved thread is reopened by reply only with new evidence.
 
