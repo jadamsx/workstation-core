@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Usage: herdr-manager setup
+"""Usage: herdr-manager setup | build <plan path>
 
 setup  run in the lead's pane: renames its tab `◆ lead`, then opens a `▸ work` tab running `claude --model sonnet`
        with the work brief and WORKSTATION_LEAD_PANE set to the lead's pane. An existing work tab is kept only if its
        agent runs with the brief; otherwise setup fails (herdr does not expose a pane's env, so the flag is the check).
+build  run in the lead's pane: sends `/clear`, then `/loop build <plan path>`, to this space's work pane.
 """
+
 import argparse
 import json
 import os
@@ -17,7 +19,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from herdr_reports import (  # noqa: E402
-    INPUT_BOX, LEAD_TAB, NO_STDIN_ENV, TRUST_DIALOG, WORK_TAB, ReportsError, herdr, pane_text, space_dir, wait_for_shell, write_atomic,
+    INPUT_BOX,
+    LEAD_TAB,
+    NO_STDIN_ENV,
+    TRUST_DIALOG,
+    WORK_TAB,
+    ReportsError,
+    herdr,
+    pane_text,
+    space_dir,
+    wait_for_shell,
+    write_atomic,
 )
 
 BRIEF = Path(__file__).resolve().parent.parent / "claude/templates/manager-brief.md"
@@ -26,6 +38,7 @@ MCP_SERVERS = BRIEF.parent.parent / "mcp.json"
 SHELL_TIMEOUT = 20
 STARTUP_TIMEOUT = 20
 START_RETRIES = 3
+CLEAR_SETTLE = 2
 IMPORTS_DIALOG = "Allow external CLAUDE.md file imports?"
 STARTUP_DIALOGS = (TRUST_DIALOG, IMPORTS_DIALOG)
 
@@ -38,7 +51,9 @@ def mcp_args(role: str, folder: Path) -> list[str]:
         names = [*listed[role], *catalog.get("roles", {}).get(role, [])]
         servers = {n: catalog["mcpServers"][n] for n in names}
     except (OSError, ValueError, KeyError) as err:
-        raise ReportsError(f"cannot start role {role!r} from {POLICY} and {MCP_SERVERS}: {type(err).__name__}: {err}") from err
+        raise ReportsError(
+            f"cannot start role {role!r} from {POLICY} and {MCP_SERVERS}: {type(err).__name__}: {err}"
+        ) from err
     folder.mkdir(parents=True, exist_ok=True)
     config = folder / "mcp.json"
     write_atomic(config, json.dumps({"mcpServers": servers}))
@@ -49,7 +64,10 @@ def register() -> str:
     pane = os.environ.get("HERDR_PANE_ID")
     if not pane:
         raise ReportsError("not inside herdr: HERDR_PANE_ID is unset")
-    mine = next((p for p in herdr("pane", "list").get("panes", []) if p["pane_id"] == pane), None)
+    mine = next(
+        (p for p in herdr("pane", "list").get("panes", []) if p["pane_id"] == pane),
+        None,
+    )
     if mine is None:
         raise ReportsError(f"pane {pane} is not in the herdr pane list")
     herdr("tab", "rename", mine["tab_id"], LEAD_TAB)
@@ -62,18 +80,28 @@ def accept_trust_dialog(pane: str, directory: Path, blocked: bool = False) -> No
         text = pane_text(pane)
         if not any(dialog in text for dialog in STARTUP_DIALOGS):
             tail = "\n".join(text.splitlines()[-5:])
-            raise ReportsError(f"the agent in pane {pane} is blocked during startup and no startup dialog is visible:\n{tail}")
+            raise ReportsError(
+                f"the agent in pane {pane} is blocked during startup and no startup dialog is visible:\n{tail}"
+            )
     cwd = Path.cwd().resolve()
     answered: set[str] = set()
     deadline = time.monotonic() + STARTUP_TIMEOUT
     while True:
         text = pane_text(pane)
-        dialog = next((d for d in STARTUP_DIALOGS if d in text and d not in answered), None)
+        dialog = next(
+            (d for d in STARTUP_DIALOGS if d in text and d not in answered), None
+        )
         if dialog is not None:
             if directory != cwd and cwd not in directory.parents:
-                raise ReportsError(f"Claude Code does not trust {directory} and it is outside {cwd}; run claude there once to trust it")
-            shown = text[text.index(dialog):]
-            keys = ["Enter"] if re.search(r"❯\s*(1\.\s*)?Yes", shown) else ["Down", "Enter"]
+                raise ReportsError(
+                    f"Claude Code does not trust {directory} and it is outside {cwd}; run claude there once to trust it"
+                )
+            shown = text[text.index(dialog) :]
+            keys = (
+                ["Enter"]
+                if re.search(r"❯\s*(1\.\s*)?Yes", shown)
+                else ["Down", "Enter"]
+            )
             herdr("agent", "send-keys", pane, *keys)
             answered.add(dialog)
         elif INPUT_BOX.search(text):
@@ -83,14 +111,26 @@ def accept_trust_dialog(pane: str, directory: Path, blocked: bool = False) -> No
         time.sleep(0.2)
     if not answered:
         return
-    raise ReportsError(f"the input box in pane {pane} never appeared after answering startup prompts for {directory}")
+    raise ReportsError(
+        f"the input box in pane {pane} never appeared after answering startup prompts for {directory}"
+    )
 
 
 def agent_start(name: str, pane: str, claude_args: list[str]) -> bool:
     """`herdr agent start`, retried while herdr still reports the new pane busy; True if it started blocked on a prompt."""
     for attempt in range(START_RETRIES + 1):
         try:
-            herdr("agent", "start", name, "--kind", "claude", "--pane", pane, "--", *claude_args)
+            herdr(
+                "agent",
+                "start",
+                name,
+                "--kind",
+                "claude",
+                "--pane",
+                pane,
+                "--",
+                *claude_args,
+            )
             return False
         except subprocess.CalledProcessError as err:
             output = f"{err.stderr}{err.stdout}"
@@ -99,15 +139,28 @@ def agent_start(name: str, pane: str, claude_args: list[str]) -> bool:
             if "agent_pane_busy" not in output or attempt == START_RETRIES:
                 raise
             time.sleep(float(os.environ.get("AGENT_START_RETRY_SECONDS", "2")))
-    return False
 
 
-def launch(name: str, label: str, env: list[str], directory: Path, claude_args: list[str]) -> tuple[str, str]:
+def launch(
+    name: str, label: str, env: list[str], directory: Path, claude_args: list[str]
+) -> tuple[str, str]:
     """Open a tab running claude and answer its startup prompts; the tab is closed again if that fails."""
     tab = herdr(
-        "tab", "create", "--workspace", os.environ["HERDR_WORKSPACE_ID"], "--cwd", str(directory), "--label", label,
-        *(arg for item in env for arg in ("--env", item)), "--env", "DISABLE_AUTO_UPDATE=true", "--env", "DISABLE_UPDATE_PROMPT=true",
-        *(arg for item in NO_STDIN_ENV for arg in ("--env", item)), "--no-focus",
+        "tab",
+        "create",
+        "--workspace",
+        os.environ["HERDR_WORKSPACE_ID"],
+        "--cwd",
+        str(directory),
+        "--label",
+        label,
+        *(arg for item in env for arg in ("--env", item)),
+        "--env",
+        "DISABLE_AUTO_UPDATE=true",
+        "--env",
+        "DISABLE_UPDATE_PROMPT=true",
+        *(arg for item in NO_STDIN_ENV for arg in ("--env", item)),
+        "--no-focus",
     )
     pane = tab["root_pane"]["pane_id"]
     try:
@@ -122,17 +175,84 @@ def launch(name: str, label: str, env: list[str], directory: Path, claude_args: 
     return pane, tab["tab"]["tab_id"]
 
 
+def find_work() -> tuple[dict | None, str | None]:
+    """This workspace's work tab and the first pane in it."""
+    workspace = os.environ.get("HERDR_WORKSPACE_ID")
+    if not workspace:
+        raise ReportsError("not inside herdr: HERDR_WORKSPACE_ID is unset")
+    tab = next(
+        (
+            t
+            for t in herdr("tab", "list", "--workspace", workspace).get("tabs", [])
+            if t.get("label") == WORK_TAB
+        ),
+        None,
+    )
+    if tab is None:
+        return None, None
+    panes = herdr("pane", "list", "--workspace", workspace).get("panes", [])
+    return tab, next(
+        (p["pane_id"] for p in panes if p.get("tab_id") == tab["tab_id"]), None
+    )
+
+
+def wait_for_clear(pane: str, before: str) -> None:
+    """Poll until the input box shows on a changed screen, or on any screen after CLEAR_SETTLE seconds (a fresh pane looks the same)."""
+    start = time.monotonic()
+    while True:
+        text = pane_text(pane)
+        waited = time.monotonic() - start
+        if INPUT_BOX.search(text) and (text != before or waited >= CLEAR_SETTLE):
+            return
+        if waited >= STARTUP_TIMEOUT:
+            raise ReportsError(
+                f"pane {pane} did not show a cleared input box after /clear"
+            )
+        time.sleep(0.2)
+
+
+def build(plan: str) -> int:
+    """Clear the work pane, wait for it, and hand it the plan by absolute path."""
+    path = Path(plan).resolve()
+    if re.search(r"\s", str(path)):
+        raise ReportsError(
+            f"the plan path may not contain whitespace or newlines: {path!r}"
+        )
+    if not path.is_file():
+        raise ReportsError(f"plan not found: {path}")
+    _, work = find_work()
+    if work is None:
+        raise ReportsError(
+            f"no {WORK_TAB} pane in this workspace; run herdr-manager setup first"
+        )
+    step = "/clear"
+    try:
+        before = pane_text(work)
+        herdr("agent", "prompt", work, "/clear")
+        step = "wait after /clear"
+        wait_for_clear(work, before)
+        step = "/loop build"
+        herdr("agent", "prompt", work, f"/loop build {path}")
+    except subprocess.CalledProcessError as err:
+        landed = (
+            "/clear had not landed" if step == "/clear" else "/clear already landed"
+        )
+        print(
+            f"herdr-manager: {step} failed: {err.stderr.strip()} ({landed})",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def setup() -> int:
     """Rename this pane's tab to lead and open the work tab unless it is already there."""
-    if "HERDR_WORKSPACE_ID" not in os.environ:
-        raise ReportsError("not inside herdr: HERDR_WORKSPACE_ID is unset")
     directory = Path.cwd()
-    tabs = herdr("tab", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("tabs", [])
-    existing = next((tab for tab in tabs if tab.get("label") == WORK_TAB), None)
+    existing, work = find_work()
     if existing:
-        panes = herdr("pane", "list", "--workspace", os.environ["HERDR_WORKSPACE_ID"]).get("panes", [])
-        work = next((p["pane_id"] for p in panes if p.get("tab_id") == existing["tab_id"]), None)
-        if work is None or "--append-system-prompt-file" not in json.dumps(herdr("pane", "process-info", "--pane", work)):
+        if work is None or "--append-system-prompt-file" not in json.dumps(
+            herdr("pane", "process-info", "--pane", work)
+        ):
             raise ReportsError(
                 f"the {WORK_TAB} tab has no agent started with --append-system-prompt-file (WORKSTATION_ROLE=work and "
                 "WORKSTATION_LEAD_PANE are set at launch and cannot be read back: herdr exposes no pane env, so the "
@@ -140,23 +260,39 @@ def setup() -> int:
             )
     pane = register()
     if not existing:
-        work, _ = launch("work", WORK_TAB, ["WORKSTATION_ROLE=work", f"WORKSTATION_LEAD_PANE={pane}"], directory,
-                         ["--model", "sonnet", *mcp_args("work", space_dir() / "work"), "--append-system-prompt-file", str(BRIEF)])
+        work, _ = launch(
+            "work",
+            WORK_TAB,
+            ["WORKSTATION_ROLE=work", f"WORKSTATION_LEAD_PANE={pane}"],
+            directory,
+            [
+                "--model",
+                "sonnet",
+                *mcp_args("work", space_dir() / "work"),
+                "--append-system-prompt-file",
+                str(BRIEF),
+            ],
+        )
         print(f"work: pane {work}")
     return 0
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="herdr-manager")
-    parser.add_subparsers(dest="command", required=True).add_parser("setup")
-    parser.parse_args(argv)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("setup")
+    commands.add_parser("build").add_argument("plan")
+    args = parser.parse_args(argv)
     try:
-        return setup()
+        return build(args.plan) if args.command == "build" else setup()
     except ReportsError as err:
         print(f"herdr-manager: {err}", file=sys.stderr)
         return 2
     except subprocess.CalledProcessError as err:
-        print(f"herdr-manager: {' '.join(err.cmd[:3])} failed: {err.stderr.strip()}", file=sys.stderr)
+        print(
+            f"herdr-manager: {' '.join(err.cmd[:3])} failed: {err.stderr.strip()}",
+            file=sys.stderr,
+        )
         return 1
 
 
