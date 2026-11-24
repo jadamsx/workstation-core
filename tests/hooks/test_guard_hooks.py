@@ -666,6 +666,17 @@ class NoMarkerTest(unittest.TestCase):
             payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": "git push"}}
             self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0)
 
+    def test_tag_and_delete_pushes_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            for command in (
+                "git push origin --tags",
+                "git push origin refs/tags/v1",
+                "git push origin --delete old",
+            ):
+                payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": command}}
+                self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0, command)
+
 
 if __name__ == "__main__":
     unittest.main()

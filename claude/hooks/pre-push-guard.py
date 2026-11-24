@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Block `git push` until the checks that would fail CI have passed locally.
 
-Runs pre-commit on the diff, then inspects the
+Deletes and tag-only pushes are exempt. Otherwise runs pre-commit on the diff, then inspects the
 branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
 ask for one, leftover template placeholder text, and a change that is already approved,
 because pushing resets approval and re-runs review and CI.
@@ -98,6 +98,13 @@ def push_args(command: str) -> list[str] | None:
         if sub == "push":
             return args
     return None
+
+
+def is_exempt_push(args: list[str]) -> bool:
+    return any(
+        a in ("--delete", "-d", "--tags", "tag") or a.startswith("refs/tags/")
+        for a in args
+    )
 
 
 def push_dir(command: str, cwd: str) -> str:
@@ -227,7 +234,11 @@ def main() -> None:
 
     command = payload.get("tool_input", {}).get("command", "")
     args = push_args(command)
-    if args is None or any(marker in command for marker in REOPEN_MARKERS):
+    if (
+        args is None
+        or is_exempt_push(args)
+        or any(marker in command for marker in REOPEN_MARKERS)
+    ):
         sys.exit(0)
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
 
