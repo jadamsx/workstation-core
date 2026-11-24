@@ -14,7 +14,7 @@ The bar in the brief is the whole bar: reviewers add no checks or rounds the pla
 | `intensity` | `light` (default), `medium`, `intense` |
 | `target` | branch, change URL, epic key, list of URLs, pasted comments, ticket or doc |
 
-The owner's argument wins. A node reviews at the `intensity` in the plan's node table (`engines/plan.md`); `self` uses the highest of them; no plan means `light`. Auth, input, secrets or permissions in the diff raise the review to at least `medium`, unless the owner named a level, which wins.
+The owner's argument wins. `self` runs at `medium` (3 rounds); auth, input, secrets or permissions in the diff raise any review to at least `medium`, unless the owner named a level, which wins. Other modes default to `light`.
 
 ## Round shapes
 
@@ -56,10 +56,10 @@ Tick the design note's Progress lines as steps pass. Without a ticket the run st
 0. For a `format: v2` note, fill each Traceability row's Status from real runs via `run-digest`; flag every FR without a passing test, test with no FR, and node whose diff left its `owns`.
 1. The rounds above, the last one a final scan of the whole diff against the base by a fresh reviewer that saw no earlier round; then the merge-time rows of "Post-completion checks" for each plan field that is set. `self` exits with zero Blocker and zero Should-fix, fix-check all FIXED and tests green in that round; at round 3 with open findings, give the owner each with your position and do not push.
 2. Gates through `run-digest`; `comment-cutter` at `medium` and above.
-3. Out: change description (`engines/write.md`), open it, CI loop; ticket drafts are one list, asked once.
+3. Out: change description (`engines/write.md`), push as a draft MR, babysit CI to green, then `/verify-self`, then mark the MR ready; ticket drafts are one list, asked once.
 4. Record the design note (`status: shipped`, change link, Decisions as built) and project index; report each FR's Status for a v2 note.
 
-Any source change after the final pass goes back through this mode before the push; a pass records its HEAD sha in `verify-self-pass` in the git dir, and `pre-push-guard` checks it.
+Any source change after the final pass goes back through this mode before the push.
 
 ### Mode `change`
 
@@ -147,7 +147,7 @@ On others' changes `test-gap-auditor` trusts a green CI run and runs nothing; mu
 
 Every agent gets the diff, the full ticket, repo path, its `CLAUDE.md`, any decision record that applies and, on a change, the pinned worktree paths and SHAs, all as files in the scratch dir. Never the author's or main thread's reasoning, the plan, earlier rounds' findings, other agents' findings, or the change's threads. `cold-reviewer`, `clean-code` and `test-gap-auditor` also get the claims ledger and description. `finding-refuter` gets the findings to refute and the ledger; in fix-check mode the previous confirmed findings and the fix delta.
 
-Decisions: code reviewers of our own work (`self`, node review, a change of ours) also get `decisions.md`, the plan's `Decided:` lines only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the lead once as "decision X may be wrong because Y". Each ruling the lead or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
+Decisions: code reviewers of our own work (`self`, a change of ours) also get `decisions.md`, the plan's `Decided:` lines only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the lead once as "decision X may be wrong because Y". Each ruling the lead or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
 
 ## Scratch dir
 
@@ -176,10 +176,6 @@ On `change` and `epic`, compare every draft against existing discussions; same p
 - Never reply in a thread someone else started or open a second thread on a raised point. Same point open by a person: drop the draft, react ➕. Resolved, answered or automated: drop.
 - The last note decides. Yours last: never reply. Open or partly fixed: edit your note, prefixed `Updated at <short sha>:`. Fixed: resolve silently. Reply only when someone wrote since.
 - Drop findings the description documents. Cross the ticket's testing notes against the tests: a named scenario no test covers is the highest-value finding. The ticket is a suspect, not a ruler.
-
-### Node review
-
-Round 1: the node's finders on `git diff -- <owns>`; every severity is fixed. Later rounds follow "Round shapes": reviewers see the diff since the reviewed sha plus callers, and a new finding that is not a Blocker or Should-fix in the fix delta goes to a follow-up list carried into `self`. The node passes with zero open Blockers, fix-check all FIXED and its acceptance or FR tests green. A Blocker open after the last round of the node's intensity stops the run: ask the owner.
 
 ### Post-completion checks
 

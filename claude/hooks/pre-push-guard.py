@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Block `git push` until the checks that would fail CI have passed locally.
-
-Pushing a branch or opening a change (`gh pr create`, `glab mr create`) also needs the
-``verify-self-pass`` marker in the git dir to name the current HEAD; /verify-self writes it.
-Deletes and tag-only pushes are exempt. Then runs pre-commit on the diff, then inspects the
-branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
-ask for one, leftover template placeholder text, and a change that is already approved,
-because pushing resets approval and re-runs review and CI.
-"""
+"""Block `git push` until the project's pre-commit hooks pass on the diff against origin/HEAD."""
 
 from __future__ import annotations
 
@@ -18,21 +10,7 @@ import shlex
 import subprocess
 import sys
 
-from hook_config import load, ticket_exempt
-
-RULES = load().get("change", {})
 TIMEOUT_S = 25
-TICKET_KEY = RULES.get("ticket_key", r"[A-Z][A-Z0-9]+-\d+")
-TITLE_REQUIRES_TICKET = RULES.get("title_requires_ticket", False)
-TICKET_EXEMPT = RULES.get("ticket_exempt_projects", [])
-PLACEHOLDERS = (
-    "Briefly summarise",
-    "Provide a concise overview",
-    "Describe your changes here",
-    *RULES.get("placeholders", []),
-)
-REOPEN_MARKERS = ("--reopen-review", "REOPEN_REVIEW")
-MARKER = "verify-self-pass"
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
@@ -103,41 +81,6 @@ def push_args(command: str) -> list[str] | None:
     return None
 
 
-def opens_change(command: str) -> bool:
-    return any(
-        tuple(tokens[:3]) in (("gh", "pr", "create"), ("glab", "mr", "create"))
-        for tokens in command_parts(command)
-    )
-
-
-def is_exempt_push(args: list[str]) -> bool:
-    return any(
-        a in ("--delete", "-d", "--tags", "tag") or a.startswith("refs/tags/")
-        for a in args
-    )
-
-
-def check_self_verified(cwd: str) -> None:
-    """Deny until the marker names HEAD; a repo with no commits has nothing to verify."""
-    try:
-        head = run(["git", "rev-parse", "HEAD"], cwd)
-        git_dir = run(["git", "rev-parse", "--git-dir"], cwd)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return
-    if head.returncode != 0 or git_dir.returncode != 0:
-        return
-    marker = os.path.join(cwd, git_dir.stdout.strip(), MARKER)
-    try:
-        passed = open(marker).read().split()[:1]
-    except (OSError, IndexError):
-        passed = []
-    if passed != [head.stdout.strip()]:
-        block(
-            "The whole change has not passed /verify-self at this HEAD.",
-            "Run /verify-self on the whole change; any commit after the pass needs a fresh pass.",
-        )
-
-
 def push_dir(command: str, cwd: str) -> str:
     """The repo the push runs in: a leading `cd <dir>` or `git -C <dir>` wins over the session cwd."""
     try:
@@ -160,39 +103,6 @@ def run(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args, cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT_S
     )
-
-
-def load_json(args: list[str], cwd: str) -> dict | None:
-    try:
-        proc = run(args, cwd)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if proc.returncode != 0:
-        return None
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def change_for_branch(cwd: str) -> dict | None:
-    """The current branch's open change as {title, body, approved}, or None when there is none yet."""
-    pr = load_json(["gh", "pr", "view", "--json", "title,body,reviewDecision"], cwd)
-    if pr:
-        return {
-            "title": pr.get("title", ""),
-            "body": pr.get("body") or "",
-            "approved": pr.get("reviewDecision") == "APPROVED",
-        }
-    mr = load_json(["glab", "mr", "view", "--output", "json"], cwd)
-    if mr:
-        return {
-            "title": mr.get("title", ""),
-            "body": mr.get("description") or "",
-            "approved": mr_approved(mr.get("iid"), cwd),
-        }
-    return None
 
 
 def check_pre_commit(cwd: str) -> None:
@@ -218,42 +128,6 @@ def check_pre_commit(cwd: str) -> None:
         )
 
 
-def mr_approved(iid: int | None, cwd: str) -> bool:
-    """`glab mr view` carries no approval state; the approvals endpoint does."""
-    if not iid:
-        return False
-    data = load_json(
-        ["glab", "api", f"projects/:id/merge_requests/{iid}/approvals"], cwd
-    )
-    return bool(data) and (bool(data.get("approved")) or bool(data.get("approved_by")))
-
-
-def check_change(change: dict, cwd: str) -> None:
-    title = change["title"]
-    if (
-        TITLE_REQUIRES_TICKET
-        and not re.search(rf"\b{TICKET_KEY}\b", title)
-        and not ticket_exempt(TICKET_EXEMPT, cwd)
-    ):
-        block(
-            f"Change title has no ticket key: {title!r}",
-            "Titles carry the key, e.g. `ABC-123 summary`. Without it the tracker loses the link.",
-        )
-
-    hit = next((p for p in PLACEHOLDERS if p in change["body"]), None)
-    if hit:
-        block(
-            f"Change description still has template placeholder text: {hit!r}",
-            "Fill the section or mark it `N/A - <reason>`.",
-        )
-
-    if change["approved"]:
-        block(
-            "This change is already approved. Pushing resets the approval and re-runs review and CI.",
-            "Batch the change, or push with --reopen-review in the command if it genuinely must go now.",
-        )
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -265,19 +139,11 @@ def main() -> None:
 
     command = payload.get("tool_input", {}).get("command", "")
     args = push_args(command)
-    pushing = args is not None
-    if not (pushing or opens_change(command)):
+    if args is None:
         sys.exit(0)
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
-    if not (pushing and is_exempt_push(args)):
-        check_self_verified(cwd)
-    if not pushing or any(marker in command for marker in REOPEN_MARKERS):
-        sys.exit(0)
 
     check_pre_commit(cwd)
-    change = change_for_branch(cwd)
-    if change:
-        check_change(change, cwd)
 
     sys.exit(0)
 

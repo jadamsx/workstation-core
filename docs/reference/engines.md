@@ -13,7 +13,7 @@ An engine is the full procedure for one stage of work, in `claude/engines/<name>
 
 ## How they fit
 
-`plan` ends at an approved node table. `build` reads that table and refuses without it. `review` runs at each node's boundary during a build and again over the whole branch in `self` mode. `write` shapes every description and comment. `ship` is the only file that names a source control host or tracker, and it owns pushing.
+`plan` ends at an approved node table. `build` reads that table and refuses without it. `review` runs once per plan, over the whole branch in `self` mode; nodes get a done-check. `write` shapes every description and comment. `ship` is the only file that names a source control host or tracker, and it owns pushing.
 
 ## The common rules, in short
 
@@ -27,7 +27,7 @@ The full text is `claude/engines/common.md`.
 
 ## Review intensity
 
-Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how hard any review is. Default `light` everywhere; auth, input, secrets or permissions raise it to `medium`.
+Two separate dials: a plan's `kind` sizes the planning, `intensity` sizes a node's care; the one `self` review runs at `medium`. Default `light` everywhere; auth, input, secrets or permissions raise it to `medium`.
 
 | Level | What runs |
 | --- | --- |
@@ -35,4 +35,4 @@ Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how har
 | `medium` | `cold-reviewer`; round 2 a `finding-refuter` fix-check; round 3 a quick confirmation |
 | `intense` | `cold-reviewer`, `clean-code`, `test-gap-auditor` in parallel, `security-reviewer` where it applies; rounds 2 and 3 as `medium` |
 
-A plan's node table has an `intensity` column per node. The exact rules are in `claude/engines/review.md`, section "Round shapes". Name a level in the request to override it.
+A plan's node table has an `intensity` column per node. It only informs the plan and does not set any review level. The exact rules are in `claude/engines/review.md`, section "Round shapes". Name a level in the request to override it.

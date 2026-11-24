@@ -41,7 +41,7 @@ Offer `full` as an escape hatch only when quick was chosen. A spike is quick unl
 
 ## Intensity
 
-Review depth is the scale and round shapes in `engines/review.md` "Round shapes". The default is `light` for every `kind` and every node. A node touching auth, input, secrets or permissions is raised to `medium`; migrations, money and public contracts to `intense`; the plan's own level follows its highest node. The owner overrides by saying the level in the request; an override is recorded as given, never second-guessed and not raised by the auth, input, secrets or permissions rule.
+Review depth is the scale and round shapes in `engines/review.md` "Round shapes". The default is `light` for every `kind` and every node. A node touching auth, input, secrets or permissions is raised to `medium`; migrations, money and public contracts to `intense`; the `self` review runs at `medium` whatever the node levels. The owner overrides by saying the level in the request; an override is recorded as given, never second-guessed and not raised by the auth, input, secrets or permissions rule.
 
 ## Interview
 
@@ -163,7 +163,7 @@ JSON
 | Validation only, last-mile proof | none: a `claim-prover` node |
 | Locate code | none: `code-locator` |
 
-Notes and prose follow `engines/write.md`. Hand a build to the `work` tab (`engines/common.md` "Delegation").
+Notes and prose follow `engines/write.md`. The main thread authors the plan and makes its decisions; agents only look things up or attack and review it. Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 

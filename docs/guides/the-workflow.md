@@ -6,7 +6,7 @@ In a [herdr space](herdr-spaces.md) the lead plans and answers questions, and th
 
 ## Plan
 
-A plan is a node table: for each node the agent, discipline, files it owns, wave, intensity, reviewer and one acceptance sentence. The plan engine writes it, a plan review attacks it, and you approve it. Review intensity (`light`, `medium`, `intense`, default `medium`) sets how hard the plan and each node are reviewed. Name a level to override it.
+A plan is a node table: for each node the agent, discipline, files it owns, wave, intensity, reviewer and one acceptance sentence. The plan engine writes it, a plan review attacks it, and you approve it. Intensity (`light`, `medium`, `intense`, default `medium`) only informs the plan. Each node gets a done-check; the whole build gets one `/verify-self`.
 
 | Skill | Use it for |
 | --- | --- |
@@ -20,7 +20,7 @@ A plan is a node table: for each node the agent, discipline, files it owns, wave
 
 ## Build
 
-`build` takes an approved plan and runs its nodes in worktrees, ready node by ready node. `builder` edits, a cold reviewer checks each node at its boundary, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing.
+`build` takes an approved plan and runs its nodes in worktrees, ready node by ready node. `builder` edits, a done-check confirms each node against its acceptance line, and the discipline a node names (tdd, refactor, migration and others) sets how it proves the node done. A last gate runs the whole suite once, then each stated behaviour is run against the real thing, and one `/verify-self` reviews the whole build.
 
 ## Review
 

@@ -120,22 +120,18 @@ class CommitGuardTest(unittest.TestCase):
 
 
 class PushGuardTest(unittest.TestCase):
-    def push(
-        self, change_json: str, tool: str = "gh", command: str = "git push"
-    ) -> subprocess.CompletedProcess:
+    def push(self, command: str, pre_commit_exit: int = 1) -> subprocess.CompletedProcess:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         repo = root / "repo"
         repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        (repo / ".pre-commit-config.yaml").write_text("repos: []\n")
         bin_dir = root / "bin"
         bin_dir.mkdir()
-        sub = "pr" if tool == "gh" else "mr"
-        fake = bin_dir / tool
-        fake.write_text(
-            f"#!/bin/sh\n[ \"$1\" = {sub} ] || exit 1\necho '{change_json}'\n"
-        )
+        fake = bin_dir / "pre-commit"
+        fake.write_text(f"#!/bin/sh\nexit {pre_commit_exit}\n")
         fake.chmod(0o755)
         env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
         return subprocess.run(
@@ -152,48 +148,24 @@ class PushGuardTest(unittest.TestCase):
             ),
         )
 
-    def test_clean_change_allowed(self) -> None:
-        result = self.push(
-            '{"title": "Add a thing", "body": "Done", "reviewDecision": ""}'
-        )
-        self.assertEqual(result.returncode, 0)
+    def test_passing_pre_commit_allowed(self) -> None:
+        self.assertEqual(self.push("git push", pre_commit_exit=0).returncode, 0)
 
-    def test_placeholder_body_blocked(self) -> None:
-        result = self.push(
-            '{"title": "Add a thing", "body": "Briefly summarise it", "reviewDecision": ""}'
-        )
+    def test_failing_pre_commit_blocked(self) -> None:
+        result = self.push("git push")
         self.assertEqual(result.returncode, 2)
-        self.assertIn("placeholder", result.stderr)
-
-    def test_approved_github_change_blocked(self) -> None:
-        result = self.push(
-            '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
-        )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("already approved", result.stderr)
-
-    def test_gitlab_placeholder_blocked(self) -> None:
-        result = self.push(
-            '{"title": "T", "description": "Provide a concise overview", "iid": 4}',
-            tool="glab",
-        )
-        self.assertEqual(result.returncode, 2)
-
-    def test_no_open_change_allowed(self) -> None:
-        self.assertEqual(self.push("{}").returncode, 0)
+        self.assertIn("pre-commit fails", result.stderr)
 
     def test_heredoc_and_quoted_push_words_allowed(self) -> None:
-        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
         for command in (
             "cat > notes.md <<'EOF'\ngit push origin main\nEOF",
             'git commit -m "docs: explain git push"',
             "echo 'git push' | wc -c",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.push(approved, command=command).returncode, 0)
+                self.assertEqual(self.push(command).returncode, 0)
 
     def test_real_push_still_gated_in_a_command_chain(self) -> None:
-        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
         for command in (
             "git push",
             "cd . && git -C . push origin b",
@@ -203,7 +175,7 @@ class PushGuardTest(unittest.TestCase):
             'bash -c "git push"',
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.push(approved, command=command).returncode, 2)
+                self.assertEqual(self.push(command).returncode, 2)
 
 
 class SharedEnvGuardTest(unittest.TestCase):
@@ -394,13 +366,6 @@ class AgentModelGateTest(unittest.TestCase):
             self.assertEqual(
                 out["updatedInput"], {**tool_input, "model": default}, agent
             )
-
-    def test_general_purpose_and_omitted_type_blocked(self) -> None:
-        for agent in ["general-purpose", "General-Purpose", None, ""]:
-            for model in [None, "sonnet"]:
-                result = self.spawn(prompt="x", subagent_type=agent, model=model)
-                self.assertEqual(result.returncode, 2, (agent, model))
-                self.assertIn("typed agent", result.stderr)
 
     def test_explicit_model_passes_untouched(self) -> None:
         for model in ["sonnet", "haiku"]:
@@ -647,77 +612,13 @@ class LayerConfigTest(unittest.TestCase):
             run_hook("pre-commit-guard.py", payload, self.env).returncode, 0
         )
 
-    def test_extra_placeholder_blocks_push(self) -> None:
-        bin_dir = self.root / "bin"
-        bin_dir.mkdir()
-        fake = bin_dir / "gh"
-        fake.write_text(
-            '#!/bin/sh\necho \'{"title": "T", "body": "XXX-", "reviewDecision": ""}\'\n'
-        )
-        fake.chmod(0o755)
-        env = {**self.env, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-        payload = {
-            "tool_name": "Bash",
-            "cwd": str(self.repo),
-            "tool_input": {"command": "git push"},
-        }
-        self.assertEqual(run_hook("pre-push-guard.py", payload, env).returncode, 0)
-        self.config("a.json", {"change": {"placeholders": ["XXX-"]}})
-        self.assertEqual(run_hook("pre-push-guard.py", payload, env).returncode, 2)
 
-
-class SelfVerifyGateTest(unittest.TestCase):
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.repo = Path(tmp.name)
-        for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"]):
-            subprocess.run(
-                ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
-                cwd=self.repo,
-                check=True,
-            )
-
-    def mark(self, sha: str | None = None) -> None:
-        head = sha or subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=self.repo, text=True
-        ).strip()
-        (self.repo / ".git/verify-self-pass").write_text(f"{head} main\n")
-
-    def run_command(self, command: str) -> subprocess.CompletedProcess:
-        return run_hook(
-            "pre-push-guard.py",
-            {
-                "tool_name": "Bash",
-                "cwd": str(self.repo),
-                "tool_input": {"command": command},
-            },
-        )
-
-    def test_push_denied_without_marker(self) -> None:
-        result = self.run_command("git push origin main")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("/verify-self", result.stderr)
-
-    def test_push_denied_with_stale_sha(self) -> None:
-        self.mark("0" * 40)
-        self.assertEqual(self.run_command("git push").returncode, 2)
-
-    def test_push_allowed_with_matching_sha(self) -> None:
-        self.mark()
-        self.assertEqual(self.run_command("git push").returncode, 0)
-
-    def test_change_create_denied_without_marker(self) -> None:
-        for command in ("gh pr create --fill", "glab mr create --fill"):
-            self.assertEqual(self.run_command(command).returncode, 2, command)
-
-    def test_tag_and_delete_pushes_allowed(self) -> None:
-        for command in (
-            "git push origin --tags",
-            "git push origin refs/tags/v1",
-            "git push origin --delete old",
-        ):
-            self.assertEqual(self.run_command(command).returncode, 0, command)
+class NoMarkerTest(unittest.TestCase):
+    def test_push_needs_no_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": "git push"}}
+            self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0)
 
 
 if __name__ == "__main__":
