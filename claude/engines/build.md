@@ -26,7 +26,7 @@ Never ask for a ticket, or for the input in a particular shape, when one of thes
 3. **Build the graph** (below), after reading the plan's area index in the notes via `code-locator` notes mode. Done when every node passed its gates and its own acceptance.
 4. **Whole-repo gates, once**: a `verify-run` node, `run-digest`. Done when formatter, linter, typecheck, `pre-commit` and the suite ran once on the whole tree, before completion is claimed.
 5. **Prove it** (below). Done when coverage gaps are closed and each stated behaviour ran against the real thing, or "no environment reachable" is said in those words.
-6. **Hand over** to the `self` review. Done when the report shows the parallelism and what each node's review found.
+6. **Hand over** to the `self` review, once, at medium, after the draft change is pushed and green. Done when the report shows the parallelism and each node's done-check.
 
 A false premise found mid-build, or work outside the plan, stops the run and goes back to plan as a decision node. A Blocker open at round 3 stops the whole run (`engines/review.md`): report what is stuck and do not route around it. A blocked pre-push gate belongs to the `self` review (two fix-and-retry rounds, then stop and show the error).
 
@@ -38,7 +38,7 @@ The work tab builds nodes itself by default. Builder agents are only for indepen
 
 ## The graph
 
-No wave barriers. Whenever a node's needs are all done, start it, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Review rounds of one node run alongside other nodes' builds. A round's fixes are grouped by the file they edit; each group goes to its own builder in its own worktree, all in one dispatch up to the cap (never one builder carrying several groups), and the group branches merge after. The node report line is `Fix groups: <n>, builders: <n>`.
+No wave barriers. Whenever a node's needs are all done, start it, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. A fix round's fixes are grouped by the file they edit; each group goes to its own builder in its own worktree, all in one dispatch up to the cap (never one builder carrying several groups), and the group branches merge after. The node report line is `Fix groups: <n>, builders: <n>`.
 
 - The work tab never idle-waits while a ready node exists. When nothing is ready, the `/loop` wakes it to check the running gate, retry or review.
 - One gate per app runs at a time, never a second suite in another worktree while one runs (`engines/common.md`); the others queue and their nodes keep building. Each app keeps its own worker cap from the resource policy, and no browser gate is shared across apps.
@@ -67,9 +67,8 @@ In this order, per node:
 1. The node's discipline: the file in `disciplines/` its row names. A node with none is incomplete unless read-only.
 2. The repo's own gates from its CLAUDE.md; a UI change is driven with playwright and the console is clean (`checklists/ui-verify.md`). The bugfix test rule is `disciplines/tdd.md`.
 3. `checklists/build.md` killer items against the node's own diff, quoting the numbers.
-4. **Pre-review gate.** `run-digest` runs lint, types and the targeted tests in the node's worktree, once, before its review. A failure goes back to the builder, for two fix attempts, then stop and show the error. A failure that already exists at the node's parent stops the work tab and asks the lead; no review starts until the owner answers. The review starts on a green result. The node's focused proof runs through `run-digest` or `claim-prover` in the node's worktree.
-5. **Review**: one self-review round of the node's diff, or the finders and rounds of its `intensity` when that says more, per `engines/review.md`. `clean-code` also runs on any structural node whatever its intensity. A spike node gets `cold-reviewer` on the experiment's diff and finding, one round. The follow-up list goes in the node report to the `self` review.
-6. **Done check**, last before the node counts as done. Git computes the Owns diff (`git diff <parent> -- <owns>`); `done-check` checks only the plan's `Decided:` and `Not-building:` lines against it, quoting the line for each deviation. The report carries `Done-check: pass` or `Done-check: deviation <sha>`, the sha being the commit checked; a job with no diff (an ops job) carries `Done-check: n/a (no diff)`. `done-check` reruns after any commit that follows the check. A deviation goes to the lead as a question.
+4. **Pre-check gate.** `run-digest` runs lint, types and the targeted tests in the node's worktree, once, before its done-check. A failure goes back to the builder, for two fix attempts, then stop and show the error. A failure that already exists at the node's parent stops the work tab and asks the lead; no done-check starts until the owner answers. It starts on a green result. The node's focused proof runs through `run-digest` or `claim-prover` in the node's worktree.
+5. **Done check**, last before the node counts as done, in place of a node review (the one review is the `self` review of the whole build). Git computes the Owns diff (`git diff <parent> -- <owns>`); `done-check`, an agent or inline, checks the node's acceptance and the plan's `Decided:` and `Not-building:` lines against it, quoting the line for each deviation. The report carries `Done-check: pass` or `Done-check: deviation <sha>`, the sha being the commit checked; a job with no diff (an ops job) carries `Done-check: n/a (no diff)`. `done-check` reruns after any commit that follows the check. A deviation goes to the lead as a question.
 
 The main thread holds the table, the graph and the findings.
 
@@ -94,4 +93,4 @@ Reasoning about a response shape is not verification, and "the tests would confi
 
 ## Output
 
-The node table with start times, actual cost and review findings per node; the nodes run in parallel against the plan's maximum; anything left open with a position on each; then the hand-off to the `self` review. Report shape: `engines/common.md`.
+The node table with start times, actual cost and done-check per node; the nodes run in parallel against the plan's maximum; anything left open with a position on each; then the hand-off to the `self` review. Report shape: `engines/common.md`.

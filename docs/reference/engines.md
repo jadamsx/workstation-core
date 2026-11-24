@@ -13,7 +13,7 @@ An engine is the full procedure for one stage of work, in `claude/engines/<name>
 
 ## How they fit
 
-`plan` ends at an approved node table. `build` reads that table and refuses without it. `review` runs at each node's boundary during a build and again over the whole branch in `self` mode. `write` shapes every description and comment. `ship` is the only file that names a source control host or tracker, and it owns pushing.
+`plan` ends at an approved node table. `build` reads that table and refuses without it. `review` runs once per plan, over the whole branch in `self` mode; nodes get a done-check. `write` shapes every description and comment. `ship` is the only file that names a source control host or tracker, and it owns pushing.
 
 ## The common rules, in short
 
