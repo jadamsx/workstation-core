@@ -5,7 +5,7 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | Hook | Event and tool | What it blocks or does |
 | --- | --- | --- |
 | `pre-commit-guard.py` | Before Bash | `git commit`, `gh pr create` or `edit`, `glab mr create` or `update` when the staged diff holds AI-style comments, the repo has no pre-commit git hook, or the change title or description breaks the rules in `hooks.d` |
-| `pre-push-guard.py` | Before Bash | A real `git push` command (the first word of a command part, never text inside a heredoc or quoted string) until pre-commit passes on the diff, the open change has no required ticket key or still holds template placeholder text |
+| `pre-push-guard.py` | Before Bash | A real `git push` command (the first word of a command part, never text inside a heredoc or quoted string) until the project's pre-commit hooks pass on the diff |
 | `rm-guard.py` | Before Bash | Recursive `rm` outside `$TMPDIR`, the drafts folder, `~/.cache`, a repo's `.claude/worktrees/*` and build folders such as `node_modules` and `dist`; `rm` with recursive and force flags anywhere in the command text, even quoted; `git push --force` (also `-f` and `+ref`) and `git reset --hard`. A `dangerouslyDisableSandbox` call is allowed once these checks pass; settings deny rules still apply |
 | `env-file-guard.py` | Before Edit, Write | Edits to real `.env.*` files. `.env.example`, `.sample` and `.template` stay editable |
 | `drafts-layout-guard.py` | Before Edit, Write | Writes under the drafts or notes folder whose first path part is not allowed, and writes under retired paths |
@@ -25,13 +25,12 @@ The guards read optional rules from every `*.json` in `claude/hooks/hooks.d/`, t
 | Key | Used by | Effect |
 | --- | --- | --- |
 | `change.require_gitmoji` | `pre-commit-guard` | A commit message or change title must start with an emoji or a `:shortcode:` |
-| `change.title_requires_ticket` | both git guards | A change title needs a ticket key |
+| `change.title_requires_ticket` | `pre-commit-guard` | A change title needs a ticket key |
 | `change.commit_forbids_ticket` | `pre-commit-guard` | A commit message given with `-m` must not carry a ticket key |
-| `change.ticket_key` | both git guards | Regular expression for a ticket key. Default `[A-Z][A-Z0-9]+-\d+` |
+| `change.ticket_key` | `pre-commit-guard` | Regular expression for a ticket key. Default `[A-Z][A-Z0-9]+-\d+` |
 | `change.commit_ticket_key` | `pre-commit-guard` | Key pattern for the commit message check. Falls back to `ticket_key` |
-| `change.ticket_exempt_projects` | both git guards | Project path prefixes (case-insensitive) whose changes need no key. The path comes from the source control project id, else the `origin` remote |
+| `change.ticket_exempt_projects` | `pre-commit-guard` | Project path prefixes (case-insensitive) whose changes need no key. The path comes from the source control project id, else the `origin` remote |
 | `change.description_cut_markers` | `pre-commit-guard` | Text after which a description is generated, so everything from the first marker on is left out of the checks |
-| `change.placeholders` | `pre-push-guard` | Template text that blocks a push when a change description still holds it, on top of the built-in phrases |
 | `opus_override` | `agent-model-gate` | Agent names that may be spawned on Opus by explicit override |
 | `lint_skipped` | `notes-lint-guard` | Vault folders to skip, on top of `templates`, `.obsidian`, `.git` and `.githooks` |
 | `drafts_allowed`, `notes_allowed` | `drafts-layout-guard` | Extra top-level names allowed in the drafts folder and the notes vault |

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Block `git push` until the checks that would fail CI have passed locally.
-
-Runs pre-commit on the diff, then inspects the
-branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
-ask for one, and leftover template placeholder text.
-"""
+"""Block `git push` until the project's pre-commit hooks pass on the diff against origin/HEAD."""
 
 from __future__ import annotations
 
@@ -15,19 +10,7 @@ import shlex
 import subprocess
 import sys
 
-from hook_config import load, ticket_exempt
-
-RULES = load().get("change", {})
 TIMEOUT_S = 25
-TICKET_KEY = RULES.get("ticket_key", r"[A-Z][A-Z0-9]+-\d+")
-TITLE_REQUIRES_TICKET = RULES.get("title_requires_ticket", False)
-TICKET_EXEMPT = RULES.get("ticket_exempt_projects", [])
-PLACEHOLDERS = (
-    "Briefly summarise",
-    "Provide a concise overview",
-    "Describe your changes here",
-    *RULES.get("placeholders", []),
-)
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
@@ -122,37 +105,6 @@ def run(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def load_json(args: list[str], cwd: str) -> dict | None:
-    try:
-        proc = run(args, cwd)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if proc.returncode != 0:
-        return None
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def change_for_branch(cwd: str) -> dict | None:
-    """The current branch's open change as {title, body}, or None when there is none yet."""
-    pr = load_json(["gh", "pr", "view", "--json", "title,body"], cwd)
-    if pr:
-        return {
-            "title": pr.get("title", ""),
-            "body": pr.get("body") or "",
-        }
-    mr = load_json(["glab", "mr", "view", "--output", "json"], cwd)
-    if mr:
-        return {
-            "title": mr.get("title", ""),
-            "body": mr.get("description") or "",
-        }
-    return None
-
-
 def check_pre_commit(cwd: str) -> None:
     if not os.path.exists(os.path.join(cwd, ".pre-commit-config.yaml")):
         return
@@ -176,26 +128,6 @@ def check_pre_commit(cwd: str) -> None:
         )
 
 
-def check_change(change: dict, cwd: str) -> None:
-    title = change["title"]
-    if (
-        TITLE_REQUIRES_TICKET
-        and not re.search(rf"\b{TICKET_KEY}\b", title)
-        and not ticket_exempt(TICKET_EXEMPT, cwd)
-    ):
-        block(
-            f"Change title has no ticket key: {title!r}",
-            "Titles carry the key, e.g. `ABC-123 summary`. Without it the tracker loses the link.",
-        )
-
-    hit = next((p for p in PLACEHOLDERS if p in change["body"]), None)
-    if hit:
-        block(
-            f"Change description still has template placeholder text: {hit!r}",
-            "Fill the section or mark it `N/A - <reason>`.",
-        )
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -212,9 +144,6 @@ def main() -> None:
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
 
     check_pre_commit(cwd)
-    change = change_for_branch(cwd)
-    if change:
-        check_change(change, cwd)
 
     sys.exit(0)
 
