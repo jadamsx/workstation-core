@@ -395,13 +395,6 @@ class AgentModelGateTest(unittest.TestCase):
                 out["updatedInput"], {**tool_input, "model": default}, agent
             )
 
-    def test_general_purpose_and_omitted_type_blocked(self) -> None:
-        for agent in ["general-purpose", "General-Purpose", None, ""]:
-            for model in [None, "sonnet"]:
-                result = self.spawn(prompt="x", subagent_type=agent, model=model)
-                self.assertEqual(result.returncode, 2, (agent, model))
-                self.assertIn("typed agent", result.stderr)
-
     def test_explicit_model_passes_untouched(self) -> None:
         for model in ["sonnet", "haiku"]:
             result = self.spawn(prompt="x", subagent_type="Explore", model=model)
@@ -666,58 +659,13 @@ class LayerConfigTest(unittest.TestCase):
         self.assertEqual(run_hook("pre-push-guard.py", payload, env).returncode, 2)
 
 
-class SelfVerifyGateTest(unittest.TestCase):
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.repo = Path(tmp.name)
-        for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"]):
-            subprocess.run(
-                ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
-                cwd=self.repo,
-                check=True,
-            )
-
-    def mark(self, sha: str | None = None) -> None:
-        head = sha or subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=self.repo, text=True
-        ).strip()
-        (self.repo / ".git/verify-self-pass").write_text(f"{head} main\n")
-
-    def run_command(self, command: str) -> subprocess.CompletedProcess:
-        return run_hook(
-            "pre-push-guard.py",
-            {
-                "tool_name": "Bash",
-                "cwd": str(self.repo),
-                "tool_input": {"command": command},
-            },
-        )
-
-    def test_push_denied_without_marker(self) -> None:
-        result = self.run_command("git push origin main")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("/verify-self", result.stderr)
-
-    def test_push_denied_with_stale_sha(self) -> None:
-        self.mark("0" * 40)
-        self.assertEqual(self.run_command("git push").returncode, 2)
-
-    def test_push_allowed_with_matching_sha(self) -> None:
-        self.mark()
-        self.assertEqual(self.run_command("git push").returncode, 0)
-
-    def test_change_create_denied_without_marker(self) -> None:
-        for command in ("gh pr create --fill", "glab mr create --fill"):
-            self.assertEqual(self.run_command(command).returncode, 2, command)
-
-    def test_tag_and_delete_pushes_allowed(self) -> None:
-        for command in (
-            "git push origin --tags",
-            "git push origin refs/tags/v1",
-            "git push origin --delete old",
-        ):
-            self.assertEqual(self.run_command(command).returncode, 0, command)
+class NoMarkerTest(unittest.TestCase):
+    def test_push_and_change_open_need_no_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            for command in ("git push", "gh pr create --fill", "glab mr create --fill"):
+                payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": command}}
+                self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0, command)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ The branch, and the design note or ticket it implements. Without a ticket it sto
 
 - Fix plan: after a successful push, the agent that pushed posts each drafted reply with the reply verb in `engines/ship.md` and resolves only fixed threads, one at a time, never one an author is still discussing. No second OK.
 
-- Pass: with no open Blocker, as the final step, have `run-digest` write the marker in `marker` mode, passing the worktree path (the lead's main thread cannot write it; subagents are trusted, not gated); `pre-push-guard` denies a push or change open until that sha is HEAD.
+- Pass: with no open Blocker, as the final step, mark the draft MR ready (`glab mr update --ready` or `gh pr ready`).
 
 ## Output
 Engine report shape for `self` per `templates/review.md`, then the three lines for the owner. `/reflect` once if a procedure repeated or a correction came twice.

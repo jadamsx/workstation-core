@@ -59,7 +59,7 @@ Tick the design note's Progress lines as steps pass. Without a ticket the run st
 3. Out: change description (`engines/write.md`), open it, CI loop; ticket drafts are one list, asked once.
 4. Record the design note (`status: shipped`, change link, Decisions as built) and project index; report each FR's Status for a v2 note.
 
-Any source change after the final pass goes back through this mode before the push; a pass records its HEAD sha in `verify-self-pass` in the git dir, and `pre-push-guard` checks it.
+Any source change after the final pass goes back through this mode before the push.
 
 ### Mode `change`
 

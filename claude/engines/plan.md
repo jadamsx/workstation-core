@@ -163,7 +163,7 @@ JSON
 | Validation only, last-mile proof | none: a `claim-prover` node |
 | Locate code | none: `code-locator` |
 
-Notes and prose follow `engines/write.md`. Hand a build to the `work` tab (`engines/common.md` "Delegation").
+Notes and prose follow `engines/write.md`. The main thread authors the plan and makes its decisions; agents only look things up or attack and review it. Hand a build to the `work` tab (`engines/common.md` "Delegation").
 
 ## Output
 

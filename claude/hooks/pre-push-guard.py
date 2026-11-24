@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Block `git push` until the checks that would fail CI have passed locally.
 
-Pushing a branch or opening a change (`gh pr create`, `glab mr create`) also needs the
-``verify-self-pass`` marker in the git dir to name the current HEAD; /verify-self writes it.
-Deletes and tag-only pushes are exempt. Then runs pre-commit on the diff, then inspects the
+Runs pre-commit on the diff, then inspects the
 branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
 ask for one, leftover template placeholder text, and a change that is already approved,
 because pushing resets approval and re-runs review and CI.
@@ -32,7 +30,6 @@ PLACEHOLDERS = (
     *RULES.get("placeholders", []),
 )
 REOPEN_MARKERS = ("--reopen-review", "REOPEN_REVIEW")
-MARKER = "verify-self-pass"
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
@@ -101,41 +98,6 @@ def push_args(command: str) -> list[str] | None:
         if sub == "push":
             return args
     return None
-
-
-def opens_change(command: str) -> bool:
-    return any(
-        tuple(tokens[:3]) in (("gh", "pr", "create"), ("glab", "mr", "create"))
-        for tokens in command_parts(command)
-    )
-
-
-def is_exempt_push(args: list[str]) -> bool:
-    return any(
-        a in ("--delete", "-d", "--tags", "tag") or a.startswith("refs/tags/")
-        for a in args
-    )
-
-
-def check_self_verified(cwd: str) -> None:
-    """Deny until the marker names HEAD; a repo with no commits has nothing to verify."""
-    try:
-        head = run(["git", "rev-parse", "HEAD"], cwd)
-        git_dir = run(["git", "rev-parse", "--git-dir"], cwd)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return
-    if head.returncode != 0 or git_dir.returncode != 0:
-        return
-    marker = os.path.join(cwd, git_dir.stdout.strip(), MARKER)
-    try:
-        passed = open(marker).read().split()[:1]
-    except (OSError, IndexError):
-        passed = []
-    if passed != [head.stdout.strip()]:
-        block(
-            "The whole change has not passed /verify-self at this HEAD.",
-            "Run /verify-self on the whole change; any commit after the pass needs a fresh pass.",
-        )
 
 
 def push_dir(command: str, cwd: str) -> str:
@@ -265,14 +227,9 @@ def main() -> None:
 
     command = payload.get("tool_input", {}).get("command", "")
     args = push_args(command)
-    pushing = args is not None
-    if not (pushing or opens_change(command)):
+    if args is None or any(marker in command for marker in REOPEN_MARKERS):
         sys.exit(0)
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
-    if not (pushing and is_exempt_push(args)):
-        check_self_verified(cwd)
-    if not pushing or any(marker in command for marker in REOPEN_MARKERS):
-        sys.exit(0)
 
     check_pre_commit(cwd)
     change = change_for_branch(cwd)

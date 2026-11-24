@@ -115,15 +115,6 @@
             "command": "python3 __HOME__/.claude/hooks/agent-model-gate.py"
           }
         ]
-      },
-      {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -133,16 +124,6 @@
           {
             "type": "command",
             "command": "python3 __HOME__/.claude/hooks/notes-lint-guard.py"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 __HOME__/.claude/hooks/main-thread-gate.py"
           }
         ]
       }

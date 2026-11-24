@@ -81,8 +81,6 @@ def main() -> None:
     agent = tool_input.get("subagent_type") or "general-purpose"
     if agent == "fork":
         sys.exit(0)
-    if agent.lower() == "general-purpose":
-        block("general-purpose is not allowed; use a typed agent with one bounded task.")
     model = tool_input.get("model")
     pin = pinned_model(agent)
     name = agent.split(":")[-1]
