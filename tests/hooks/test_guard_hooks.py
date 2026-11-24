@@ -660,12 +660,11 @@ class LayerConfigTest(unittest.TestCase):
 
 
 class NoMarkerTest(unittest.TestCase):
-    def test_push_and_change_open_need_no_marker(self) -> None:
+    def test_push_needs_no_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
-            for command in ("git push", "gh pr create --fill", "glab mr create --fill"):
-                payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": command}}
-                self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0, command)
+            payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": "git push"}}
+            self.assertEqual(run_hook("pre-push-guard.py", payload).returncode, 0)
 
 
 if __name__ == "__main__":

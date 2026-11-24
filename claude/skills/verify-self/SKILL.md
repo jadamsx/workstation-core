@@ -1,11 +1,11 @@
 ---
 name: verify-self
-description: Review your own built work with fresh reviewers, fix everything, cut comments, describe the change, push through the gate and babysit it green. Use before pushing. Posts only a fix plan's replies.
+description: Review your own built work with fresh reviewers, fix everything, cut comments, describe the change, push through the gate and babysit it green. Use once the draft MR is pushed and green, before it is marked ready. Posts only a fix plan's replies.
 engine: review
 params: {mode: self, intensity: medium, target: branch}
 ---
 ## When
-After `/build`, or on any branch of yours before it leaves the machine. Someone else's change is `verify-change`; an epic is `verify-change`; other people's comments are `verify-comments`. It never expands scope: it fixes findings and proves acceptance.
+After `/build`, once the branch is pushed as a draft and CI is green. Someone else's change is `verify-change`; an epic is `verify-change`; other people's comments are `verify-comments`. It never expands scope: it fixes findings and proves acceptance.
 
 ## Inputs
 The branch, and the design note or ticket it implements. Without a ticket it stops after the report.

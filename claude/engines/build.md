@@ -34,11 +34,11 @@ A false premise found mid-build, or work outside the plan, stops the run and goe
 
 `EnterWorktree` for every repo the plan touches, local-only work included, after `git fetch origin` in that repo. Base is the repo's default branch (`git symbolic-ref refs/remotes/origin/HEAD`; never assume `main`). Location `<repo>/.claude/worktrees/<key>`, key = the ticket key, or `local-<plan-slug>` with none. Branch `<KEY>/<short-description>`; with no key `local/<plan-slug>`, never pushed. One ticket, one tree per repo: isolation is not permission to start a second ticket.
 
-Every node has its own worktree `<ticket>-<node>` and its own agent, and parallel nodes never share either. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval.
+The work tab builds nodes itself by default. Builder agents are only for independent nodes that run in parallel; each parallel node gets its own worktree `<ticket>-<node>` and agent, and parallel nodes never share either. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval.
 
 ## The graph
 
-No wave barriers. Whenever a node's needs are all done, start it in its own worktree and agent, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Review rounds of one node run alongside other nodes' builds. A round's fixes are grouped by the file they edit; each group goes to its own builder in its own worktree, all in one dispatch up to the cap (never one builder carrying several groups), and the group branches merge after. The node report line is `Fix groups: <n>, builders: <n>`.
+No wave barriers. Whenever a node's needs are all done, start it, up to `build_concurrency_cap` in `claude/resource-policy.json` (6 when the file is absent). A slow node blocks only its dependents, and a failed node does not stop its siblings. Review rounds of one node run alongside other nodes' builds. A round's fixes are grouped by the file they edit; each group goes to its own builder in its own worktree, all in one dispatch up to the cap (never one builder carrying several groups), and the group branches merge after. The node report line is `Fix groups: <n>, builders: <n>`.
 
 - The work tab never idle-waits while a ready node exists. When nothing is ready, the `/loop` wakes it to check the running gate, retry or review.
 - One gate per app runs at a time, never a second suite in another worktree while one runs (`engines/common.md`); the others queue and their nodes keep building. Each app keeps its own worker cap from the resource policy, and no browser gate is shared across apps.
@@ -51,11 +51,11 @@ Discovered work that is not this ticket becomes a ticket draft under the note's 
 
 ## Node prompts
 
-Each prompt gives the node spec (acceptance, `owns`, discipline, checklists), the worktree path and the repo, and says to apply `checklists/build.md` before reporting done. Each also carries:
+Each agent prompt gives the node spec (acceptance, `owns`, discipline, checklists), the worktree path and the repo, and says to apply `checklists/build.md` before reporting done. Each also carries:
 
 - **Plan lines**: the node's `owns` paths and the plan's `Decided:`, `Standing:` and `Not-building:` lines, carried verbatim.
-- **Size routing**: a node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other node to `builder`. If a small agent fails, or its work fails review, rerun on the larger agent without asking.
-- **Open findings**: the work tab lists its open Blocker and Should-fix findings; the lead decides them before a change opens.
+- **Size routing**: an agent node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other agent node to `builder`. If a small agent fails, or its work fails review, rerun on the larger agent without asking.
+- **Open findings**: the work tab reports its open Blocker and Should-fix findings in the node's done report, not as a lead decision before the change opens.
 - **Agent rules**: `engines/agent-core.md` applies; a file an agent says it rebuilt is re-reviewed and re-proven.
 - **For a v2 plan**, the FR ids the node delivers (its `covers` cell) with each FR's text. A node that would add, drop or change an FR is a decision node.
 - **What already ran**: the real suite and numbers from the nodes that just finished.
@@ -67,11 +67,11 @@ In this order, per node:
 1. The node's discipline: the file in `disciplines/` its row names. A node with none is incomplete unless read-only.
 2. The repo's own gates from its CLAUDE.md; a UI change is driven with playwright and the console is clean (`checklists/ui-verify.md`). The bugfix test rule is `disciplines/tdd.md`.
 3. `checklists/build.md` killer items against the node's own diff, quoting the numbers.
-4. **Pre-review gate.** `run-digest` runs lint, types and the targeted tests in the node's worktree, in the background with a result file. A failure goes back to the builder and no review round is logged, for two fix attempts, then stop and show the error. A failure that already exists at the node's parent counts as a failure: the work tab stops, asks the lead, and starts no round until the owner answers. Round 1 starts on a green result. The node's focused proof runs through `run-digest` or `claim-prover` in the node's worktree.
-5. **Review**: the finders and rounds of the node's `intensity`, per `engines/review.md`. Every node's diff is reviewed whatever its size. `clean-code` also runs on any structural node whatever its intensity. A spike node gets `cold-reviewer` on the experiment's diff and finding, one round. The follow-up list goes in the node report to the `self` review.
+4. **Pre-review gate.** `run-digest` runs lint, types and the targeted tests in the node's worktree, once, before its review. A failure goes back to the builder, for two fix attempts, then stop and show the error. A failure that already exists at the node's parent stops the work tab and asks the lead; no review starts until the owner answers. The review starts on a green result. The node's focused proof runs through `run-digest` or `claim-prover` in the node's worktree.
+5. **Review**: one self-review round of the node's diff, or the finders and rounds of its `intensity` when that says more, per `engines/review.md`. `clean-code` also runs on any structural node whatever its intensity. A spike node gets `cold-reviewer` on the experiment's diff and finding, one round. The follow-up list goes in the node report to the `self` review.
 6. **Done check**, last before the node counts as done. Git computes the Owns diff (`git diff <parent> -- <owns>`); `done-check` checks only the plan's `Decided:` and `Not-building:` lines against it, quoting the line for each deviation. The report carries `Done-check: pass` or `Done-check: deviation <sha>`, the sha being the commit checked; a job with no diff (an ops job) carries `Done-check: n/a (no diff)`. `done-check` reruns after any commit that follows the check. A deviation goes to the lead as a question.
 
-The main thread holds the table, the graph and the findings; a main thread reading source or running a suite means the run collapsed into one agent.
+The main thread holds the table, the graph and the findings.
 
 ## Author duties
 

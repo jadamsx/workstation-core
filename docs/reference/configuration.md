@@ -45,7 +45,7 @@ A per-machine overlay is merged on top: `<hostname>/settings.overlay.json` in `m
 | `WORKSTATION_BROWSER_STATE` | | Where `browser-login` saves sessions for `shot` |
 | `HOOKS_CONFIG_DIR` | `claude/hooks/hooks.d` | Folder of hook rule files |
 | `SHARED_ENVS_FILE` | `shared-envs.txt` beside the hook | Hosts `shared-env-guard` protects |
-| `WORKSTATION_ROLE` | | `lead` for a lead tab, `work` (with `WORKSTATION_LEAD_PANE`, the lead's pane id) for the work tab set by `herdr-manager setup`, `free` for an ungated tab |
+| `WORKSTATION_ROLE` | | `lead` for a lead tab, `work` (with `WORKSTATION_LEAD_PANE`, the lead's pane id) for the work tab set by `herdr-manager setup`, `free` for an ungated tab. It only labels the tab; no hook reads it |
 
 Run `grep -rn "environ" bin lib claude/hooks` for the full list.
 
