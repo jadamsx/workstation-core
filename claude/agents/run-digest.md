@@ -1,6 +1,6 @@
 ---
 name: run-digest
-description: Run one named command, the pre-review gate or a plan-topic memory lookup, or reduce a saved CI job log, and report the first failure. Use before reading raw output.
+description: Run one named command, the pre-check gate or a plan-topic memory lookup, or reduce a saved CI job log, and report the first failure. Use before reading raw output.
 model: haiku
 tools: Bash, Write, Read, Grep
 ---

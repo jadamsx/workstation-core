@@ -11,7 +11,7 @@ After `/build`, once the branch is pushed as a draft and CI is green. Someone el
 The branch, and the design note or ticket it implements. Without a ticket it stops after the report.
 
 ## Differs
-- Rounds follow `engines/review.md` "Round shapes": `medium` unless the owner says otherwise; a planned change reviews at the highest node `intensity`.
+- Rounds follow `engines/review.md` "Round shapes": `medium` unless the owner says otherwise; the level follows the `self` rule in `engines/review.md` "Params".
 - Fixes: grouped by edited file, one builder per group (`engines/build.md` "The graph").
 - Pushing and CI: `engines/ship.md`. Description: `change-write`; diagrams as it asks.
 

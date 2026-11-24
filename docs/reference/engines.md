@@ -27,7 +27,7 @@ The full text is `claude/engines/common.md`.
 
 ## Review intensity
 
-Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how hard any review is. Default `light` everywhere; auth, input, secrets or permissions raise it to `medium`.
+Two separate dials: a plan's `kind` sizes the planning, `intensity` sizes a node's care; the one `self` review runs at `medium`. Default `light` everywhere; auth, input, secrets or permissions raise it to `medium`.
 
 | Level | What runs |
 | --- | --- |
@@ -35,4 +35,4 @@ Two separate dials: a plan's `kind` sizes the planning, `intensity` sets how har
 | `medium` | `cold-reviewer`; round 2 a `finding-refuter` fix-check; round 3 a quick confirmation |
 | `intense` | `cold-reviewer`, `clean-code`, `test-gap-auditor` in parallel, `security-reviewer` where it applies; rounds 2 and 3 as `medium` |
 
-A plan's node table has an `intensity` column per node. The exact rules are in `claude/engines/review.md`, section "Round shapes". Name a level in the request to override it.
+A plan's node table has an `intensity` column per node. It only informs the plan and does not set any review level. The exact rules are in `claude/engines/review.md`, section "Round shapes". Name a level in the request to override it.
