@@ -3,8 +3,7 @@
 
 Runs pre-commit on the diff, then inspects the
 branch's open change (`gh` or `glab`): a missing ticket key when the hooks.d ``change`` rules
-ask for one, leftover template placeholder text, and a change that is already approved,
-because pushing resets approval and re-runs review and CI.
+ask for one, and leftover template placeholder text.
 """
 
 from __future__ import annotations
@@ -29,7 +28,6 @@ PLACEHOLDERS = (
     "Describe your changes here",
     *RULES.get("placeholders", []),
 )
-REOPEN_MARKERS = ("--reopen-review", "REOPEN_REVIEW")
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\b", re.DOTALL)
 ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
 PREFIXES = {"sudo", "command", "xargs", "exec", "env"}
@@ -139,20 +137,18 @@ def load_json(args: list[str], cwd: str) -> dict | None:
 
 
 def change_for_branch(cwd: str) -> dict | None:
-    """The current branch's open change as {title, body, approved}, or None when there is none yet."""
-    pr = load_json(["gh", "pr", "view", "--json", "title,body,reviewDecision"], cwd)
+    """The current branch's open change as {title, body}, or None when there is none yet."""
+    pr = load_json(["gh", "pr", "view", "--json", "title,body"], cwd)
     if pr:
         return {
             "title": pr.get("title", ""),
             "body": pr.get("body") or "",
-            "approved": pr.get("reviewDecision") == "APPROVED",
         }
     mr = load_json(["glab", "mr", "view", "--output", "json"], cwd)
     if mr:
         return {
             "title": mr.get("title", ""),
             "body": mr.get("description") or "",
-            "approved": mr_approved(mr.get("iid"), cwd),
         }
     return None
 
@@ -180,16 +176,6 @@ def check_pre_commit(cwd: str) -> None:
         )
 
 
-def mr_approved(iid: int | None, cwd: str) -> bool:
-    """`glab mr view` carries no approval state; the approvals endpoint does."""
-    if not iid:
-        return False
-    data = load_json(
-        ["glab", "api", f"projects/:id/merge_requests/{iid}/approvals"], cwd
-    )
-    return bool(data) and (bool(data.get("approved")) or bool(data.get("approved_by")))
-
-
 def check_change(change: dict, cwd: str) -> None:
     title = change["title"]
     if (
@@ -209,12 +195,6 @@ def check_change(change: dict, cwd: str) -> None:
             "Fill the section or mark it `N/A - <reason>`.",
         )
 
-    if change["approved"]:
-        block(
-            "This change is already approved. Pushing resets the approval and re-runs review and CI.",
-            "Batch the change, or push with --reopen-review in the command if it genuinely must go now.",
-        )
-
 
 def main() -> None:
     try:
@@ -227,7 +207,7 @@ def main() -> None:
 
     command = payload.get("tool_input", {}).get("command", "")
     args = push_args(command)
-    if args is None or any(marker in command for marker in REOPEN_MARKERS):
+    if args is None:
         sys.exit(0)
     cwd = push_dir(command, payload.get("cwd") or os.getcwd())
 

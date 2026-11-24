@@ -59,7 +59,7 @@ Any review app or plugin: GitHub Copilot code review, CodeRabbit, Danger, a revi
 
 ## Push gate
 
-- The gate blocks on: failing pre-commit, a missing tracker key where the team requires one, an unfilled template, an already approved change.
+- The gate blocks on: failing pre-commit, a missing tracker key where the team requires one or an unfilled template.
 - Pre-commit runs through `run-digest` before the commit. Commits follow the repo's convention.
 - Two fix-and-retry rounds at most. After the second, stop and show the error: a third is guessing, and that is how `--no-verify` gets typed. Never skip a hook or check (`SKIP=`, `--no-verify`), and never offer to; a failing dependency audit is fixed by a bump commit inside the change.
 - The owner starting a ship run covers pushing that run's branch, including fix pushes during the CI loop. A `herdr-manager build <plan>` hand-off covers the build worker's push and its draft MR. Any other push asks.

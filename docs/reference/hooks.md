@@ -5,7 +5,7 @@ Hooks are scripts in `claude/hooks/`. The settings wire them to tool events, and
 | Hook | Event and tool | What it blocks or does |
 | --- | --- | --- |
 | `pre-commit-guard.py` | Before Bash | `git commit`, `gh pr create` or `edit`, `glab mr create` or `update` when the staged diff holds AI-style comments, the repo has no pre-commit git hook, or the change title or description breaks the rules in `hooks.d` |
-| `pre-push-guard.py` | Before Bash | A real `git push` command (the first word of a command part, never text inside a heredoc or quoted string) until pre-commit passes on the diff, the open change has no required ticket key, still holds template placeholder text, or is already approved |
+| `pre-push-guard.py` | Before Bash | A real `git push` command (the first word of a command part, never text inside a heredoc or quoted string) until pre-commit passes on the diff, the open change has no required ticket key or still holds template placeholder text |
 | `rm-guard.py` | Before Bash | Recursive `rm` outside `$TMPDIR`, the drafts folder, `~/.cache`, a repo's `.claude/worktrees/*` and build folders such as `node_modules` and `dist`; `rm` with recursive and force flags anywhere in the command text, even quoted; `git push --force` (also `-f` and `+ref`) and `git reset --hard`. A `dangerouslyDisableSandbox` call is allowed once these checks pass; settings deny rules still apply |
 | `env-file-guard.py` | Before Edit, Write | Edits to real `.env.*` files. `.env.example`, `.sample` and `.template` stay editable |
 | `drafts-layout-guard.py` | Before Edit, Write | Writes under the drafts or notes folder whose first path part is not allowed, and writes under retired paths |

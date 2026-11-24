@@ -165,13 +165,6 @@ class PushGuardTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("placeholder", result.stderr)
 
-    def test_approved_github_change_blocked(self) -> None:
-        result = self.push(
-            '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
-        )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("already approved", result.stderr)
-
     def test_gitlab_placeholder_blocked(self) -> None:
         result = self.push(
             '{"title": "T", "description": "Provide a concise overview", "iid": 4}',
@@ -183,17 +176,17 @@ class PushGuardTest(unittest.TestCase):
         self.assertEqual(self.push("{}").returncode, 0)
 
     def test_heredoc_and_quoted_push_words_allowed(self) -> None:
-        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
+        placeholder = '{"title": "T", "body": "Briefly summarise it", "reviewDecision": ""}'
         for command in (
             "cat > notes.md <<'EOF'\ngit push origin main\nEOF",
             'git commit -m "docs: explain git push"',
             "echo 'git push' | wc -c",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.push(approved, command=command).returncode, 0)
+                self.assertEqual(self.push(placeholder, command=command).returncode, 0)
 
     def test_real_push_still_gated_in_a_command_chain(self) -> None:
-        approved = '{"title": "T", "body": "Done", "reviewDecision": "APPROVED"}'
+        placeholder = '{"title": "T", "body": "Briefly summarise it", "reviewDecision": ""}'
         for command in (
             "git push",
             "cd . && git -C . push origin b",
@@ -203,7 +196,7 @@ class PushGuardTest(unittest.TestCase):
             'bash -c "git push"',
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.push(approved, command=command).returncode, 2)
+                self.assertEqual(self.push(placeholder, command=command).returncode, 2)
 
 
 class SharedEnvGuardTest(unittest.TestCase):
