@@ -135,9 +135,7 @@ The plan names what each node must prove (`checklists/design.md` §15); `test-ga
 - A branch that fans out gets one `claim-prover` node depending on every node in it, proving acceptance without touching product code. A straight line gets none.
 - `kind` comes from `node-index kinds`; never invent one.
 
-## Node specs
-
-Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
+**Node specs.** Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
 
 **The table is a contract.** Once the owner says go, every row dispatches to the agent and discipline it names. A row the main thread builds itself is the run failing silently.
 
