@@ -19,7 +19,7 @@ Quote the numbers you checked in the report. An item you skipped is named, with 
 7. Said what you ran and what you only read, and named the changed files you did not read. Agreement between agents is not evidence.
 8. A real bug is stated first; style never pads the report.
 9. Bolt-ons flagged: additions outside the brief or the node's Owns. Decision deviations flagged: each against the Decided and Not-building lines, with the quoted line.
-10. Findings written as Conventional Comments: `<label>: file:line - what breaks - fix`, where Blocker is `issue (blocking)`, Should-fix `suggestion (blocking)` and Nit `nitpick`. No praise label.
+10. Findings written as Conventional Comments: `<label>: file:line - what breaks - fix`, where Blocker is `issue (blocking)`, Should-fix `suggestion (non-blocking)` and Nit `nitpick`. No praise label.
 
 ## Reference
 
