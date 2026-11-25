@@ -34,7 +34,7 @@ A false premise found mid-build, or work outside the plan, stops the run and goe
 
 `EnterWorktree` for every repo the plan touches, local-only work included, after `git fetch origin` in that repo. Base is the repo's default branch (`git symbolic-ref refs/remotes/origin/HEAD`; never assume `main`). Location `<repo>/.claude/worktrees/<key>`, key = the ticket key, or `local-<plan-slug>` with none. Branch `<KEY>/<short-description>`; with no key `local/<plan-slug>`, never pushed. One ticket, one tree per repo: isolation is not permission to start a second ticket.
 
-The work tab builds nodes itself by default. Builder agents are only for independent nodes that run in parallel; each parallel node gets its own worktree `<ticket>-<node>` and agent, and parallel nodes never share either. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval.
+Every node goes to a builder agent with its Node specs entry; independent nodes run in parallel, each in its own worktree `<ticket>-<node>` and agent, never shared. The work tab does quick work outside nodes inline: CI fixes, rebases, thread replies, small review fixes. A node branches from its parent branch: the ticket branch, or the branch of the need that finished last, with its other needs merged in first, so changes stack and the next node starts without waiting for approval.
 
 ## The graph
 
