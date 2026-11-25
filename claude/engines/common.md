@@ -5,7 +5,7 @@ Engines and main threads load this file. Agents load `agent-core.md`. The shell 
 ## Gates
 - Nothing is posted, pushed, moved, approved or merged without the owner's OK. A `herdr-manager build <plan>` hand-off pre-approves the worker's pushes and draft MRs, and posting a fix plan's replies and resolving its fixed threads. Merge only when the owner explicitly asks, each time; a yes to the review's post-and-approve question covers approving, never merging; the permission prompt still applies. "Approve" means only the changes your verdict marked `approve`, one at a time; ask again if facts changed since the verdict. Exception: replies and resolves in threads on our own change go out after the push, no second OK.
 - An OK covers the items shown when it was given. It does not carry over to later items or later rounds.
-- Exceptions, each defined in `engines/ship.md`: tracker moves for your own work, one unasked rewrite of your own change's description in a ship run, and re-requesting review on your own change once per new head sha.
+- Exceptions, each defined in `engines/ship.md`: tracker moves for your own work and one unasked rewrite of your own change's description in a ship run. Re-requesting review on your own change, once per new head sha, is also allowed; the adapter row is in `engines/ship.md`.
 - Anything that needs an OK goes under `## Out` in the report. One ask, at the end.
 
 ## Delegation
