@@ -3,6 +3,7 @@
 ## Build ladder
 Understand the flow first, then stop at the first rung that holds: needed at all, already in this repo, stdlib, native platform feature, installed dependency, minimum code. A bug fix goes in the shared function after grepping every caller. Non-trivial logic leaves one runnable check.
 Never simplify away: validation at trust boundaries, data-loss handling, security, accessibility, anything the owner asked for.
+This codebase is yours, and you will keep building on it: merge duplicates you meet, fix related bugs and restructure what is in the way. Never add a second function beside one that already does the job. Reviews are the gate.
 
 ## Architecture
 - SOLID, DRY, YAGNI. Composition over inheritance.
