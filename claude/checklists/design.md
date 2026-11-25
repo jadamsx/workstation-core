@@ -132,4 +132,4 @@ Before any plan is approved, including a plan of Claude's own, answer these. One
 - Law of Demeter, least surprise, idempotent where retried.
 - Small functions, clear names; make the change easy, then make the easy change.
 - No speculative generality; delete dead code; leave test seams.
-- A plan's Node specs apply these; a builder never chooses.
+- YAGNI and KISS win ties. A plan's Node specs apply these; a builder never chooses.
