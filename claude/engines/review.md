@@ -103,7 +103,7 @@ Fresh agents each round, given the ticket, the plan and every `Decided:` item, "
 |---|---|---|---|---|
 | Blocker | `issue (blocking)` | wrong behaviour, security hole, data loss, broken contract, a test that proves nothing about the fix, a comment the change made false | fix before push | blocking thread |
 | Refuse | | too big to review, or mechanical churn burying the change | split before push | ask for a split |
-| Should-fix | `suggestion (blocking)` | quality a senior engineer would stop at | fix before push | non-blocking |
+| Should-fix | `suggestion (non-blocking)` | quality a senior engineer would stop at | fix before push | non-blocking |
 | Nit | `nitpick` | style, naming, wording | round 1 fix | non-blocking, batched |
 
 No praise label. Quality findings are never dropped on someone else's change, only labelled non-blocking.

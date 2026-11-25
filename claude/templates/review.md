@@ -29,7 +29,7 @@ Dropped: <finding, why it did not reproduce>
 Suggested comments: <Conventional Comments>
 Next: <one action>
 ```
-Labels: Blocker is `issue (blocking)`, Should-fix is `suggestion (blocking)`, Nit is `nitpick`.
+Labels: Blocker is `issue (blocking)`, Should-fix is `suggestion (non-blocking)`, Nit is `nitpick`.
 
 ## Threads
 Thread ids posted on the change, one per line with the path:line and whether it is resolved.
