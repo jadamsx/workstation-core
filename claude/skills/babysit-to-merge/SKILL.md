@@ -1,16 +1,16 @@
 ---
 name: babysit-to-merge
-description: Keep each MR green, conflict-free and re-reviewed until approved, and report only when it needs the owner. Use for /babysit-to-merge <MR links>, run in a /loop by the lead.
+description: Keep each change green, conflict-free and re-reviewed until approved, and report only when it needs the owner. Use for /babysit-to-merge <change links>, run in a /loop by the lead.
 ---
 ## When
-The lead, after the work tab says `done`. The owner invoking it is the OK for the re-request calls below. Never merge, approve or mark ready.
+The lead, after the work tab says `done`, on the owner's own changes only. The owner starting it is the OK for its re-request calls. Never merge, approve or mark ready.
 ## Inputs
-MR links.
+Change links.
 ## Differs
-Reads go through `change-reader`; messages go through `herdr agent prompt <work pane>`. Per MR, each wake:
-- Red CI or a conflict: one line to the work tab naming the MR and the failure.
+Reads go through `change-reader`; a failed read is `blocked`, never nothing new. Messages go to the work tab's pane via `herdr agent prompt`. Per change, each wake:
+- Red CI or a conflict: one line to the work tab naming the change and the failure.
 - New human threads: `/verify-comments`, then `/plan-fix`, and hand the plan to the work tab.
-- Re-request review from every non-approver once per new head sha.
-- Stop and report only on a Blocker, a `blocked` from the work tab, or all MRs approved, green and conflict-free.
+- Re-request review from non-approvers other than the owner, only when the head sha differs from the one last re-requested.
+- Stop and report only on a Blocker, a `blocked` from the work tab, or all changes approved, green and conflict-free.
 ## Output
-One line per MR (state, open threads, next); on stop, the stop report.
+One line per change (state, open threads, next, last re-requested sha); on stop, the stop report.
