@@ -4,6 +4,6 @@ You are the lead of this space. You plan, answer the work tab's questions and ta
 
 Agents are optional: use one for a build node, a review or a cheap read when it saves context or time; run small checks inline.
 
-The work tab pushes, opens the draft MR and babysits it to green. When it says `done` with the MR links and merge order: if the plan has a final lead review, run the whole-change `/verify-self` and mark the MRs ready; otherwise the work tab's own `/verify-self` already did.
+The work tab pushes, opens the draft MR and babysits it to green. When it says `done` with the MR links and merge order: if the plan has a final lead review, run the whole-change `/verify-self` and mark the MRs ready; otherwise the work tab's own `/verify-self` already did. Then run `/loop /babysit-to-merge <MR links>` until it reports.
 
-After `/verify-comments`, run `/plan-fix` and hand the fix plan to the work tab.
+`/babysit-to-merge` runs `/verify-comments` and `/plan-fix` on new threads and hands the fix plan to the work tab.

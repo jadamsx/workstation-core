@@ -25,6 +25,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | React ➕ to a note (agree) | `gh api repos/<o>/<r>/pulls/comments/<id>/reactions -f content=+1` (GitHub has no plus reaction; `+1` is the nearest) | `glab api -X POST projects/<id>/merge_requests/<iid>/notes/<note_id>/award_emoji -f name=heavy_plus_sign`; list the same path first and skip if yours is there |
 | Edit my own note | `PATCH repos/<o>/<r>/pulls/comments/<id>` | `PUT .../discussions/<id>/notes/<note_id>` |
 | Approve a change | `gh pr review <n> --approve` | `glab mr approve <iid> -R <project>` |
+| Re-request review | `gh pr edit <n> --add-reviewer <login>` | `glab mr update <iid> -R <project> --reviewer +<username>` |
 | Resolve a thread | GraphQL `resolveReviewThread` | `PUT .../discussions/<id>` with `resolved=true` |
 | Check status, per job | `gh pr checks <n>`, `gh run list --branch <b>` | `glab ci status`, `glab api projects/<id>/pipelines/<pipeline-id>/jobs` |
 | Failed job log | `gh run view <run-id> --log-failed` | `glab ci trace <job-id>` |
@@ -35,7 +36,7 @@ One mapping. Pick the column from the remote. Another source control host: add a
 | Open or update a change (description from `change-write`) | `gh pr create`, `gh pr edit` | `glab mr create`, `glab mr update` |
 
 - The template path is the default; the project settings may point elsewhere. Read the template before writing a description (`change-write`).
-- Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK (thread replies on our own change: `engines/common.md`), one thread first, checked to land before the rest.
+- Reads go to `change-reader`. Post, edit and react calls are made by the main thread, after the owner's OK (thread replies on our own change: `/plan-fix`), one thread first, checked to land before the rest.
 - Allowed exception to the OK gate: a ship run may rewrite its own change's title and description once at the start, unasked, via `change-write`. Any later edit asks.
 - Discussions are read with who raised each and whether it is resolved. A resolved thread is reopened by reply only with new evidence.
 
@@ -59,18 +60,18 @@ Any review app or plugin: GitHub Copilot code review, CodeRabbit, Danger, a revi
 
 ## Push gate
 
-- The gate blocks on: failing pre-commit, a missing tracker key where the team requires one or an unfilled template.
+- The gate blocks on: failing pre-commit, a missing tracker key where the team requires one, an unfilled template, a test the change adds that no CI job runs, a README or description the diff contradicts.
 - Pre-commit runs through `run-digest` before the commit. Commits follow the repo's convention.
 - Two fix-and-retry rounds at most. After the second, stop and show the error: a third is guessing, and that is how `--no-verify` gets typed. Never skip a hook or check (`SKIP=`, `--no-verify`), and never offer to; a failing dependency audit is fixed by a bump commit inside the change.
-- The owner starting a ship run covers pushing that run's branch, including fix pushes during the CI loop. A `herdr-manager build <plan>` hand-off covers the build worker's push and its draft MR. Any other push asks.
+- The owner starting a ship run covers pushing that run's branch, including fix pushes during the CI loop. A `herdr-manager build <plan>` hand-off covers the build worker's push and its draft MR, and the fix pushes and replies of any later fix plan. Any other push asks.
 
 ## CI loop
 
 Runs until: checks green, every valid automated comment fixed, every correct scanner finding fixed. Never stops to ask; reports.
 
-1. Fetch state: per-job checks, unresolved discussions, automated notes, conflicts, `git fetch origin <target>` (always the latest before investigating).
+1. Every round, fetch state: per-job checks, unresolved discussions, automated notes, conflicts, `git fetch origin <target>` (always the latest before investigating). A host CLI call that fails (auth, TLS, sandbox) is retried once outside the sandbox, then reported `blocked`; a failed read is never nothing new.
 2. Checks running: read job states every round, not just the overall status. When no job has failed and nothing else is actionable, watch the pipeline in a background command that exits when any job changes state, and act on its notification. Do not poll.
-3. A job failed (not an allowed failure), even while others run: `run-digest` reads that log at once, a `builder` fixes the root cause in parallel with the rest of the pipeline, `run-digest` runs pre-commit, then commit and push. The push supersedes the old run. A flaky-shaped failure (runner died, timeout, network): retry once instead of fixing code.
+3. A job failed (not an allowed failure), even while others run: `run-digest` reads that log at once, a `builder` fixes the root cause in parallel with the rest of the pipeline, `run-digest` runs pre-commit, then commit and push, and watch the new pipeline per step 2 until green or failed before sleeping or reporting. The push supersedes the old run. A flaky-shaped failure (runner died, timeout, network): retry once instead of fixing code.
 4. Automated comments and scanner findings: per "Automated reviewers".
 5. Conflicts: below.
 6. Before reporting: re-check the description against its template; trim it if a fix round made it stale. Post nothing to the change.
