@@ -102,12 +102,12 @@ One field per line. Empty means the check that reads it is skipped (`engines/rev
 |---|---|---|
 | Team review | Context and scope, Goals and non-goals, Design, Alternatives considered, Cross-cutting concerns | epic and story in full; task and bug may drop them |
 | Spec | User Scenarios & Testing (Given/When/Then), Requirements (`FR-001: System MUST ...`), Success Criteria (`SC-001`) | epic and story in full; task and bug need Requirements only; a spike has one FR for the finding it must produce |
-| Build | Plan header, Node table with `covers`, Progress, Traceability, Decisions, Traps, Out, Links | every plan |
+| Build | Plan header, Node table with `covers`, Node specs, Progress, Traceability, Decisions, Traps, Out, Links | every plan |
 
 - One FR per ticket acceptance criterion; behaviour a tester drives is also a scenario. A bug's FR-001 is the symptom gone plus the unchanged behaviour. An unanswered question stays `[NEEDS CLARIFICATION: ...]`; none may remain at approval.
 - Every FR is covered by at least one node and every node covers at least one FR; a verification node lists the FRs it proves.
 - Traceability: one row per FR and SC (Req, Nodes, Test, Status `open`), filled from real runs at the `self` review. An SC with a number also sets the plan field whose agent proves it (`hot_path`, `frames`).
-- Design lens: run the approach past SOLID, DRY, KISS, YAGNI, ports and adapters, 12-factor, testability, observability, idempotency and versioning; write up only those that change the design or name a real risk. YAGNI and KISS win ties.
+- Code shape: `checklists/design.md` §19, applied in Node specs.
 
 ## Node table
 
@@ -124,6 +124,10 @@ A plan is a graph of nodes. The table is always written; the build accepts nothi
 | **acceptance** | one sentence saying how we know it is done |
 
 The plan names what each node must prove (`checklists/design.md` §15); `test-gap-auditor` checks it.
+
+## Node specs
+
+Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
 
 - **A need is real only if a node reads the other's output.** Otherwise stub, draft or run in parallel. A shared owned file is a need. Two nodes are disjoint when no path in one equals or is a prefix of one in the other; overlapping nodes serialise, or one is the integration owner and the others hand it a patch. The plan review checks every need and removes the false ones.
 - **No wave barriers.** The wave is the commit grouping; the build starts a node as soon as its needs are done, each in its own worktree and agent, up to `concurrency_cap`.

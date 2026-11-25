@@ -53,7 +53,7 @@ Discovered work that is not this ticket becomes a ticket draft under the note's 
 
 Each agent prompt gives the node spec (acceptance, `owns`, discipline, checklists), the worktree path and the repo, and says to apply `checklists/build.md` before reporting done. Each also carries:
 
-- **Plan lines**: the node's `owns` paths and the plan's `Decided:`, `Standing:` and `Not-building:` lines, carried verbatim.
+- **Plan lines**: the node's `owns` paths and the plan's `Decided:`, `Standing:` and `Not-building:` lines and the node's Node specs entry, carried verbatim.
 - **Size routing**: an agent node that is low risk, touches one or two files and is mechanical goes to `builder-small`; every other agent node to `builder`. If a small agent fails, or its work fails its done-check or the self review, rerun on the larger agent without asking.
 - **Open findings**: the work tab reports its open Blocker and Should-fix findings in the node's done report, not as a lead decision before the change opens.
 - **Agent rules**: `engines/agent-core.md` applies; a file an agent says it rebuilt gets its done-check or the self review again, and is re-proven.

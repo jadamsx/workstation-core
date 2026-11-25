@@ -124,3 +124,12 @@ Before any plan is approved, including a plan of Claude's own, answer these. One
 - For every user-visible string, type, status and button: data or code? Cite the rule that decides it.
 - UI follows the pre-made design frame when one exists; it is never invented. The check is fidelity to the frame, not taste.
 - Any state or flow the frame doesn't show gets raised as a question for the designer, never designed by the agent.
+
+## 19. Code shape per node
+
+- SOLID, DRY, YAGNI, KISS; composition over inheritance; separation of concerns; one source of truth per fact.
+- Fail fast with domain exceptions; validate at trust boundaries; side effects at the edges; explicit data flow.
+- Law of Demeter, least surprise, idempotent where retried.
+- Small functions, clear names; make the change easy, then make the easy change.
+- No speculative generality; delete dead code; leave test seams.
+- A plan's Node specs apply these; a builder never chooses.
