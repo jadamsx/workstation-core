@@ -7,6 +7,7 @@ The table is read from the skills' frontmatter. The parameters shown are the ski
 | Skill | Engine | Params | What it does |
 | --- | --- | --- | --- |
 | `babysit` | `ship` | `{phase: loop, target: current-branch}` | Drive a change to green: watch the pipeline and automated reviewers, fix what is valid, loop until clean. Use for `/babysit <url>` or after opening a change. |
+| `babysit-to-merge` | none | none | Keep each change green, conflict-free and re-reviewed until approved, and report only when it needs the owner. Use for /babysit-to-merge <change links>, run in a /loop by the lead. |
 | `build` | `build` | `{}` | Execute an approved plan's node graph in a worktree, ready node by ready node, then hand to verify-self. Use for `/build <plan note or ticket>`. Refuses without an approved plan. |
 | `change-write` | `write` | `{target: change}` | Write or rewrite a change title and description in the team's style, filling the repo template and saying only what the diff cannot. Use when opening or tidying a change. |
 | `debt-ledger` | none | none | Harvest every deliberate-shortcut comment in a repo into a ledger with its ceiling and upgrade trigger, flagging the ones with no trigger. Use for /debt-ledger or "what did we defer". |
