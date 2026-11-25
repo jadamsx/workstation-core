@@ -147,7 +147,7 @@ On others' changes `test-gap-auditor` trusts a green CI run and runs nothing; mu
 
 Every agent gets the diff, the full ticket, repo path, its `CLAUDE.md`, any decision record that applies and, on a change, the pinned worktree paths and SHAs, all as files in the scratch dir. Never the author's or main thread's reasoning, the plan, earlier rounds' findings, other agents' findings, or the change's threads. `cold-reviewer`, `clean-code` and `test-gap-auditor` also get the claims ledger and description. `finding-refuter` gets the findings to refute and the ledger; in fix-check mode the previous confirmed findings and the fix delta.
 
-Decisions: code reviewers of our own work (`self`, a change of ours) also get `decisions.md`, the plan's `Decided:` lines only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the lead once as "decision X may be wrong because Y". Each ruling the lead or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
+Decisions: code reviewers of our own work (`self`, a change of ours) also get `decisions.md`, the plan's `Decided:` lines and Node specs only, no reasoning. A finding that contradicts a listed decision is dropped unless it states a fact the decision did not know; such a finding goes to the lead once as "decision X may be wrong because Y". Each ruling the lead or owner makes on a finding is appended to `decisions.md`, so later rounds cannot raise it again. Reviews of other people's changes get no plan.
 
 ## Scratch dir
 

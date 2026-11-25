@@ -102,12 +102,12 @@ One field per line. Empty means the check that reads it is skipped (`engines/rev
 |---|---|---|
 | Team review | Context and scope, Goals and non-goals, Design, Alternatives considered, Cross-cutting concerns | epic and story in full; task and bug may drop them |
 | Spec | User Scenarios & Testing (Given/When/Then), Requirements (`FR-001: System MUST ...`), Success Criteria (`SC-001`) | epic and story in full; task and bug need Requirements only; a spike has one FR for the finding it must produce |
-| Build | Plan header, Node table with `covers`, Progress, Traceability, Decisions, Traps, Out, Links | every plan |
+| Build | Plan header, Node table with `covers`, Node specs, Progress, Traceability, Decisions, Traps, Out, Links | every plan |
 
 - One FR per ticket acceptance criterion; behaviour a tester drives is also a scenario. A bug's FR-001 is the symptom gone plus the unchanged behaviour. An unanswered question stays `[NEEDS CLARIFICATION: ...]`; none may remain at approval.
 - Every FR is covered by at least one node and every node covers at least one FR; a verification node lists the FRs it proves.
 - Traceability: one row per FR and SC (Req, Nodes, Test, Status `open`), filled from real runs at the `self` review. An SC with a number also sets the plan field whose agent proves it (`hot_path`, `frames`).
-- Design lens: run the approach past SOLID, DRY, KISS, YAGNI, ports and adapters, 12-factor, testability, observability, idempotency and versioning; write up only those that change the design or name a real risk. YAGNI and KISS win ties.
+- Code shape: `checklists/design.md` §19, applied in Node specs.
 
 ## Node table
 
@@ -134,6 +134,8 @@ The plan names what each node must prove (`checklists/design.md` §15); `test-ga
 - A question for the owner or anyone else is a node with `actor: user`, gating whatever waits on it.
 - A branch that fans out gets one `claim-prover` node depending on every node in it, proving acceptance without touching product code. A straight line gets none.
 - `kind` comes from `node-index kinds`; never invent one.
+
+**Node specs.** Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
 
 **The table is a contract.** Once the owner says go, every row dispatches to the agent and discipline it names. A row the main thread builds itself is the run failing silently.
 
