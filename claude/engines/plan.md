@@ -125,10 +125,6 @@ A plan is a graph of nodes. The table is always written; the build accepts nothi
 
 The plan names what each node must prove (`checklists/design.md` §15); `test-gap-auditor` checks it.
 
-## Node specs
-
-Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
-
 - **A need is real only if a node reads the other's output.** Otherwise stub, draft or run in parallel. A shared owned file is a need. Two nodes are disjoint when no path in one equals or is a prefix of one in the other; overlapping nodes serialise, or one is the integration owner and the others hand it a patch. The plan review checks every need and removes the false ones.
 - **No wave barriers.** The wave is the commit grouping; the build starts a node as soon as its needs are done, each in its own worktree and agent, up to `concurrency_cap`.
 - Titles name the work, not the file; filenames belong in `owns`.
@@ -138,6 +134,10 @@ Under the table, `## Node specs` has one entry per node, written by the lead, wi
 - A question for the owner or anyone else is a node with `actor: user`, gating whatever waits on it.
 - A branch that fans out gets one `claim-prover` node depending on every node in it, proving acceptance without touching product code. A straight line gets none.
 - `kind` comes from `node-index kinds`; never invent one.
+
+## Node specs
+
+Under the table, `## Node specs` has one entry per node, written by the lead, with: interface (names, signatures, types), placement (`file:line` to extend, or the new file), reuse (helpers to call, `file:line`), delete, errors raised, test names. Each non-obvious call names its principle. A node a builder must design is not ready.
 
 **The table is a contract.** Once the owner says go, every row dispatches to the agent and discipline it names. A row the main thread builds itself is the run failing silently.
 
